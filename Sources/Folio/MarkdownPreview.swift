@@ -8,6 +8,7 @@ struct MarkdownPreview: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
     var onImage: ((URL) -> Void)?
+    var resolveLibraryLinks = true
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
     @AppStorage("readingFont") private var font = ReadingFont.system.rawValue
@@ -36,7 +37,7 @@ struct MarkdownPreview: View {
         return options
     }
 
-    private var links: [String: UUID] { NoteLinks.targets(in: store.library) }
+    private var links: [String: UUID] { resolveLibraryLinks ? NoteLinks.targets(in: store.library) : [:] }
 
     var body: some View {
         ZStack {

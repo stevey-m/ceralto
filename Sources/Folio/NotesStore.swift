@@ -31,6 +31,7 @@ struct NotebookDraft: Identifiable {
     let id = UUID()
     var existingID: UUID?
     var name = ""
+    var branchPath: String?
 }
 
 @MainActor
@@ -762,21 +763,83 @@ final class NotesStore: ObservableObject {
         reconcileSelection()
     }
 
-    func addNotebook(name: String) {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLoaded, !isReadOnly, !name.isEmpty else { return }
-        let notebook = Notebook(name: name)
-        library.notebooks.append(notebook)
-        scope = .notebook(notebook.id)
-        save()
+    @discardableResult func addNotebook(name: String) -> Bool {
+        do {
+            let path = try NotebookManagement.validatedPath(name)
+            guard !library.notebooks.contains(where: { $0.name.caseInsensitiveCompare(path) == .orderedSame }) else {
+                throw NoteWorkflowError("A notebook already exists at that path.")
+            }
+            let notebook = Notebook(name: path)
+            var candidate = library
+            candidate.notebooks.append(notebook)
+            try commitNotebookChange(candidate)
+            scope = .notebook(notebook.id)
+            return true
+        } catch { errorMessage = "Could not create notebook: \(error.localizedDescription)"; return false }
     }
 
-    func renameNotebook(_ id: UUID, name: String) {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLoaded, !isReadOnly, !name.isEmpty,
-              let index = library.notebooks.firstIndex(where: { $0.id == id }) else { return }
-        library.notebooks[index].name = name
-        save()
+    @discardableResult func renameNotebook(_ id: UUID, name: String) -> Bool {
+        do {
+            let path = try NotebookManagement.validatedPath(name)
+            guard let index = library.notebooks.firstIndex(where: { $0.id == id }) else {
+                throw NoteWorkflowError("The notebook no longer exists.")
+            }
+            guard !library.notebooks.contains(where: { $0.id != id && $0.name.caseInsensitiveCompare(path) == .orderedSame }) else {
+                throw NoteWorkflowError("A notebook already exists at that path.")
+            }
+            var candidate = library
+            candidate.notebooks[index].name = path
+            try commitNotebookChange(candidate)
+            scope = .notebook(id)
+            return true
+        } catch { errorMessage = "Could not rename notebook: \(error.localizedDescription)"; return false }
+    }
+
+    @discardableResult func renameNotebookBranch(_ path: String, to name: String) -> Bool {
+        do {
+            try commitNotebookChange(NotebookManagement.renaming(library, branch: path, to: name))
+            let destination = try NotebookManagement.validatedPath(name)
+            if let folder = NotebookBranch.build(library.notebooks).lazy.compactMap({ $0.branch(at: destination) }).first {
+                scope = .folder(folder.id, folder.descendants)
+            }
+            return true
+        } catch { errorMessage = "Notebook change failed: \(error.localizedDescription)"; return false }
+    }
+
+    @discardableResult func moveNotes(_ ids: Set<UUID>, to path: String) -> Bool {
+        do {
+            try commitNotebookChange(NotebookManagement.movingNotes(ids, in: library, to: path))
+            if let folder = NotebookBranch.build(library.notebooks).lazy.compactMap({ $0.branch(at: path) }).first {
+                scope = .folder(folder.id, folder.descendants)
+            }
+            reconcileSelection()
+            return true
+        } catch { errorMessage = "Could not move notes: \(error.localizedDescription)"; return false }
+    }
+
+    private func commitNotebookChange(_ candidate: Library) throws {
+        guard isLoaded, !isReadOnly, !isSyncing else {
+            throw NoteWorkflowError("Open an editable library and wait for sync before reorganising notebooks.")
+        }
+        try storage.save(candidate)
+        library = candidate
+        hasUnsavedChanges = false
+    }
+
+    func acceptNotebookDrop(_ items: [String], on path: String) -> Bool {
+        let notes = items.filter { $0.hasPrefix("deltos-note:") }
+        if notes.count == items.count, !notes.isEmpty {
+            let ids = Set(notes.compactMap { UUID(uuidString: String($0.dropFirst("deltos-note:".count))) })
+            guard ids.count == notes.count else { errorMessage = "The dragged note identifiers are invalid."; return false }
+            return moveNotes(ids, to: path)
+        }
+        if items.count == 1, let item = items.first, item.hasPrefix("deltos-folder:") {
+            let source = String(item.dropFirst("deltos-folder:".count))
+            let leaf = source.split(separator: "/").last.map(String.init) ?? source
+            return renameNotebookBranch(source, to: path + "/" + leaf)
+        }
+        errorMessage = "Drag a Deltos note or one notebook branch onto a notebook."
+        return false
     }
 
     func deleteNotebook(_ id: UUID) {

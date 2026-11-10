@@ -381,6 +381,8 @@ struct ContentView: View {
         return AnyView(Group {
             if branch.children.isEmpty {
                 scopeRow(branch.name, icon: "folder", scope: scope)
+                    .draggable("deltos-folder:" + branch.id)
+                    .dropDestination(for: String.self) { items, _ in store.acceptNotebookDrop(items, on: branch.id) }
                     .help(branch.id)
                     .contextMenu { notebookActions(branch) }
             } else {
@@ -391,6 +393,8 @@ struct ContentView: View {
                     ForEach(branch.children) { child in notebookTree(child) }
                 } label: {
                     scopeRow(branch.name, icon: "folder", scope: scope).help(branch.id)
+                        .draggable("deltos-folder:" + branch.id)
+                        .dropDestination(for: String.self) { items, _ in store.acceptNotebookDrop(items, on: branch.id) }
                 }
                 .tag(scope)
                 .contextMenu { notebookActions(branch) }
@@ -399,17 +403,22 @@ struct ContentView: View {
     }
 
     @ViewBuilder private func notebookActions(_ branch: NotebookBranch) -> some View {
+        Button("Rename or Move Branch...") {
+            store.notebookDraft = NotebookDraft(name: branch.id, branchPath: branch.id)
+        }
         Button("New Subfolder...") {
             store.notebookDraft = NotebookDraft(name: branch.id + "/")
         }
         ForEach(branch.notebooks) { notebook in
+            if branch.notebooks.count > 1 {
+                Button("Rename Duplicate \(notebook.id.uuidString.prefix(8))...") {
+                    store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
+                }
+            }
             Button("New Note in \(notebook.name)") {
                 store.scope = .notebook(notebook.id)
                 store.selectedNoteID = nil
                 store.createNote()
-            }
-            Button("Rename \(notebook.name)...") {
-                store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
             }
             Button("Delete \(notebook.name)...", role: .destructive) { notebookToDelete = notebook }
                 .disabled(store.library.notebooks.count < 2)
@@ -441,8 +450,8 @@ struct ContentView: View {
                                     store.selectedNoteID = nil
                                     store.createNote()
                                 }
-                                Button("Rename \(notebook.name)...") {
-                                    store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
+                                Button("Rename or Move Branch...") {
+                                    store.notebookDraft = NotebookDraft(name: branch.id, branchPath: branch.id)
                                 }
                                 Button("Delete \(notebook.name)...", role: .destructive) { notebookToDelete = notebook }
                                     .disabled(store.library.notebooks.count < 2)
@@ -456,6 +465,7 @@ struct ContentView: View {
     private func noteRow(_ note: Note) -> some View {
         NoteRow(note: note)
             .tag(note.id)
+            .draggable("deltos-note:" + note.id.uuidString)
             .contextMenu {
                 Button("Open in New Tab") { store.openNoteInNewTab(note.id) }
                 Button("Show as Reference") { store.showReference(note.id) }
@@ -464,6 +474,12 @@ struct ContentView: View {
                     Button("Restore Note") { store.restore(note.id) }
                     Button("Delete Forever...", role: .destructive) { noteToDelete = note }
                 } else {
+                    Menu("Move to Notebook") {
+                        ForEach(store.library.notebooks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { notebook in
+                            Button(notebook.name) { store.moveNotes([note.id], to: notebook.name) }
+                                .disabled(notebook.id == note.notebookID)
+                        }
+                    }
                     Button(note.isPinned ? "Unpin Note" : "Pin Note") {
                         store.update(note.id) { $0.isPinned.toggle() }
                     }
@@ -645,16 +661,20 @@ private struct NotebookSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(draft.existingID == nil ? "New notebook" : "Rename notebook")
+            Text(draft.branchPath != nil ? "Rename or move notebook branch" : draft.existingID == nil ? "New notebook" : "Rename notebook")
                 .font(.title2.weight(.semibold))
             TextField("Notebook name", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(submit)
+            if draft.branchPath != nil {
+                Text("Enter the full destination path, for example Work/Research. All subfolders move together. Use a single name to move to the top level. Existing branches are never merged. Notebook-qualified text links are not rewritten.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(draft.existingID == nil ? "Create" : "Rename", action: submit)
+                Button(draft.branchPath != nil ? "Apply" : draft.existingID == nil ? "Create" : "Rename", action: submit)
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -665,8 +685,12 @@ private struct NotebookSheet: View {
 
     private func submit() {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if let id = draft.existingID { store.renameNotebook(id, name: name) }
-        else { store.addNotebook(name: name) }
+        if let path = draft.branchPath {
+            guard store.renameNotebookBranch(path, to: name) else { return }
+        } else if let id = draft.existingID {
+            guard store.renameNotebook(id, name: name) else { return }
+        }
+        else { guard store.addNotebook(name: name) else { return } }
         dismiss()
     }
 }

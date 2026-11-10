@@ -4,15 +4,17 @@ import SwiftUI
 @main
 struct FolioApp: App {
     @StateObject private var store = NotesStore()
+    @StateObject private var markdown = LiveMarkdownStore()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.liveMarkdown) private var focusedMarkdown
 
     var body: some Scene {
         Window("Deltos", id: "library") {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 720, minHeight: 520)
-                .onAppear { delegate.store = store; store.backupManager?.start() }
+                .onAppear { delegate.store = store; delegate.markdown = markdown; store.backupManager?.start() }
         }
         .defaultSize(width: 1240, height: 800)
         .commands {
@@ -50,6 +52,10 @@ struct FolioApp: App {
                 Button("Import Markdown or HTML Files...", action: store.importMarkdown)
                     .keyboardShortcut(store.shortcut(.importFiles).keyboardShortcut)
                     .disabled(!store.isLoaded)
+                Button("Open Live Markdown Folder...") {
+                    openWindow(id: "live-markdown")
+                    markdown.chooseFolder(avoiding: store.libraryURL)
+                }
                 Button("Import Joplin Folder...", action: store.importJoplinFolder)
                     .disabled(!store.isLoaded || store.isImportingJoplin)
                 Button("Import Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }
@@ -71,9 +77,12 @@ struct FolioApp: App {
                     .disabled(!store.isLoaded)
             }
             CommandGroup(replacing: .saveItem) {
-                Button("Save") { store.perform(.save) }
+                Button("Save") {
+                    if let focusedMarkdown { focusedMarkdown.save() }
+                    else { store.perform(.save) }
+                }
                     .keyboardShortcut(store.shortcut(.save).keyboardShortcut)
-                    .disabled(!store.isLoaded)
+                    .disabled(focusedMarkdown == nil && !store.isLoaded)
                 Button("Show Library in Finder", action: store.revealLibrary)
                 Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
                 Divider()
@@ -135,6 +144,13 @@ struct FolioApp: App {
         }
         .defaultSize(width: 480, height: 420)
         .windowResizability(.contentMinSize)
+        Window("Live Markdown Library", id: "live-markdown") {
+            LiveMarkdownView(model: markdown).environmentObject(store)
+                .focusedSceneValue(\.liveMarkdown, markdown)
+                .frame(minWidth: 820, minHeight: 580)
+                .onAppear { delegate.markdown = markdown }
+        }
+        .defaultSize(width: 1240, height: 800)
         MenuBarExtra("Deltos", systemImage: "square.and.pencil") {
             Button("Quick Capture") { capture() }.disabled(!store.isLoaded)
             Button("Open Deltos") {
@@ -158,8 +174,10 @@ struct FolioApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: NotesStore?
+    weak var markdown: LiveMarkdownStore?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard markdown?.confirmLeavingDraft() != false else { return .terminateCancel }
         if store?.backupManager?.busy == true {
             let alert = NSAlert()
             alert.messageText = "A complete backup is still running"

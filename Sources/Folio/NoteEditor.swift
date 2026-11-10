@@ -59,7 +59,7 @@ struct NoteEditor: View {
                     Menu {
                         ForEach(store.library.notebooks) { notebook in
                             Button(notebook.name) {
-                                store.update(note.id) { $0.notebookID = notebook.id }
+                                store.moveNotes([note.id], to: notebook.name)
                             }
                         }
                     } label: {

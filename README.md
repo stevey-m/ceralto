@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.12.0 is a development release, not a finished replacement for your library.**
+**0.13.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.12.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.13.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -174,6 +174,78 @@ Notes save atomically to the local library. Save failures are visible; changes
 stay in memory and Deltos warns before quitting. History retains up to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 Restoring also preserves the current version.
+
+## Notebook management
+
+On Mac, drag a note from the middle pane onto a sidebar notebook to move it.
+The note's context menu also offers **Move to Notebook**. Drag one notebook
+onto another to reparent its entire branch. To rename a branch, move it to the
+top level or enter an exact destination, use **Rename or Move Branch** and
+provide a full path such as `Work/Research`. All descendant notebook paths
+change together; notebook IDs, note content, history, attachments and Trash
+are preserved. Similar names such as `Study-old` are not part of `Study`.
+Notebook-qualified text links are not rewritten; check them after renaming.
+
+Destination collisions (including case-insensitive branch collisions) and
+moves into a branch's own descendants are rejected without merging.
+Reorganisation writes the complete candidate library before changing the
+visible state, so a failed write leaves the original hierarchy intact.
+Dropping a note onto a virtual parent creates a real notebook at that path.
+Ambiguous duplicate imported notebook paths must be renamed before using
+path-based note moves; their sidebar context menu offers individual
+**Rename Duplicate** actions with short notebook IDs. The existing per-notebook delete action is unchanged:
+it moves that notebook's notes to another notebook; it is not recursive branch
+deletion. Multi-select and bulk note operations are not yet implemented.
+
+## Live Markdown folders
+
+Choose **File > Open Live Markdown Folder** on Mac. This opens a separate
+native window, not a conversion of your current Deltos library. The normal
+library and its notes stay untouched. Open an ordinary folder or Obsidian
+vault containing `.md`/`.markdown` files, **not Joplin's internal sync folder**.
+Joplin's OneDrive sync storage is not an ordinary Markdown vault; continue
+using a Joplin Markdown export to exchange those notes.
+
+The tree reflects actual directories, including empty folders. Select a note
+to edit its UTF-8 source in Source, Split or Preview mode. **Save** (or your
+configured Save shortcut, Command-S by default) writes that original file.
+Front matter and unknown metadata remain in the source; Deltos does not
+reconstruct or normalise YAML, or insert its own metadata. Relative local
+images use the existing safe preview with the open folder as their resource
+boundary. Local attachment links open with their macOS application.
+
+Use **New** to create a note or folder. Paths are relative to the open folder
+and their parent directories must already exist. A file/folder context menu
+provides **Rename or Move** and **Reveal in Finder**. Moves never merge or
+overwrite destinations. Links are not automatically rewritten when moving a
+file or directory; keeping attachments beside a note and moving their shared
+parent preserves their relative relationship.
+
+Every three seconds while the window is active, Deltos polls for filesystem
+changes. Clean selected notes reload from disk. If your draft is unsaved,
+external edits, renames or deletion preserve it and show a conflict.
+Save checks the original content digest again and refuses stale writes.
+Choose **Save Draft as New Copy** to keep both versions, or explicitly
+discard the draft and reload disk. Switching notes/folders, closing the
+window and quitting prompt about unsaved edits; a failed Save keeps the draft.
+Edits are saved explicitly, not autosaved; unsaved drafts do not survive an
+application crash or forced termination.
+
+The first live-folder implementation edits UTF-8 Markdown notes up to 16 MB;
+hidden files (including `.obsidian` configuration), symbolic links and
+non-Markdown files are not offered for editing. No files are imported into the
+JSON library and no sidecar library/index is written to your folder. Choose
+the folder again after restarting. The live window does not run plugins,
+resolve Deltos-library wiki links, provide native Compose, or share the normal
+library's search/tags/history/Trash, scheduled backups or snapshot sync.
+Keep an independent folder backup (for example Time Machine).
+
+Use a downloaded local folder. File coordination and stale-content checks
+reduce conflicting writes; they are not cross-device locking or a guarantee
+against an uncoordinated external editor writing at the exact same instant.
+Avoid simultaneous edits to the same file. Cloud upload/delivery and live
+provider behaviour remain unverified; this is not certified Obsidian or
+Joplin compatibility.
 
 ## Dropbox, OneDrive, Google Drive and cloud folders
 
