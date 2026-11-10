@@ -1,6 +1,6 @@
-# Contributing to Folio
+# Contributing to Deltos
 
-Folio aims for Apple Notes' ease of use, Joplin's notebook management, and
+Deltos aims for Apple Notes' ease of use, Joplin's notebook management, and
 Obsidian's readable, portable documents. It is an independent open-source
 project, not affiliated with any of those products.
 
@@ -11,7 +11,7 @@ Use macOS 14 or newer and a Swift 6 toolchain. From the standalone repository:
 ```bash
 bash scripts/test.sh
 bash scripts/build-app.sh
-open dist/Folio.app
+open dist/Deltos.app
 ```
 
 In the original parent repository, first `cd MacNotes`. Swift Package Manager
@@ -42,7 +42,7 @@ Executable plugins need an approved isolation and permissions design first.
 
 Use synthetic fixtures, not your personal library, screenshots containing
 personal notes, signing credentials or cloud tokens. A development app uses
-the normal Folio library unless you run it in an isolated macOS account.
+the normal Deltos library unless you run it in an isolated macOS account.
 Make a complete backup before testing a development release.
 
 ## Licensing

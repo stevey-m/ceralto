@@ -1,9 +1,9 @@
-# Folio
+# Deltos
 
 **A quiet place for everything worth keeping.**
 
 Native Mac writing. An offline iPad reader. Readable Markdown. MIT licensed.
-Folio aims for Apple Notes' simplicity, Joplin's notebook management and
+Deltos aims for Apple Notes' simplicity, Joplin's notebook management and
 Obsidian's ownership and extensibility, without turning your notebook into
 a dashboard.
 
@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.10.0 is a development release, not a finished replacement for your library.**
+**0.11.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,9 +29,9 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.10.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Deltos-0.11.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
-Quit the old Folio before replacing it. Existing libraries
+Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
 older releases cannot read the new native-composition format marker.
 
@@ -39,13 +39,34 @@ Requires macOS 14+. This DMG targets Apple Silicon; Intel requires a separate
 build. Development bundles are ad-hoc signed, not Apple-notarized. For a build
 you trust, macOS may require **System Settings > Privacy & Security > Open Anyway**.
 
+### Folio is now Deltos
+
+The name changes, not your library. The bundle identifier `dev.folio.notes`,
+preference keys, extension IDs, backup formats and `Folio Sync` cloud directory
+remain unchanged for compatibility. The existing public source repository is
+still `stevey-m/folio`. Both versions use
+`~/Library/Application Support/Folio/`; no manual data move is needed.
+Quit Folio before launching Deltos and remove the old Folio app from Applications
+only after confirming your notes in Deltos. Never run both against the same
+library at once.
+
+### Print a note
+
+Choose **File > Print...** or **Command-P** to print the currently selected note,
+with its title, rendered text and local images, in a light paper-friendly layout.
+The standard macOS panel offers printer, paper, orientation, page range and
+**PDF > Save as PDF**. Printing captures the latest text in memory without
+changing the note. Missing images produce an explicit error rather than a
+silently incomplete print. Command-P is reserved; a prior custom assignment
+using it must be reset in Keyboard Shortcuts (the saved configuration is kept).
+
 ## A notebook, not a control panel
 
 Shortcuts below are defaults. Customize application commands in
 **Settings > Keyboard Shortcuts**; contextual editing shortcuts stay fixed.
 
 - **Start with today.** Open **Today's Note** from the sidebar, Navigate menu,
-  command palette or Command-Shift-D. Folio reuses today's dated note without
+  command palette or Command-Shift-D. Deltos reuses today's dated note without
   replacing your words. Choose a notebook path and starter template in
   **Settings > Editor > Daily notes**.
 - **Choose a useful starting page.** The searchable template chooser combines
@@ -61,7 +82,7 @@ Shortcuts below are defaults. Customize application commands in
   Duplicate bindings and reserved standard commands are rejected.
 - **Choose your tools.** Settings separates **Built-in Features** from
   **Community Extensions**. Switch Daily notes, Template chooser and Task
-  overview on or off without changing notes. Enable individual Folio template
+  overview on or off without changing notes. Enable individual Deltos template
   packs, or disable all community packs. Register extracted Joplin or Obsidian
   folders to inspect their names, versions and declared host requirements.
   **Inspection is not execution:** those plugins cannot run in this release.
@@ -106,7 +127,7 @@ Shortcuts below are defaults. Customize application commands in
   changes only the editing mode, not the body. Unsupported structures are
   rejected by the formatted editor rather than silently flattened.
 - **Capture without organising.** Quick Capture is a separate floating window,
-  available from the menu bar, toolbar or Command-Shift-Space while Folio is
+  available from the menu bar, toolbar or Command-Shift-Space while Deltos is
   active. Save to Inbox with Command-Return. Unsubmitted drafts remain locally
   when the window closes; failed saves keep the draft. This is not a global
   keyboard hook.
@@ -148,7 +169,7 @@ Shortcuts below are defaults. Customize application commands in
   The iPad reader's sidebar also offers appearance and accent choices.
 
 Notes save atomically to the local library. Save failures are visible; changes
-stay in memory and Folio warns before quitting. History retains up to 20
+stay in memory and Deltos warns before quitting. History retains up to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 Restoring also preserves the current version.
 
@@ -156,15 +177,15 @@ Restoring also preserves the current version.
 
 On Mac, choose **Settings > Cloud Folders > Connect Cloud Folder** and select
 a dedicated folder managed by your provider's installed desktop app.
-Sign in using that app, not Folio, and mark the entire folder as downloaded or
+Sign in using that app, not Deltos, and mark the entire folder as downloaded or
 available offline. Select the same folder on another Mac only after the
 provider has delivered the initial snapshot. Use **Sync Now** manually after
 editing, then check the provider's status before refreshing the other Mac.
 Existing iCloud folder bookmarks and the snapshot format are unchanged.
 
-Folio keeps its working library local and exchanges immutable, checksummed
+Deltos keeps its working library local and exchanges immutable, checksummed
 snapshots with original attachments. Connection rejects folders overlapping
-Folio's local storage. Status reports **local exchange**, never verified
+Deltos's local storage. Status reports **local exchange**, never verified
 upload or delivery. Offline placeholders, partially delivered snapshots and
 provider failures may require keeping the folder downloaded and retrying.
 This generic folder path is experimental, not a certified integration with
@@ -173,14 +194,14 @@ provider detection or cross-provider copying is implemented.
 
 **Export Dated Complete Backup** lets you choose a separate local/cloud
 location. Each manual backup creates a unique dated directory containing
-notes, history and original attachments. Restore with **Import Folio Backup**;
+notes, history and original attachments. Restore with **Import Deltos Backup**;
 import adds copies without replacing current notes. Sync snapshots are not a
 substitute for independent backups: cloud deletion can propagate to backups
 in the same account. There is no automatic pruning or scheduled backup.
 Settings, unsaved drafts, smart folders and plugin registrations are not part
 of these library backups. Use Time Machine for the entire local app folder.
 
-Keep an independent copy. Files in cloud folders are readable; Folio does not
+Keep an independent copy. Files in cloud folders are readable; Deltos does not
 provide end-to-end encryption. The existing iPad iCloud reader remains
 experimental; Dropbox/OneDrive/Google Drive access through iPad Files is not
 validated and is not enabled by connecting a Mac folder.
@@ -195,7 +216,7 @@ active notes already have today's title there, the most recently edited is
 opened. A dated note in Trash must be restored explicitly, not silently
 resurrected or duplicated. Renaming a dated note allows a new note with the
 original daily title to be created; changing/renaming the notebook path likewise
-changes where Folio looks. It is not a permanent calendar-ID system.
+changes where Deltos looks. It is not a permanent calendar-ID system.
 
 The configured template supplies the Markdown body and tags; the daily title
 stays the date, and `daily` is added to its tags. Built-in templates work offline
@@ -271,9 +292,9 @@ Smart folders are **local to this Mac**, in `smart-folders.json`, outside the
 note library schema. They restore on relaunch but are not synced to iPad or
 other Macs, nor included in complete backups, open-folder exports or local
 daily library recovery copies. Preserve this file separately, or include the
-entire Folio folder in Time Machine. A corrupt or newer smart-folder file is
+entire Folio storage folder in Time Machine. A corrupt or newer smart-folder file is
 left untouched; the library still opens, and **Reload Smart Folders** lets
-you retry after repairing or preserving/removing the file while Folio is quit.
+you retry after repairing or preserving/removing the file while Deltos is quit.
 
 Selecting a matching open tab keeps the smart folder and refinement. Opening
 a note outside its results reveals that note's real notebook. New notes and
@@ -283,7 +304,7 @@ never applied to new notes as implicit tags or pins.
 
 ## Local opening-day recovery
 
-On Mac, Folio also saves the first validated on-disk library from each UTC day
+On Mac, Deltos also saves the first validated on-disk library from each UTC day
 when opening an existing library, retaining the last seven opening days in
 `Recovery/`. Reopening on the same day does not overwrite that day's copy.
 Recovery-copy failures stop the library opening for editing and show an error;
@@ -294,10 +315,10 @@ previously deleted notes, and are not a replacement for complete backups.
 There is no library-schema migration in this release.
 
 Use **Settings > Files & Backups > Show Local Recovery Copies** to find them.
-To recover: quit Folio, preserve the current `library.json` separately, copy
+To recover: quit Deltos, preserve the current `library.json` separately, copy
 the chosen JSON file into the library folder as `library.json`, then reopen.
 Original attachment folders must still exist. Do not replace the live library
-while Folio is running.
+while Deltos is running.
 
 ## Your Mac library on iPad
 
@@ -305,7 +326,7 @@ The first iPad experience is deliberately **viewing only**: notebooks, tags,
 search, readable pages and tap-to-open original images in the document area. There are no
 half-finished editing controls.
 
-1. On Mac, create a dedicated folder in **iCloud Drive**. In Folio choose
+1. On Mac, create a dedicated folder in **iCloud Drive**. In Deltos choose
    **File > Connect Cloud Folder**, then **Sync Now**.
 2. Let iCloud upload it. In Files on iPad, make the folder available offline
    using **Keep Downloaded** where available.
@@ -365,7 +386,7 @@ on your iPad.
 
 **Joplin:** export **MD - Markdown + Front Matter**, then choose **File >
 Import Joplin Folder**. Titles, tags, dates and notebook paths are preserved.
-The export and its original resources are copied into Folio; the source export
+The export and its original resources are copied into Deltos; the source export
 can then be removed. Other YAML fields remain in the copied originals.
 JEX, RAW exports and unexported `:/resource-id` links are not supported.
 
@@ -380,7 +401,7 @@ quotes, links and sanitized HTML. HTML source is retained, but its original
 stylesheets and active content are not reproduced. Remote images, scripts,
 forms and embeds are blocked. Local images are restricted to the note's
 resource root. Relative links to other documents open their saved originals,
-not editable Folio notes.
+not editable Deltos notes.
 
 Evernote ENEX, web clipping and OCR are not implemented.
 
@@ -394,7 +415,7 @@ This is a portable snapshot you can open with other tools, not a live Obsidian
 vault backend.
 
 **File > Export Complete Backup** includes the full library, history and copied
-original resource trees. **Import Folio Backup** adds records without replacing
+original resource trees. **Import Deltos Backup** adds records without replacing
 existing notes. Backups use portable relative paths and can be moved between
 devices. Device-local sync state and folder permissions are not exported.
 
@@ -418,14 +439,14 @@ in a shared folder or run separate app processes against it. Individual-note
 export writes only the source body; use an open-folder export or complete
 backup for original attachments.
 
-There is no Folio account, subscription, analytics service or runtime server.
+There is no Deltos account, subscription, analytics service or runtime server.
 Your chosen provider's desktop app handles file delivery. Local notes, drafts
-and snapshots are not encrypted by Folio. Use device protection/FileVault.
+and snapshots are not encrypted by Deltos. Use device protection/FileVault.
 History and retained attachments are not substitutes for independent backups.
 
 ## Settings that stay out of your way
 
-Open **Folio > Settings** (Command-comma). Search settings by name or purpose,
+Open **Deltos > Settings** (Command-comma). Search settings by name or purpose,
 then select a matching category:
 
 - **General:** version, manual release downloads, documentation, contributor
@@ -457,7 +478,7 @@ source archive or repository, start at its root:
 ```bash
 bash scripts/test.sh
 bash scripts/build-app.sh
-open dist/Folio.app
+open dist/Deltos.app
 bash scripts/build-dmg.sh
 bash scripts/build-ipad.sh
 bash scripts/package-source.sh
@@ -477,7 +498,7 @@ embedded document preview, not a web-app shell.
 
 The standalone source archive includes MIT licensing, contributor guidance,
 an example extension and macOS CI. The nested `.github/workflows` becomes
-active when Folio is published at its own repository root; it does not
+active when Deltos is published at its own repository root; it does not
 replace the original parent repository's workflows.
 
 ## License

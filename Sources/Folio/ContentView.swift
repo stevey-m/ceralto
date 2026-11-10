@@ -83,7 +83,7 @@ struct ContentView: View {
                     .accessibilityLabel("Quick capture")
             }
         }
-        .navigationTitle("Folio")
+        .navigationTitle("Deltos")
         .onChange(of: store.scope) { _, _ in store.reconcileSelection() }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
         .sheet(item: $store.notebookDraft) { draft in
@@ -109,7 +109,7 @@ struct ContentView: View {
         }) {
             CommandPalette(onSelect: { pendingCommand = $0 }).environmentObject(store)
         }
-        .alert("Folio", isPresented: Binding(
+        .alert("Deltos", isPresented: Binding(
             get: { store.importSummary != nil },
             set: { if !$0 { store.importSummary = nil } }
         )) {
@@ -117,7 +117,7 @@ struct ContentView: View {
         } message: {
             Text(store.importSummary ?? "")
         }
-        .alert("Folio needs your attention", isPresented: Binding(
+        .alert("Deltos needs your attention", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
         )) {
@@ -190,7 +190,7 @@ struct ContentView: View {
                     } description: {
                         Text(store.isLoaded
                              ? "Select a note, or create something new."
-                             : "Retry opening your library. Folio will not overwrite a file it cannot read.")
+                             : "Retry opening your library. Deltos will not overwrite a file it cannot read.")
                     } actions: {
                         if store.isLoaded {
                             Button("New Note", action: store.createNote)
@@ -247,7 +247,7 @@ struct ContentView: View {
                     .font(.title2)
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Folio").font(.title2.weight(.semibold))
+                    Text("Deltos").font(.title2.weight(.semibold))
                     Text("Your offline library")
                         .font(.caption).foregroundStyle(.secondary)
                 }

@@ -109,7 +109,7 @@ enum ShortcutConfiguration {
 
     static func validate(_ bindings: [String: ShortcutBinding]) throws {
         guard Set(bindings.keys) == Set(defaults.keys) else { throw ShortcutError("The shortcut configuration contains missing or unknown actions.") }
-        let reserved = Set(["a", "b", "c", "f", "h", "i", "m", "q", "u", "v", "w", "x", "z", ","].map {
+        let reserved = Set(["a", "b", "c", "f", "h", "i", "m", "p", "q", "u", "v", "w", "x", "z", ","].map {
             ShortcutBinding(key: $0)
         } + [ShortcutBinding(key: "z", modifiers: 1), ShortcutBinding(key: "h", modifiers: 2),
              ShortcutBinding(key: "m", modifiers: 2), ShortcutBinding(key: "f", modifiers: 4),
@@ -180,7 +180,7 @@ struct ShortcutSettings: View {
                 }
                 .disabled(!store.shortcutsAvailable || draft == store.shortcutBindings)
             }
-            Text("Only Folio application commands are configurable here. Standard editing, window and system shortcuts remain reserved. These are local preferences, not global hotkeys.")
+            Text("Only Deltos application commands are configurable here. Standard editing, window and system shortcuts remain reserved. These are local preferences, not global hotkeys.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("Reset all application shortcuts?", isPresented: $confirmingReset, titleVisibility: .visible) {

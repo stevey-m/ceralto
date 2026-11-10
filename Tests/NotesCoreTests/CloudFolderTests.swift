@@ -49,7 +49,7 @@ struct CloudFolderTests {
             let first = try store.exportDatedBackup(to: cloud, on: date)
             let second = try store.exportDatedBackup(to: cloud, on: date)
             #expect(first != second)
-            #expect(first.lastPathComponent.hasPrefix("Folio Backup 2023-11-14"))
+            #expect(first.lastPathComponent.hasPrefix("Deltos Backup 2023-11-14"))
             #expect(FileManager.default.fileExists(atPath: first.appendingPathComponent("library.json").path))
             #expect(FileManager.default.fileExists(atPath: second.appendingPathComponent("library.json").path))
             let result = try LibraryBackup.imported(from: first,

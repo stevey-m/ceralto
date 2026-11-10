@@ -29,7 +29,7 @@ public enum JoplinImport {
         let destination = importsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
             .standardizedFileURL
         guard !destination.path.hasPrefix(root.path + "/") else {
-            throw JoplinImportError.invalid("The export folder cannot contain Folio's import storage.")
+            throw JoplinImportError.invalid("The export folder cannot contain Deltos's import storage.")
         }
         var files: [URL] = []
         var enumerationError: (any Error)?

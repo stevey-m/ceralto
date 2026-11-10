@@ -4,8 +4,8 @@ struct BuiltInFeaturesSettings: View {
     @EnvironmentObject private var store: NotesStore
 
     var body: some View {
-        Section("Optional Folio tools") {
-            Text("Switch off tools you do not use. Your notes, tasks, templates and workflow preferences are kept. These are native Folio features, not imported Obsidian core plugins.")
+        Section("Optional Deltos tools") {
+            Text("Switch off tools you do not use. Your notes, tasks, templates and workflow preferences are kept. These are native Deltos features, not imported Obsidian core plugins.")
                 .foregroundStyle(.secondary)
             ForEach(BuiltInFeature.allCases) { feature in
                 Toggle(isOn: Binding(get: { store.featureEnabled(feature) },
@@ -62,7 +62,7 @@ struct CommunityExtensionsSettings: View {
     var body: some View {
         Section("Manage community extensions") {
             TextField("Search registered extensions", text: $query)
-            Text("Enable Folio template packs or inspect a local Joplin/Obsidian plugin folder. External plugins cannot run: Folio reads manifest metadata only, without loading code or making network requests.")
+            Text("Enable Deltos template packs or inspect a local Joplin/Obsidian plugin folder. External plugins cannot run: Deltos reads manifest metadata only, without loading code or making network requests.")
                 .foregroundStyle(.secondary)
             Button("Inspect Joplin or Obsidian Folder...", action: store.choosePluginFolder)
                 .disabled(!store.isLoaded || store.isReadOnly || !store.extensionConfigurationAvailable)
@@ -71,7 +71,7 @@ struct CommunityExtensionsSettings: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         ExtensionConfigurationRecovery()
-        Section("Folio template packs") {
+        Section("Deltos template packs") {
             Button("Open Extensions Folder", action: store.revealExtensions)
             Button("Reload Template Packs", action: store.reloadExtensions)
             if store.extensions.isEmpty {
@@ -144,7 +144,7 @@ struct CommunityExtensionsSettings: View {
             }
             Button("Cancel", role: .cancel) { removing = nil }
         } message: {
-            Text("Only Folio's registration is removed. No files in the original plugin folder or your notes will be deleted.")
+            Text("Only Deltos's registration is removed. No files in the original plugin folder or your notes will be deleted.")
         }
         .confirmationDialog("Disable all community template packs?", isPresented: $confirmingDisable,
                             titleVisibility: .visible) {

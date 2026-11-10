@@ -103,6 +103,7 @@ struct DocumentWebView: NSViewRepresentable {
     var onImage: (URL) -> Void
     var onError: (String) -> Void
     var onNote: (UUID) -> Void = { _ in }
+    var onLoaded: (WKWebView) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -225,6 +226,14 @@ struct DocumentWebView: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+            if (error as NSError).code != NSURLErrorCancelled { parent.onError(error.localizedDescription) }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            parent.onLoaded(webView)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
             if (error as NSError).code != NSURLErrorCancelled { parent.onError(error.localizedDescription) }
         }
 

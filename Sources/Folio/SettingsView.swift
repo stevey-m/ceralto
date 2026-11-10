@@ -28,7 +28,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "version releases updates help github source license contributors note list preview dates"
         case .appearance: "theme system light dark dracula accent gold blue purple green rose font text size images width panes layout"
         case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates"
-        case .files: "library storage location import export joplin markdown html attachments backup restore history privacy encryption trash"
+        case .files: "library storage location import export print pdf joplin markdown html attachments backup restore history privacy encryption trash"
         case .sync: "icloud dropbox onedrive google drive cloud folder connect disconnect sync offline ipad refresh snapshots conflicts backup"
         case .extensions: "templates packs plugins api community reload install joplin obsidian compatibility inspect folders"
         case .features: "core plugins built in optional tools daily notes templates tasks enable disable"
@@ -136,12 +136,12 @@ struct SettingsView: View {
     @ViewBuilder private func sectionContent(_ section: SettingsSection) -> some View {
         switch section {
         case .general:
-            Section("Folio") {
+            Section("Deltos") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Source build")
-                Text("A native notebook. Your notes stay on your device. MIT licensed, with no Folio account or subscription.")
+                Text("A native notebook. Your notes stay on your device. MIT licensed, with no Deltos account or subscription.")
                     .foregroundStyle(.secondary)
                 Button("View Releases & Downloads") { openProject("releases") }
-                Text("Updates are downloaded and installed manually. Folio does not check for updates in the background.")
+                Text("Updates are downloaded and installed manually. Deltos does not check for updates in the background.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Help & Documentation") { openProject("blob/main/README.md") }
                 Button("Contribute on GitHub") { openProject("blob/main/CONTRIBUTING.md") }
@@ -185,10 +185,14 @@ struct SettingsView: View {
                 Text(store.libraryURL.deletingLastPathComponent().path).textSelection(.enabled)
                     .font(.callout.monospaced())
                 Button("Show Library in Finder", action: store.revealLibrary)
-                Text("Do not move the working library into a shared folder. Notes, drafts and attachments are not encrypted by Folio; use FileVault and device protection.")
+                Text("Do not move the working library into a shared folder. Notes, drafts and attachments are not encrypted by Deltos; use FileVault and device protection.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Import & export") {
+                Button("Print Current Note...", action: store.printSelectedNote)
+                    .disabled(FolioCommand.printNote.unavailableReason(in: store) != nil)
+                Text("File > Print (Command-P) prints the rendered current note, including its title and local images. Use the macOS print dialog's PDF menu to save a PDF. Printer choice, paper size, orientation and page range use the standard system panel.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Button("Import Markdown or HTML Files...", action: store.importMarkdown)
                 Button("Import Joplin Export Folder...", action: store.importJoplinFolder)
                 Button("Export Open Markdown Folder...", action: store.exportVault)
@@ -197,13 +201,13 @@ struct SettingsView: View {
             }.disabled(!store.isLoaded || store.isImportingJoplin)
             Section("Backups & recovery") {
                 Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
-                Text("Before opening an existing Mac library for editing, Folio keeps its first validated copy of the day. The last seven opening days are retained. These JSON copies contain notes and history, but not attachment files or unsaved drafts. They are not complete backups.")
+                Text("Before opening an existing Mac library for editing, Deltos keeps its first validated copy of the day. The last seven opening days are retained. These JSON copies contain notes and history, but not attachment files or unsaved drafts. They are not complete backups.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("To recover a whole library copy, quit Folio, preserve the current library.json, then copy the chosen recovery file to that location as library.json. Attachments must still exist in their original locations. Never replace the file while Folio is running.")
+                Text("To recover a whole library copy, quit Folio, preserve the current library.json, then copy the chosen recovery file to that location as library.json. Attachments must still exist in their original locations. Never replace the file while Deltos is running.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Export Complete Backup...", action: store.exportBackup)
                     .disabled(!store.isLoaded)
-                Button("Import Folio Backup...", action: store.importBackup)
+                Button("Import Deltos Backup...", action: store.importBackup)
                     .disabled(!store.isLoaded)
                 Text("Complete backups include notes, history and original attachments. Import adds notes without replacing current ones. Back up regularly or use Time Machine; scheduled backups are not implemented.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -226,10 +230,10 @@ struct SettingsView: View {
             Section("Backups are separate from sync") {
                 Button("Export Dated Complete Backup...", action: store.exportBackup)
                     .disabled(!store.isLoaded || store.isReadOnly || store.isSyncing)
-                Button("Import Folio Backup...", action: store.importBackup).disabled(!store.isLoaded)
+                Button("Import Deltos Backup...", action: store.importBackup).disabled(!store.isLoaded)
                 Text("Choose a separate backup location, ideally outside the sync folder or with another provider. Each manual backup creates a new dated copy of notes, history and original attachments. Nothing is overwritten or automatically pruned. No scheduled backups or direct cloud account sign-in are implemented.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("A local save does not confirm upload. Check the provider's app before relying on another device. Cloud deletion can remove synced backups too; keep an independent copy. Files are readable, not end-to-end encrypted by Folio.")
+                Text("A local save does not confirm upload. Check the provider's app before relying on another device. Cloud deletion can remove synced backups too; keep an independent copy. Files are readable, not end-to-end encrypted by Deltos.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Offline reader & limitations") {
@@ -249,9 +253,10 @@ struct SettingsView: View {
             Section("Keyboard shortcuts") {
                 shortcut("Save Quick Capture", "⌘Return")
                 shortcut("Search this collection", "⌘F")
+                shortcut("Print current note / Save as PDF", "⌘P")
                 shortcut("Bold / Italic in Compose", "⌘B / ⌘I")
                 shortcut("Back from image", "Esc")
-                Text("These contextual editing shortcuts are fixed. Application shortcuts above work while Folio is active; a global capture hotkey is not implemented.")
+                Text("These contextual editing shortcuts are fixed. Application shortcuts above work while Deltos is active; a global capture hotkey is not implemented.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         case .appearance:
@@ -265,7 +270,7 @@ struct SettingsView: View {
 
     private func openProject(_ path: String) {
         guard let url = URL(string: "https://github.com/stevey-m/folio/" + path), NSWorkspace.shared.open(url) else {
-            store.errorMessage = "Could not open the Folio project page in your browser."
+            store.errorMessage = "Could not open the Deltos project page in your browser."
             return
         }
     }

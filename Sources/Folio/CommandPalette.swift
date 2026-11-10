@@ -8,7 +8,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
     case reference, closeReference
     case revealRecovery
     case newSmartFolder
-    case today, templates, tasks
+    case today, templates, tasks, printNote
 
     var id: String { rawValue }
 
@@ -30,7 +30,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .exportNote: "Export Current Note..."
         case .exportVault: "Export Open Markdown Folder..."
         case .backup: "Export Complete Backup..."
-        case .importBackup: "Import Folio Backup..."
+        case .importBackup: "Import Deltos Backup..."
         case .sync: "Sync Now"
         case .revealLibrary: "Show Library in Finder"
         case .reloadTemplates: "Reload Template Packs"
@@ -41,10 +41,12 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .today: "Open Today's Note"
         case .templates: "Choose a Template..."
         case .tasks: "Show Tasks..."
+        case .printNote: "Print Current Note..."
         }
     }
 
     @MainActor func shortcut(in store: NotesStore) -> String {
+        if self == .printNote { return "⌘P" }
         guard let action = ShortcutAction.allCases.first(where: { $0.command == self }) else { return "" }
         let binding = store.shortcut(action)
         return binding.key.isEmpty ? "" : binding.label
@@ -71,6 +73,9 @@ enum FolioCommand: String, CaseIterable, Identifiable {
             return "Enable \(feature.name) in Settings > Built-in Features"
         }
         switch self {
+        case .printNote:
+            if store.isPreparingPrint { return "A print job is already open" }
+            return store.selectedNote == nil ? "Select a note first" : nil
         case .back: return store.workspace.canGoBack ? nil : "No earlier document"
         case .forward: return store.workspace.canGoForward ? nil : "No later document"
         case .closeTab, .exportNote, .reference: return store.selectedNote == nil ? "Select a note first" : nil
@@ -130,6 +135,7 @@ extension NotesStore {
             catch { errorMessage = "Could not open today's note: \(error.localizedDescription)" }
         case .templates: showingTemplates = true
         case .tasks: showingTasks = true
+        case .printNote: printSelectedNote()
         }
     }
 }

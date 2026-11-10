@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build --configuration release
 BIN_DIR="$(swift build --configuration release --show-bin-path)"
-APP="$PWD/dist/Folio.app"
+APP="$PWD/dist/Deltos.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Folio" "$APP/Contents/MacOS/Folio"
 cp Support/Info.plist "$APP/Contents/Info.plist"

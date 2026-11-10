@@ -82,7 +82,7 @@ struct MobileReaderView: View {
                     } label: { Label("Appearance", systemImage: "circle.lefthalf.filled") }
                 }
             }
-            .navigationTitle("Folio")
+            .navigationTitle("Deltos")
         } content: {
             List(selection: $store.selectedNoteID) {
                 if let folder = store.navigationFolder {
@@ -148,7 +148,7 @@ struct MobileReaderView: View {
                 store.syncNow()
             } catch { store.errorMessage = "Could not connect folder: \(error.localizedDescription)" }
         }
-        .alert("Folio needs your attention", isPresented: Binding(
+        .alert("Deltos needs your attention", isPresented: Binding(
             get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } }
         )) {
             Button("Dismiss", role: .cancel) {}

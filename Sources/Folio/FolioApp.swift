@@ -8,7 +8,7 @@ struct FolioApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        Window("Folio", id: "library") {
+        Window("Deltos", id: "library") {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 720, minHeight: 520)
@@ -67,7 +67,7 @@ struct FolioApp: App {
                     .disabled(!store.isLoaded)
                 Button("Export Open Markdown Folder...", action: store.exportVault)
                     .disabled(!store.isLoaded)
-                Button("Import Folio Backup...", action: store.importBackup)
+                Button("Import Deltos Backup...", action: store.importBackup)
                     .disabled(!store.isLoaded)
             }
             CommandGroup(replacing: .saveItem) {
@@ -84,6 +84,11 @@ struct FolioApp: App {
                     .disabled(store.syncFolderName == nil || store.isSyncing)
                 Button("Disconnect Shared Folder", action: store.disconnectSyncFolder)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
+            }
+            CommandGroup(replacing: .printItem) {
+                Button(store.isPreparingPrint ? "Preparing Print..." : "Print...") { store.perform(.printNote) }
+                    .keyboardShortcut("p")
+                    .disabled(FolioCommand.printNote.unavailableReason(in: store) != nil)
             }
             CommandGroup(after: .textEditing) {
                 Button("Find Across All Notes") {
@@ -130,16 +135,16 @@ struct FolioApp: App {
         }
         .defaultSize(width: 480, height: 420)
         .windowResizability(.contentMinSize)
-        MenuBarExtra("Folio", systemImage: "square.and.pencil") {
+        MenuBarExtra("Deltos", systemImage: "square.and.pencil") {
             Button("Quick Capture") { capture() }.disabled(!store.isLoaded)
-            Button("Open Folio") {
+            Button("Open Deltos") {
                 openWindow(id: "library")
                 NSApp.activate(ignoringOtherApps: true)
             }
             Button(store.isSyncing ? "Syncing..." : "Sync Now", action: store.syncNow)
                 .disabled(store.syncFolderName == nil || store.isSyncing)
             Divider()
-            Button("Quit Folio") { NSApp.terminate(nil) }.keyboardShortcut("q")
+            Button("Quit Deltos") { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
         Settings { SettingsView().environmentObject(store) }
     }
@@ -160,9 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard store.hasUnsavedChanges else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "Your latest changes have not been saved"
-        alert.informativeText = "Stay in Folio to retry saving or export your notes. Quitting now will discard changes that could not be written to disk."
+        alert.informativeText = "Stay in Deltos to retry saving or export your notes. Quitting now will discard changes that could not be written to disk."
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Keep Folio Open")
+        alert.addButton(withTitle: "Keep Deltos Open")
         alert.addButton(withTitle: "Quit Without Saving")
         return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }

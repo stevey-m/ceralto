@@ -138,7 +138,7 @@ public struct Library: Codable, Equatable, Sendable {
         let welcome = Note(
             notebookID: notebook.id, title: "A little space for your thoughts",
             body: """
-            # Welcome to Folio
+            # Welcome to Deltos
 
             Your notes, on your Mac. A quiet place to think, write, and collect ideas.
 

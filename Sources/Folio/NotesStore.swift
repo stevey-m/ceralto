@@ -72,6 +72,8 @@ final class NotesStore: ObservableObject {
     @Published private(set) var extensionConfigurationAvailable = true
     @Published private(set) var extensionConfigurationError: String?
     @Published private(set) var pluginInspections: [PluginInspection] = []
+    @Published private(set) var isPreparingPrint = false
+    private var notePrinter: NotePrinter?
     #endif
     private let storage: LibraryStorage
     private let preferences: UserDefaults
@@ -470,6 +472,34 @@ final class NotesStore: ObservableObject {
     }
 
     #if os(macOS)
+    func printSelectedNote() {
+        guard isLoaded, let note = selectedNote, !isPreparingPrint else {
+            errorMessage = "Select a note and wait for any current print job to finish before printing."
+            return
+        }
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else {
+            errorMessage = "Open the Deltos note window before printing."
+            return
+        }
+        do {
+            let printer = try NotePrinter(note: note)
+            notePrinter = printer
+            isPreparingPrint = true
+            Task {
+                defer {
+                    printer.close()
+                    notePrinter = nil
+                    isPreparingPrint = false
+                }
+                do {
+                    try await printer.prepare()
+                    let operation = try printer.makeOperation()
+                    _ = await printer.run(operation, in: window)
+                } catch { errorMessage = "Could not print the note: \(error.localizedDescription)" }
+            }
+        } catch { errorMessage = "Could not prepare the note for printing: \(error.localizedDescription)" }
+    }
+
     func reloadExtensionConfiguration() {
         do {
             let candidate: ExtensionManagerConfiguration
@@ -792,7 +822,7 @@ final class NotesStore: ObservableObject {
         try bookmark.write(to: bookmarkURL, options: .atomic)
         syncFolder = folder
         syncFolderName = folder.lastPathComponent
-        syncMessage = "Folder connected. Choose Sync Now for local snapshot exchange. Cloud upload and delivery are managed by your provider and are not verified by Folio."
+        syncMessage = "Folder connected. Choose Sync Now for local snapshot exchange. Cloud upload and delivery are managed by your provider and are not verified by Deltos."
     }
 
     func disconnectSyncFolder() {
@@ -823,7 +853,7 @@ final class NotesStore: ObservableObject {
             guard !stale else { throw JoplinImportError.invalid("Folder permission expired. Connect the shared folder again.") }
             syncFolder = url
             syncFolderName = url.lastPathComponent
-            syncMessage = "Folder connection restored. Local notes are available offline; cloud upload and delivery are not verified by Folio."
+            syncMessage = "Folder connection restored. Local notes are available offline; cloud upload and delivery are not verified by Deltos."
         } catch {
             syncMessage = "Shared folder needs reconnection: \(error.localizedDescription)"
         }
@@ -876,7 +906,7 @@ final class NotesStore: ObservableObject {
     func folderExchangeMessage(at time: String, conflicts: Int) -> String {
         let operation = isReadOnly ? "Downloaded snapshots read locally" : "Snapshot exchange completed locally"
         let conflictMessage = conflicts == 0 ? "" : " \(conflicts) conflicts preserved; see #sync-conflict."
-        return "\(operation) at \(time).\(conflictMessage) Cloud upload and delivery are not verified by Folio."
+        return "\(operation) at \(time).\(conflictMessage) Cloud upload and delivery are not verified by Deltos."
     }
 
     func validateCloudFolder(_ folder: URL) throws {
@@ -887,7 +917,7 @@ final class NotesStore: ObservableObject {
         let root = folder.standardizedFileURL.resolvingSymlinksInPath().path
         let local = storage.url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath().path
         guard root != "/", root != local, !root.hasPrefix(local + "/"), !local.hasPrefix(root + "/") else {
-            throw JoplinImportError.invalid("Choose a dedicated cloud folder outside Folio's local library storage, not that storage or one of its parent folders.")
+            throw JoplinImportError.invalid("Choose a dedicated cloud folder outside Deltos's local library storage, not that storage or one of its parent folders.")
         }
     }
 
@@ -899,7 +929,7 @@ final class NotesStore: ObservableObject {
         let accessing = parent.startAccessingSecurityScopedResource()
         defer { if accessing { parent.stopAccessingSecurityScopedResource() } }
         try validateCloudFolder(parent)
-        let name = "Folio Backup " + date.ISO8601Format().replacingOccurrences(of: ":", with: "-") + " " + UUID().uuidString
+        let name = "Deltos Backup " + date.ISO8601Format().replacingOccurrences(of: ":", with: "-") + " " + UUID().uuidString
         let destination = parent.appendingPathComponent(name, isDirectory: true)
         var coordinationError: NSError?
         var result: Result<Void, Error>?
@@ -940,7 +970,7 @@ final class NotesStore: ObservableObject {
     func chooseSyncFolder() {
         let panel = NSOpenPanel()
         panel.title = "Connect a Cloud Folder"
-        panel.message = "Choose a dedicated, locally downloaded folder in Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Folio exchanges snapshots manually; the provider handles upload. Start on one Mac and wait for delivery before connecting the next. Provider delivery is experimental and unverified."
+        panel.message = "Choose a dedicated, locally downloaded folder in Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Deltos exchanges snapshots manually; the provider handles upload. Start on one Mac and wait for delivery before connecting the next. Provider delivery is experimental and unverified."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
@@ -957,7 +987,7 @@ final class NotesStore: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let parent = panel.url else { return }
-        let name = "Folio Open Export " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
+        let name = "Deltos Open Export " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
         do {
             let folder = parent.appendingPathComponent(name, isDirectory: true)
             try exportVault(to: folder)
@@ -978,8 +1008,8 @@ final class NotesStore: ObservableObject {
 
     func exportBackup() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Where to Save a Complete Folio Backup"
-        panel.message = "Choose a local folder or a downloaded Dropbox, OneDrive, Google Drive or iCloud folder. A new dated copy includes notes, history and original attachments. This is a manual backup, not scheduled backup or live sync. Folio cannot confirm cloud upload."
+        panel.title = "Choose Where to Save a Complete Deltos Backup"
+        panel.message = "Choose a local folder or a downloaded Dropbox, OneDrive, Google Drive or iCloud folder. A new dated copy includes notes, history and original attachments. This is a manual backup, not scheduled backup or live sync. Deltos cannot confirm cloud upload."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
@@ -993,7 +1023,7 @@ final class NotesStore: ObservableObject {
 
     func importBackup() {
         let panel = NSOpenPanel()
-        panel.title = "Import a Folio Backup"
+        panel.title = "Import a Deltos Backup"
         panel.message = "Select a backup folder containing library.json. Its notes will be added without replacing current notes."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -1008,7 +1038,7 @@ final class NotesStore: ObservableObject {
         guard isLoaded, !isImportingJoplin, let notebookID = currentNotebookID else { return }
         let panel = NSOpenPanel()
         panel.title = "Import Markdown or HTML Files"
-        panel.message = "Linked local images and attachments in the same folder are copied into Folio. For shared parent resources, use Import Folder."
+        panel.message = "Linked local images and attachments in the same folder are copied into Deltos. For shared parent resources, use Import Folder."
         panel.allowedContentTypes = [.plainText, .html, UTType(filenameExtension: "md") ?? .plainText,
                                      UTType(filenameExtension: "markdown") ?? .plainText]
         panel.allowsMultipleSelection = true
@@ -1024,7 +1054,7 @@ final class NotesStore: ObservableObject {
                     try DocumentFileImport.prepare(files: files, notebookID: notebookID, importsDirectory: importsDirectory)
                 }.value
                 try commitJoplinImport(result)
-                importSummary = "Imported \(result.notes.count) documents and copied their local resources into Folio."
+                importSummary = "Imported \(result.notes.count) documents and copied their local resources into Deltos."
             } catch {
                 errorMessage = "Import failed; no notes were imported: \(error.localizedDescription)"
             }
@@ -1052,7 +1082,7 @@ final class NotesStore: ObservableObject {
         guard isLoaded, !isImportingJoplin else { return }
         let panel = NSOpenPanel()
         panel.title = includeHTML ? "Import Markdown or HTML Folder" : "Import Joplin Markdown + Front Matter Folder"
-        panel.message = "Subfolders become notebooks. Original images and attachments are copied to Folio without resizing."
+        panel.message = "Subfolders become notebooks. Original images and attachments are copied to Deltos without resizing."
         panel.prompt = "Import Folder"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -1067,7 +1097,7 @@ final class NotesStore: ObservableObject {
                     try JoplinImport.prepare(folder: folder, importsDirectory: importsDirectory, includeHTML: includeHTML)
                 }.value
                 try commitJoplinImport(result)
-                importSummary = "Imported \(result.notes.count) notes into \(result.notebooks.count) notebooks. A copy of the export, including attachments, is stored in Folio's Imports folder."
+                importSummary = "Imported \(result.notes.count) notes into \(result.notebooks.count) notebooks. A copy of the export, including attachments, is stored in Deltos's Imports folder."
             } catch {
                 errorMessage = "Folder import failed; no notes were imported: \(error.localizedDescription)"
             }

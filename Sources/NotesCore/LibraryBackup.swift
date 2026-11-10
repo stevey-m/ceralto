@@ -42,12 +42,12 @@ public enum LibraryBackup {
 
     public static func imported(from folder: URL, importsDirectory: URL) throws -> JoplinImportResult {
         guard var library = try LibraryStorage(url: folder.appendingPathComponent("library.json")).load() else {
-            throw JoplinImportError.invalid("This folder is not a Folio backup.")
+            throw JoplinImportError.invalid("This folder is not a Deltos or Folio backup.")
         }
         let root = folder.standardizedFileURL.resolvingSymlinksInPath()
         let destination = importsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         guard !destination.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root.path + "/") else {
-            throw JoplinImportError.invalid("Choose a backup outside Folio's import storage.")
+            throw JoplinImportError.invalid("Choose a backup outside Deltos's import storage.")
         }
         var ids: [UUID: UUID] = [:]
         library.notebooks = library.notebooks.map { notebook in
