@@ -185,7 +185,7 @@ struct LiveMarkdownStoreTests {
                 try await Task.sleep(for: .milliseconds(20))
             }
             #expect(window.delegate?.windowShouldClose?(window) == true)
-            func webView(in view: NSView) -> WKWebView? {
+            @MainActor func webView(in view: NSView) -> WKWebView? {
                 if let web = view as? WKWebView { return web }
                 return view.subviews.compactMap { webView(in: $0) }.first
             }
