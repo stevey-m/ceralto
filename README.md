@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.13.0 is a development release, not a finished replacement for your library.**
+**0.14.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.13.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.14.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -59,6 +59,33 @@ The standard macOS panel offers printer, paper, orientation, page range and
 changing the note. Missing images produce an explicit error rather than a
 silently incomplete print. Command-P is reserved; a prior custom assignment
 using it must be reset in Keyboard Shortcuts (the saved configuration is kept).
+
+### Write and format in Compose
+
+The Bold, Italic and Bullet controls reflect the current selection. A mixed
+selection is not highlighted; applying Bold or Italic formats the whole
+selection consistently. The paragraph menu changes whole selected paragraphs
+without dropping links, inline styling or the selection. Heading weight is
+kept separate from explicit bold, so returning a heading to Body does not
+leave its words permanently bold.
+
+Use **More text formatting** for Underline (Command-U), Strikethrough, Inline
+Code and Remove Link. With no selection, inline formatting applies to the
+next text you type. Remove Link also works with the caret inside a link.
+Native undo/redo covers formatting and attachment insertion.
+
+Paste a screenshot or clipboard image directly into Compose. PNG data is
+copied unchanged; TIFF clipboard images are converted to portable PNG files.
+The paperclip and Finder-file paste insert at the current selection, and file
+drops insert at the drop position. Insertions replace selected text and
+separate attachments from surrounding paragraphs. Images remain managed local
+files referenced by readable Markdown, not embedded base64. Undo removes the
+insertion but keeps the file available for redo, history and backups.
+
+Text paste is still plain text, not rich-text/HTML conversion. Image paste and
+caret attachment insertion apply to Compose; source notes and the separate
+live Markdown window keep their existing editing behavior. In source or
+Preview mode, the paperclip still appends attachments to the note.
 
 ## A notebook, not a control panel
 
@@ -161,7 +188,8 @@ Shortcuts below are defaults. Customize application commands in
   Smaller preview sizes remain available in Settings.
   Add files with the paperclip, drag files into Compose,
   or paste files copied in Finder. Text paste is intentionally plain text;
-  clipboard-only image paste and rich-text paste are not yet supported.
+  clipboard-only images can also be pasted directly into Compose. Rich-text
+  paste is not yet supported.
 - **Make it yours, quietly.** System, Light, Dark and Dracula appearances, five
   accent colours (Gold, Blue, Purple, Green and Rose), font family, text
   size, image display size and full-width reading are in Settings. Tags are

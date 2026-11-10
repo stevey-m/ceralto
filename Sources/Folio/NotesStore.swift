@@ -867,6 +867,33 @@ final class NotesStore: ObservableObject {
         save()
     }
 
+    #if os(macOS)
+    func importComposeAttachments(_ files: [URL], to id: UUID) throws -> Attachments.Imported {
+        guard isLoaded, !isReadOnly, !isSyncing,
+              let index = library.notes.firstIndex(where: { $0.id == id }),
+              library.notes[index].deletedAt == nil, library.notes[index].contentFormat == .formatted else {
+            throw JoplinImportError.invalid("Select an editable Compose note before adding attachments.")
+        }
+        let imported = try Attachments.importing(
+            files: files, for: library.notes[index],
+            directory: storage.url.deletingLastPathComponent().appendingPathComponent("Attachments", isDirectory: true)
+        )
+        var candidate = library
+        candidate.notes[index].importedRootURL = imported.resources.root
+        candidate.notes[index].importedSourceURL = imported.resources.source
+        do {
+            // Persist resource ownership before an undoable editor insertion can reference it.
+            try storage.save(candidate)
+        } catch {
+            try JoplinImport.discardSnapshot(imported.directory, after: error)
+            throw error
+        }
+        library = candidate
+        hasUnsavedChanges = false
+        return imported
+    }
+    #endif
+
     func exportBackup(to folder: URL) throws {
         guard isLoaded else { throw LibraryError.invalidLibrary }
         try LibraryBackup.export(library, to: folder)

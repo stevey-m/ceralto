@@ -8,6 +8,7 @@ extension NSAttributedString.Key {
     static let folioImage = Self("FolioImage")
     static let folioAlt = Self("FolioAlt")
     static let folioCode = Self("FolioCode")
+    static let folioBold = Self("FolioBold")
 }
 
 @MainActor
@@ -31,7 +32,8 @@ enum NativePageCodec {
         if style == .heading1 || style == .heading2 {
             face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask)
         }
-        return [.font: face, .foregroundColor: color, .paragraphStyle: paragraph, .folioBlock: style.rawValue]
+        return [.font: face, .foregroundColor: color, .paragraphStyle: paragraph,
+                .folioBlock: style.rawValue, .folioBold: false]
     }
 
     static func decode(_ html: String, resources: ImportedResources?, size: Double = 16,
@@ -71,6 +73,7 @@ enum NativePageCodec {
                 if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
                 if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
                 attrs[.font] = face
+                attrs[.folioBold] = run.bold
                 if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
                 if run.struck { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
                 if run.code {
@@ -109,7 +112,7 @@ enum NativePageCodec {
                 } else {
                     if let face = attrs[.font] as? NSFont {
                         let traits = NSFontManager.shared.traits(of: face)
-                        run.bold = traits.contains(.boldFontMask)
+                        run.bold = attrs[.folioBold] as? Bool ?? traits.contains(.boldFontMask)
                         run.italic = traits.contains(.italicFontMask)
                     }
                     run.code = attrs[.folioCode] as? Bool == true
@@ -133,69 +136,213 @@ enum NativePageCodec {
 final class FormattingActions: ObservableObject {
     weak var editor: PageTextView?
     @Published var style = FormattedBlock.Style.paragraph
+    @Published var bold = false
+    @Published var italic = false
+    @Published var underline = false
+    @Published var struck = false
+    @Published var code = false
+    @Published var linked = false
+
+    func refresh() {
+        guard let editor else { return }
+        let selection = editor.selectedRange()
+        var attributes: [[NSAttributedString.Key: Any]] = []
+        if selection.length > 0 {
+            editor.textStorage?.enumerateAttributes(in: selection) { attrs, _, _ in
+                if attrs[.folioMarker] as? Bool != true { attributes.append(attrs) }
+            }
+        }
+        if attributes.isEmpty { attributes = [editor.typingAttributes] }
+        style = FormattedBlock.Style(rawValue: attributes[0][.folioBlock] as? String ?? "") ?? .paragraph
+        bold = attributes.allSatisfy { $0[.folioBold] as? Bool == true }
+        italic = attributes.allSatisfy {
+            NSFontManager.shared.traits(of: $0[.font] as? NSFont ?? .systemFont(ofSize: 16)).contains(.italicFontMask)
+        }
+        underline = attributes.allSatisfy { ($0[.underlineStyle] as? Int ?? 0) != 0 }
+        struck = attributes.allSatisfy { ($0[.strikethroughStyle] as? Int ?? 0) != 0 }
+        code = attributes.allSatisfy { $0[.folioCode] as? Bool == true }
+        linked = attributes.contains { $0[.link] != nil }
+    }
 
     func toggle(_ trait: NSFontTraitMask) {
-        guard let editor else { return }
+        guard let editor, editor.isEditable else { return }
+        refresh()
         let range = editor.selectedRange()
-        let current = range.length > 0
-            ? editor.textStorage?.attributes(at: range.location, effectiveRange: nil) ?? editor.typingAttributes
-            : editor.typingAttributes
-        let face = current[.font] as? NSFont ?? .systemFont(ofSize: 16)
-        let removing = NSFontManager.shared.traits(of: face).contains(trait)
-        if range.length == 0 {
-            var typing = editor.typingAttributes
-            typing[.font] = removing
+        let removing = trait == .boldFontMask ? bold : italic
+        func formatted(_ current: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+            var attrs = current
+            let face = current[.font] as? NSFont ?? .systemFont(ofSize: 16)
+            let heading = [FormattedBlock.Style.heading1.rawValue, FormattedBlock.Style.heading2.rawValue]
+                .contains(current[.folioBlock] as? String ?? "")
+            attrs[.font] = removing && !(trait == .boldFontMask && heading)
                 ? NSFontManager.shared.convert(face, toNotHaveTrait: trait)
                 : NSFontManager.shared.convert(face, toHaveTrait: trait)
-            typing.removeValue(forKey: .folioMarker)
-            editor.typingAttributes = typing
+            if trait == .boldFontMask { attrs[.folioBold] = !removing }
+            attrs.removeValue(forKey: .folioMarker)
+            return attrs
+        }
+        if range.length == 0 {
+            editor.typingAttributes = formatted(editor.typingAttributes)
         } else {
             editor.editAttributes(name: "Format Text") { storage in
-                storage.enumerateAttribute(.font, in: range) { value, subrange, _ in
-                    let font = value as? NSFont ?? face
-                    storage.addAttribute(.font, value: removing
-                        ? NSFontManager.shared.convert(font, toNotHaveTrait: trait)
-                        : NSFontManager.shared.convert(font, toHaveTrait: trait), range: subrange)
+                storage.enumerateAttributes(in: range) { attrs, subrange, _ in
+                    guard attrs[.folioMarker] as? Bool != true else { return }
+                    storage.setAttributes(formatted(attrs), range: subrange)
                 }
             }
         }
+        refresh()
         editor.window?.makeFirstResponder(editor)
     }
 
     func setStyle(_ style: FormattedBlock.Style) {
-        guard let editor, let storage = editor.textStorage else { return }
+        guard let editor, editor.isEditable, let storage = editor.textStorage else { return }
         let selection = editor.selectedRange()
         let range = (storage.string as NSString).paragraphRange(for: selection)
         let attrs = NativePageCodec.attributes(style: style, size: editor.pageFontSize,
                                                family: editor.pageFont, color: editor.textColor ?? .textColor)
         if range.length == 0 {
             editor.typingAttributes = attrs
-        } else {
-            editor.editAttributes(name: "Paragraph Style") { text in
-                // Rebuild only the selected paragraphs so list markers remain presentation, not content.
-                let part = text.attributedSubstring(from: range)
-                let html = NativePageCodec.encode(part)
-                do {
-                    var page = try FormattedPage(html: html)
-                    for index in page.blocks.indices { page.blocks[index].style = style }
-                    let replacement = try NativePageCodec.decode(page.html(), resources: editor.resources,
-                        size: editor.pageFontSize, family: editor.pageFont, color: editor.textColor ?? .textColor)
-                    text.replaceCharacters(in: range, with: replacement)
-                    if range.upperBound < text.length && !replacement.string.hasSuffix("\n") {
-                        text.insert(NSAttributedString(string: "\n", attributes: attrs), at: range.location + replacement.length)
-                    }
-                } catch { editor.onError?("Could not format this paragraph: \(error.localizedDescription)") }
+            if style == .bullet {
+                var marker = attrs
+                marker[.folioMarker] = true
+                editor.insertText(NSAttributedString(string: "\u{2022} ", attributes: marker), replacementRange: selection)
+                editor.typingAttributes = attrs
             }
+        } else {
+            var paragraphs: [NSRange] = []
+            var start = range.location
+            while start < range.upperBound {
+                let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: start, length: 0))
+                paragraphs.append(paragraph)
+                start = paragraph.upperBound
+            }
+            var anchor = selection.location
+            var end = selection.upperBound
+            editor.editAttributes(name: "Paragraph Style") { text in
+                for paragraph in paragraphs.reversed() {
+                    var markerRange = NSRange(location: paragraph.location, length: 0)
+                    if text.attribute(.folioMarker, at: paragraph.location, effectiveRange: &markerRange) as? Bool != true {
+                        markerRange.length = 0
+                    }
+                    markerRange = NSIntersectionRange(markerRange, paragraph)
+                    let removed = markerRange.length
+                    if removed > 0 { text.deleteCharacters(in: markerRange) }
+                    let body = NSRange(location: paragraph.location, length: paragraph.length - removed)
+                    text.enumerateAttributes(in: body) { original, subrange, _ in
+                        var updated = original
+                        updated[.folioBlock] = attrs[.folioBlock]
+                        updated[.paragraphStyle] = attrs[.paragraphStyle]
+                        updated[.font] = Self.face(for: updated, editor: editor)
+                        text.setAttributes(updated, range: subrange)
+                    }
+                    let inserted = style == .bullet ? 2 : 0
+                    if inserted > 0 {
+                        var marker = attrs
+                        marker[.folioMarker] = true
+                        text.insert(NSAttributedString(string: "\u{2022} ", attributes: marker), at: paragraph.location)
+                    }
+                    func shifted(_ offset: Int) -> Int {
+                        guard offset >= paragraph.location else { return offset }
+                        return offset >= paragraph.location + removed
+                            ? offset + inserted - removed : paragraph.location + inserted
+                    }
+                    anchor = shifted(anchor)
+                    end = shifted(end)
+                }
+            }
+            editor.setSelectedRange(NSRange(location: anchor, length: max(0, end - anchor)))
+            var typing = editor.typingAttributes
+            typing[.folioBlock] = style.rawValue
+            typing[.paragraphStyle] = attrs[.paragraphStyle]
+            typing[.font] = Self.face(for: typing, editor: editor)
+            typing.removeValue(forKey: .folioMarker)
+            editor.typingAttributes = typing
         }
         self.style = style
+        refresh()
         editor.window?.makeFirstResponder(editor)
     }
 
-    func addLink(_ value: String) {
-        guard let editor else { return }
-        guard FormattedPage.allowedLink(value), URL(string: value)?.scheme != nil else {
+    private static func face(for attrs: [NSAttributedString.Key: Any], editor: PageTextView) -> NSFont {
+        let style = FormattedBlock.Style(rawValue: attrs[.folioBlock] as? String ?? "") ?? .paragraph
+        var face = NativePageCodec.attributes(style: style, size: editor.pageFontSize,
+            family: attrs[.folioCode] as? Bool == true ? .monospace : editor.pageFont,
+            color: editor.textColor ?? .textColor)[.font] as? NSFont ?? .systemFont(ofSize: editor.pageFontSize)
+        if attrs[.folioBold] as? Bool == true {
+            face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask)
+        }
+        if let original = attrs[.font] as? NSFont,
+           NSFontManager.shared.traits(of: original).contains(.italicFontMask) {
+            face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask)
+        }
+        return face
+    }
+
+    func toggleInline(_ key: NSAttributedString.Key) {
+        guard let editor, editor.isEditable else { return }
+        refresh()
+        let enabled = key == .folioCode ? code : key == .underlineStyle ? underline : struck
+        func formatted(_ original: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+            var attrs = original
+            if key == .folioCode {
+                attrs[.folioCode] = !enabled
+                if enabled { attrs.removeValue(forKey: .backgroundColor) }
+                else { attrs[.backgroundColor] = NSColor.secondaryLabelColor.withAlphaComponent(0.1) }
+                attrs[.font] = Self.face(for: attrs, editor: editor)
+            } else {
+                attrs[key] = enabled ? 0 : NSUnderlineStyle.single.rawValue
+            }
+            return attrs
+        }
+        let range = editor.selectedRange()
+        if range.length == 0 { editor.typingAttributes = formatted(editor.typingAttributes) }
+        else {
+            editor.editAttributes(name: "Format Text") { storage in
+                storage.enumerateAttributes(in: range) { attrs, subrange, _ in
+                    guard attrs[.folioMarker] as? Bool != true else { return }
+                    storage.setAttributes(formatted(attrs), range: subrange)
+                }
+            }
+        }
+        refresh()
+        editor.window?.makeFirstResponder(editor)
+    }
+
+    func removeLink() {
+        guard let editor, editor.isEditable else { return }
+        var range = editor.selectedRange()
+        if range.length == 0, let storage = editor.textStorage, storage.length > 0 {
+            let index = min(range.location, storage.length - 1)
+            guard storage.attribute(.link, at: index, effectiveRange: &range) != nil else { return }
+        }
+        editor.editAttributes(name: "Remove Link") { $0.removeAttribute(.link, range: range) }
+        var typing = editor.typingAttributes
+        typing.removeValue(forKey: .link)
+        editor.typingAttributes = typing
+        refresh()
+        editor.window?.makeFirstResponder(editor)
+    }
+
+    func chooseAttachments() {
+        guard let editor, editor.isEditable else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Insert Images or Attachments"
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK else { return }
+        editor.insertFiles(panel.urls)
+    }
+
+    @discardableResult
+    func addLink(_ value: String) -> Bool {
+        guard let editor, editor.isEditable else { return false }
+        guard FormattedPage.allowedLink(value), let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              !value.contains(where: \.isWhitespace),
+              scheme == "mailto" ? !url.path.isEmpty : !(url.host ?? "").isEmpty else {
             editor.onError?("Enter a complete http, https, or mailto link.")
-            return
+            return false
         }
         let range = editor.selectedRange()
         if range.length == 0 {
@@ -205,7 +352,9 @@ final class FormattingActions: ObservableObject {
         } else {
             editor.editAttributes(name: "Add Link") { $0.addAttribute(.link, value: value, range: range) }
         }
+        refresh()
         editor.window?.makeFirstResponder(editor)
+        return true
     }
 }
 
@@ -230,7 +379,7 @@ class DocumentTextView: NSTextView {
 @MainActor
 final class PageTextView: DocumentTextView {
     var resources: ImportedResources?
-    var onFiles: (([URL]) -> Void)?
+    var onImportFiles: (([URL]) throws -> Attachments.Imported)?
     var onError: ((String) -> Void)?
     var onImage: ((URL) -> Void)?
     var pageFontSize = 16.0
@@ -288,14 +437,77 @@ final class PageTextView: DocumentTextView {
     }
 
     override func paste(_ sender: Any?) {
-        let board = NSPasteboard.general
+        paste(from: .general)
+    }
+
+    func paste(from board: NSPasteboard) {
+        guard isEditable else { return }
         if let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
-            onFiles?(urls)
+            insertFiles(urls)
+        } else if board.availableType(from: [.png, .tiff]) != nil {
+            do {
+                let bytes: Data
+                if let png = board.data(forType: .png), NSBitmapImageRep(data: png) != nil {
+                    bytes = png
+                } else if let tiff = board.data(forType: .tiff), let bitmap = NSBitmapImageRep(data: tiff),
+                          let png = bitmap.representation(using: .png, properties: [:]) {
+                    bytes = png
+                } else {
+                    throw JoplinImportError.invalid("The clipboard image could not be decoded. Copy it again or attach the original file.")
+                }
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Deltos-paste-\(UUID().uuidString)")
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+                defer {
+                    do { try FileManager.default.removeItem(at: folder) }
+                    catch { onError?("The image paste temporary file could not be removed: \(error.localizedDescription)") }
+                }
+                let image = folder.appendingPathComponent("Pasted image.png")
+                try bytes.write(to: image, options: .atomic)
+                insertFiles([image])
+            } catch {
+                onError?("Could not paste this image: \(error.localizedDescription)")
+            }
         } else if let text = board.string(forType: .string) {
             insertText(text, replacementRange: selectedRange())
         } else {
-            onError?("Paste text or copy files in Finder to attach them. Use the paperclip for image files.")
+            onError?("The clipboard does not contain text, a supported image or files.")
+        }
+    }
+
+    @discardableResult
+    func insertFiles(_ urls: [URL]) -> Bool {
+        guard isEditable else { return false }
+        guard let onImportFiles else {
+            onError?("Attachment insertion is unavailable.")
+            return false
+        }
+        do {
+            let imported = try onImportFiles(urls)
+            let page = try FormattedPage(markdown: imported.fragment)
+            let inserted = try NativePageCodec.decode(page.html(), resources: imported.resources, size: pageFontSize,
+                family: pageFont, color: textColor ?? .textColor)
+            resources = imported.resources
+            let addition = NSMutableAttributedString(attributedString: inserted)
+            let range = selectedRange()
+            let body = string as NSString
+            let attrs = NativePageCodec.attributes(style: .paragraph, size: pageFontSize,
+                family: pageFont, color: textColor ?? .textColor)
+            if range.location > 0 && body.substring(with: NSRange(location: range.location - 1, length: 1)) != "\n" {
+                addition.insert(NSAttributedString(string: "\n", attributes: attrs), at: 0)
+            }
+            if range.upperBound < body.length && body.substring(with: NSRange(location: range.upperBound, length: 1)) != "\n" {
+                addition.append(NSAttributedString(string: "\n", attributes: attrs))
+            }
+            window?.makeFirstResponder(self)
+            insertText(addition, replacementRange: range)
+            undoManager?.setActionName("Insert Attachment")
+            typingAttributes = attrs
+            setFrameSize(frame.size)
+            return true
+        } catch {
+            onError?("Could not insert attachments: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -303,8 +515,12 @@ final class PageTextView: DocumentTextView {
         if let urls = sender.draggingPasteboard.readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
         ) as? [URL], !urls.isEmpty {
-            onFiles?(urls)
-            return true
+            let previous = selectedRange()
+            let point = convert(sender.draggingLocation, from: nil)
+            setSelectedRange(NSRange(location: characterIndexForInsertion(at: point), length: 0))
+            let inserted = insertFiles(urls)
+            if !inserted { setSelectedRange(previous) }
+            return inserted
         }
         return super.performDragOperation(sender)
     }
@@ -354,12 +570,12 @@ struct FormattedEditor: View {
     let fontSize: Double
     let family: ReadingFont
     let dracula: Bool
+    @ObservedObject var actions: FormattingActions
     var onChange: (String) -> Void
-    var onFiles: ([URL]) -> Void
     var onError: (String) -> Void
     var onImage: (URL) -> Void
     var currentSource: (() -> String)?
-    @StateObject private var actions = FormattingActions()
+    var onImportFiles: (([URL]) throws -> Attachments.Imported)?
     @ViewState private var addingLink = false
     @ViewState private var link = ""
 
@@ -375,10 +591,25 @@ struct FormattedEditor: View {
                 Divider().frame(height: 18)
                 Button { actions.toggle(.boldFontMask) } label: { Image(systemName: "bold") }
                     .keyboardShortcut("b").help("Bold (Command-B)").accessibilityLabel("Bold")
+                    .background(actions.bold ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                    .accessibilityValue(actions.bold ? "On" : "Off")
                 Button { actions.toggle(.italicFontMask) } label: { Image(systemName: "italic") }
                     .keyboardShortcut("i").help("Italic (Command-I)").accessibilityLabel("Italic")
-                Button { actions.setStyle(.bullet) } label: { Image(systemName: "list.bullet") }
+                    .background(actions.italic ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                    .accessibilityValue(actions.italic ? "On" : "Off")
+                Menu {
+                    Button(actions.underline ? "Remove Underline" : "Underline") { actions.toggleInline(.underlineStyle) }
+                        .keyboardShortcut("u")
+                    Button(actions.struck ? "Remove Strikethrough" : "Strikethrough") { actions.toggleInline(.strikethroughStyle) }
+                    Button(actions.code ? "Remove Inline Code" : "Inline Code") { actions.toggleInline(.folioCode) }
+                    Divider()
+                    Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
+                } label: { Image(systemName: "textformat") }
+                .help("More text formatting").accessibilityLabel("More text formatting")
+                Button { actions.setStyle(actions.style == .bullet ? .paragraph : .bullet) } label: { Image(systemName: "list.bullet") }
                     .help("Bullet list").accessibilityLabel("Bullet list")
+                    .background(actions.style == .bullet ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                    .accessibilityValue(actions.style == .bullet ? "On" : "Off")
                 Button { addingLink = true } label: { Image(systemName: "link") }
                     .help("Add link").accessibilityLabel("Add link")
                 Spacer()
@@ -389,8 +620,8 @@ struct FormattedEditor: View {
             .padding(.horizontal, 28).padding(.vertical, 12)
             Divider()
             NativePageView(html: note.body, resources: resources, size: fontSize, family: family,
-                           dracula: dracula, actions: actions, onChange: onChange, onFiles: onFiles,
-                           onError: onError, onImage: onImage, currentSource: currentSource)
+                           dracula: dracula, actions: actions, onChange: onChange,
+                           onError: onError, onImage: onImage, currentSource: currentSource, onImportFiles: onImportFiles)
         }
         .popover(isPresented: $addingLink) {
             VStack(alignment: .leading, spacing: 12) {
@@ -408,7 +639,7 @@ struct FormattedEditor: View {
     }
 
     private func insertLink() {
-        actions.addLink(link.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard actions.addLink(link.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
         addingLink = false
         link = ""
     }
@@ -451,10 +682,10 @@ struct NativePageView: NSViewRepresentable {
     let dracula: Bool
     let actions: FormattingActions
     var onChange: (String) -> Void
-    var onFiles: ([URL]) -> Void
     var onError: (String) -> Void
     var onImage: ((URL) -> Void)?
     var currentSource: (() -> String)?
+    var onImportFiles: (([URL]) throws -> Attachments.Imported)?
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -496,8 +727,9 @@ struct NativePageView: NSViewRepresentable {
         let html = currentSource?() ?? self.html
         let coordinator = context.coordinator
         coordinator.parent = self
+        let previousResources = editor.resources
         editor.resources = resources
-        editor.onFiles = onFiles
+        editor.onImportFiles = onImportFiles
         editor.onError = onError
         editor.onImage = onImage
         editor.isContinuousSpellCheckingEnabled = spellChecking
@@ -515,8 +747,12 @@ struct NativePageView: NSViewRepresentable {
             .foregroundColor: NSColor((FolioAccent(rawValue: accent) ?? .gold).color(for: colorScheme)),
             .underlineStyle: NSUnderlineStyle.single.rawValue
         ]
-        guard coordinator.loadedHTML != html || coordinator.size != size ||
-                coordinator.family != family || coordinator.dracula != dracula || coordinator.resources != resources else { return }
+        // Resource ownership can change during an insertion without replacing the native buffer or its undo history.
+        if coordinator.loadedHTML == html && coordinator.size == size &&
+            coordinator.family == family && coordinator.dracula == dracula && previousResources == resources {
+            coordinator.resources = resources
+            return
+        }
         do {
             let selection = editor.selectedRange()
             let page = try FormattedPage(markdown: html)
@@ -524,8 +760,15 @@ struct NativePageView: NSViewRepresentable {
             coordinator.updating = true
             defer { coordinator.updating = false }
             editor.textStorage?.setAttributedString(decoded)
-            editor.typingAttributes = NativePageCodec.attributes(style: .paragraph, size: size, family: family, color: color)
-            editor.setSelectedRange(NSRange(location: min(selection.location, decoded.length), length: 0))
+            let location = min(selection.location, decoded.length)
+            editor.setSelectedRange(NSRange(location: location, length: min(selection.length, decoded.length - location)))
+            var typing = decoded.length > 0
+                ? decoded.attributes(at: min(location, decoded.length - 1), effectiveRange: nil)
+                : NativePageCodec.attributes(style: .paragraph, size: size, family: family, color: color)
+            for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment] {
+                typing.removeValue(forKey: key)
+            }
+            editor.typingAttributes = typing
             editor.isEditable = isEnabled
             if coordinator.loadedHTML != nil && coordinator.loadedHTML != html { editor.undoManager?.removeAllActions() }
             coordinator.loadedHTML = html
@@ -534,6 +777,10 @@ struct NativePageView: NSViewRepresentable {
             coordinator.dracula = dracula
             coordinator.resources = resources
             editor.setFrameSize(editor.frame.size)
+            Task { @MainActor [weak editor] in
+                guard let editor, actions.editor === editor else { return }
+                actions.refresh()
+            }
         } catch {
             editor.isEditable = false
             onError("Could not open the formatted editor. Your saved note has not been changed: \(error.localizedDescription)")
@@ -563,6 +810,7 @@ struct NativePageView: NSViewRepresentable {
             typing.removeValue(forKey: .folioAlt)
             typing.removeValue(forKey: .attachment)
             editor.typingAttributes = typing
+            parent.actions.refresh()
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
@@ -574,6 +822,7 @@ struct NativePageView: NSViewRepresentable {
                 typing.removeValue(forKey: key)
             }
             editor.typingAttributes = typing
+            parent.actions.refresh()
         }
 
         func textView(_ textView: NSTextView, clickedOn cell: any NSTextAttachmentCellProtocol,

@@ -23,6 +23,7 @@ struct NoteEditor: View {
     @ViewState private var confirmingSource = false
     @ViewState private var showingBacklinks = false
     @ViewState private var imageURL: URL?
+    @StateObject private var formatting = FormattingActions()
 
     private var isTrashed: Bool { note.deletedAt != nil }
     private var editorMode: EditorMode { EditorMode(rawValue: mode) ?? .preview }
@@ -112,13 +113,11 @@ struct NoteEditor: View {
             if note.contentFormat == .formatted && editorMode != .preview && !isTrashed {
                 FormattedEditor(note: note, fontSize: fontSize,
                                 family: ReadingFont(rawValue: readingFont) ?? .system,
-                                dracula: theme == FolioTheme.dracula.rawValue) { body in
+                                dracula: theme == FolioTheme.dracula.rawValue, actions: formatting) { body in
                     store.update(note.id) { $0.body = body }
-                } onFiles: { urls in
-                    do { try store.attachFiles(urls, to: note.id) }
-                    catch { store.errorMessage = "Could not attach files: \(error.localizedDescription)" }
                 } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
                   currentSource: { noteBinding(\.body).wrappedValue }
+                  onImportFiles: { try store.importComposeAttachments($0, to: note.id) }
             } else if editorMode == .split && !isTrashed {
                 HSplitView {
                     sourceEditor.frame(minWidth: 130)
@@ -179,7 +178,13 @@ struct NoteEditor: View {
                     .disabled(isTrashed)
                 }
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: store.addAttachments) { Image(systemName: "paperclip") }
+                Button {
+                    if note.contentFormat == .formatted && editorMode == .write {
+                        formatting.chooseAttachments()
+                    } else {
+                        store.addAttachments()
+                    }
+                } label: { Image(systemName: "paperclip") }
                     .help("Add images or attachments")
                     .accessibilityLabel("Add attachments")
                     .disabled(isTrashed)

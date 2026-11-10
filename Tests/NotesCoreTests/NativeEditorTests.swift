@@ -13,7 +13,7 @@ struct NativeEditorTests {
         var saved = ""
         var error: String?
         let view = NativePageView(html: "Hello world", resources: nil, size: 17, family: .system,
-            dracula: false, actions: actions, onChange: { saved = $0 }, onFiles: { _ in }, onError: { error = $0 })
+            dracula: false, actions: actions, onChange: { saved = $0 }, onError: { error = $0 })
         let host = NSHostingView(rootView: view)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -71,7 +71,7 @@ struct NativeEditorTests {
         var opened: URL?
         var error: String?
         let view = NativePageView(html: "![Photo](photo.jpg)", resources: resources, size: 17, family: .system,
-            dracula: false, actions: actions, onChange: { _ in }, onFiles: { _ in },
+            dracula: false, actions: actions, onChange: { _ in },
             onError: { error = $0 }, onImage: { opened = $0 })
         let host = NSHostingView(rootView: view)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 600),

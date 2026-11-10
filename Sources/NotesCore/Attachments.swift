@@ -2,8 +2,32 @@ import Foundation
 import UniformTypeIdentifiers
 
 public enum Attachments {
+    public struct Imported: Sendable {
+        public let fragment: String
+        public let resources: ImportedResources
+        public let directory: URL
+    }
+
     public static func adding(files: [URL], to original: Note, directory: URL) throws -> Note {
         guard !files.isEmpty else { return original }
+        let imported = try importing(files: files, for: original, directory: directory)
+        var note = original
+        note.importedRootURL = imported.resources.root
+        note.importedSourceURL = imported.resources.source
+        let addition = imported.fragment
+        if note.contentFormat.usesHTML, let end = note.body.range(of: "</body>", options: .caseInsensitive) {
+            note.body.insert(contentsOf: "\n\(addition)\n", at: end.lowerBound)
+        } else {
+            note.body += "\n\n" + addition + "\n"
+        }
+        note.updatedAt = Date()
+        return note
+    }
+
+    public static func importing(files: [URL], for original: Note, directory: URL) throws -> Imported {
+        guard !files.isEmpty else {
+            throw JoplinImportError.invalid("Choose at least one attachment.")
+        }
         let manager = FileManager.default
         let batch = UUID().uuidString
         let root = original.importedRootURL ?? directory.appendingPathComponent(original.id.uuidString, isDirectory: true)
@@ -38,16 +62,7 @@ public enum Attachments {
             try JoplinImport.discardSnapshot(destination, after: error)
             throw error
         }
-        var note = original
-        note.importedRootURL = root
-        note.importedSourceURL = source
-        let addition = fragments.joined(separator: "\n\n")
-        if note.contentFormat.usesHTML, let end = note.body.range(of: "</body>", options: .caseInsensitive) {
-            note.body.insert(contentsOf: "\n\(addition)\n", at: end.lowerBound)
-        } else {
-            note.body += "\n\n" + addition + "\n"
-        }
-        note.updatedAt = Date()
-        return note
+        return Imported(fragment: fragments.joined(separator: "\n\n"),
+                        resources: ImportedResources(source: source, root: root), directory: destination)
     }
 }

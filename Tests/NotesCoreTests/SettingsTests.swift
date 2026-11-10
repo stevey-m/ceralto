@@ -49,7 +49,7 @@ struct SettingsTests {
         defaults.set(false, forKey: "composeSpellChecking")
         let actions = FormattingActions()
         let view = NativePageView(html: "Words", resources: nil, size: 17, family: .system, dracula: false,
-                                  actions: actions, onChange: { _ in }, onFiles: { _ in }, onError: { Issue.record("\($0)") })
+                                  actions: actions, onChange: { _ in }, onError: { Issue.record("\($0)") })
         let host = NSHostingView(rootView: view.defaultAppStorage(defaults))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
                               styleMask: [.titled], backing: .buffered, defer: false)
