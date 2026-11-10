@@ -234,7 +234,8 @@ struct NoteEditor: View {
 
     private var sourceEditor: some View {
         SourceEditor(text: noteBinding(\.body), family: ReadingFont(rawValue: readingFont) ?? .system,
-                     size: fontSize, dracula: theme == FolioTheme.dracula.rawValue)
+                     size: fontSize, dracula: theme == FolioTheme.dracula.rawValue,
+                     currentSource: { noteBinding(\.body).wrappedValue })
             .accessibilityLabel(note.contentFormat == .html ? "HTML source editor" : "Markdown editor")
     }
 

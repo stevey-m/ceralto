@@ -9,6 +9,7 @@ struct SourceEditor: NSViewRepresentable {
     let family: ReadingFont
     let size: Double
     let dracula: Bool
+    let currentSource: () -> String
     @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -41,17 +42,20 @@ struct SourceEditor: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let editor = scroll.documentView as? SourceTextView else { return }
         context.coordinator.parent = self
-        if editor.string != text {
+        let latestText = currentSource()
+        if editor.string != latestText {
             let range = editor.selectedRange()
-            editor.string = text
+            editor.string = latestText
             editor.setSelectedRange(NSRange(location: min(range.location, editor.string.utf16.count), length: 0))
             editor.undoManager?.removeAllActions()
         }
-        editor.font = NativePageCodec.font(family, size: size)
-        editor.textColor = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
+        let font = NativePageCodec.font(family, size: size)
+        if editor.font != font { editor.font = font }
+        let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
+        if editor.textColor != color { editor.textColor = color }
         editor.insertionPointColor = editor.textColor ?? .textColor
-        editor.isEditable = isEnabled
-        editor.isSelectable = isEnabled
+        if editor.isEditable != isEnabled { editor.isEditable = isEnabled }
+        if editor.isSelectable != isEnabled { editor.isSelectable = isEnabled }
         if !isEnabled, editor.window?.firstResponder === editor { editor.window?.makeFirstResponder(nil) }
     }
 
