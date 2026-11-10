@@ -74,6 +74,7 @@ final class NotesStore: ObservableObject {
     @Published private(set) var pluginInspections: [PluginInspection] = []
     @Published private(set) var isPreparingPrint = false
     private var notePrinter: NotePrinter?
+    var backupManager: BackupManager?
     #endif
     private let storage: LibraryStorage
     private let preferences: UserDefaults
@@ -90,6 +91,11 @@ final class NotesStore: ObservableObject {
         load()
         restoreSyncFolder()
         if !readOnly { reloadExtensions() }
+        #if os(macOS)
+        if !readOnly {
+            backupManager = BackupManager(store: self, defaults: preferences)
+        }
+        #endif
     }
 
     var visibleNotes: [Note] {
@@ -120,9 +126,10 @@ final class NotesStore: ObservableObject {
         let branches = NotebookBranch.build(library.notebooks)
         switch scope {
         case .notebook(let id):
-            return branches.first { $0.descendants.contains(id) }
+            guard let notebook = library.notebooks.first(where: { $0.id == id }) else { return nil }
+            return branches.lazy.compactMap { $0.branch(at: notebook.name) }.first
         case .folder(let path, _):
-            return branches.first { path == $0.id || path.hasPrefix($0.id + "/") }
+            return branches.lazy.compactMap { $0.branch(at: path) }.first
         default:
             return nil
         }
@@ -701,8 +708,8 @@ final class NotesStore: ObservableObject {
         }
         if note.deletedAt != nil {
             scope = .trash
-        } else if let folder = NotebookBranch.build(library.notebooks).first(where: { $0.descendants.contains(note.notebookID) }) {
-            scope = .folder(folder.id, folder.descendants)
+        } else if library.notebooks.contains(where: { $0.id == note.notebookID }) {
+            scope = .notebook(note.notebookID)
         } else {
             scope = .all
         }

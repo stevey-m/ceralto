@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.11.0 is a development release, not a finished replacement for your library.**
+**0.12.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.11.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.12.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -136,10 +136,12 @@ Shortcuts below are defaults. Customize application commands in
   titles, text, tags and notebook names. The note-list search stays scoped to
   the current collection. Search works offline; OCR, attachment-text indexing
   and semantic/AI search are not implemented.
-- **Use notebooks that behave like notebooks.** Nested paths form collapsible
-  trees. Main folders stay on the left; their expandable subtopics and notes
-  appear in the middle; selecting a note displays it on the right. Notes saved
-  directly in a main folder remain visible above its subtopics. Search reveals
+- **Use notebooks that behave like notebooks.** Nested paths form a complete,
+  expandable notebook tree in the left sidebar, including empty subfolders and
+  deeper descendants. Select a subfolder to show only its notes and descendants
+  in the middle pane; selecting a note displays it on the right. Parent folders
+  include their descendants. Notes saved directly in a folder remain visible
+  above its subtopics. Search reveals
   matching notes inside subtopics. On Mac, use a folder's context menu to add a
   subtopic or create a note in it. Tags, pins, moving notes, Trash and restore are included. Navigation
   widths are saved and do not grow when selecting long names. Drag dividers,
@@ -197,9 +199,46 @@ location. Each manual backup creates a unique dated directory containing
 notes, history and original attachments. Restore with **Import Deltos Backup**;
 import adds copies without replacing current notes. Sync snapshots are not a
 substitute for independent backups: cloud deletion can propagate to backups
-in the same account. There is no automatic pruning or scheduled backup.
+in the same account. Manual exports are never automatically pruned.
 Settings, unsaved drafts, smart folders and plugin registrations are not part
 of these library backups. Use Time Machine for the entire local app folder.
+
+### Scheduled complete backups and safe recovery
+
+Open **Settings > Files & Backups**, choose a separate downloaded local/cloud
+folder, and enable backups while Deltos is open. Choose hourly, six-hourly or
+daily backups, retaining 1–100 verified managed copies (default: daily, 10).
+Scheduling is off until you opt in. Deltos checks once a minute while running,
+attempts overdue backups on launch/wake, and retries failures at most once
+every five minutes. It does not back up while quit or asleep and does not
+confirm cloud upload. Backups are unencrypted.
+
+Each backup contains the library, note history, Trash and original attachment
+trees. A checksum receipt is written after the complete export, then the
+staging folder is renamed to publish it. Verification reads the complete file
+set and checks every file's SHA-256 digest. These checks detect incomplete or
+changed files; they are not signatures or protection against deliberate
+tampering by someone who can also rewrite the receipt.
+
+Retention runs only after a new backup verifies, and only inside
+`Deltos Backups/<backup-set UUID>/`. It removes older verified managed copies,
+never manual exports or unrelated files. A damaged or unrecognised
+UUID-named entry stops pruning with an explicit error. Interrupted staging
+directories remain hidden and are not listed or automatically deleted.
+Keep an independent backup as well; provider deletions can propagate.
+
+The verified backup browser shows dates, note counts and notebook counts.
+**Recover Copies** previews those counts and requires confirmation before
+adding notes and notebooks as new copies. Current notes are never replaced;
+repeating recovery creates duplicates. Backups are verified again before
+import. This is additive recovery into a working, editable library, not
+whole-library replacement or a repair of an unreadable live library.
+For unreadable live JSON, use the opening-day recovery procedure below.
+Use **Import Deltos Backup** to recover a manual export or an older backup
+set after reconnecting/resetting preferences. Library backups exclude settings,
+smart folders, workspace state, plugin registrations and unsaved capture drafts.
+Unreadable schedule settings are preserved and scheduling is blocked until
+you explicitly reset them. Reset never deletes existing backups.
 
 Keep an independent copy. Files in cloud folders are readable; Deltos does not
 provide end-to-end encryption. The existing iPad iCloud reader remains
@@ -456,7 +495,7 @@ then select a matching category:
 - **Editor:** default format for new notes, daily-note notebook/template, and local macOS spelling in Compose.
   Existing notes and imports keep their format; automatic correction stays off.
 - **Files & Backups:** actual library location, imports, portable exports,
-  complete backups and recovery guidance.
+  manual exports, scheduled verified complete backups, retention and additive recovery.
 - **Cloud Folders:** provider-neutral folder connection, manual snapshot
   exchange, dated complete backups, local-only status and offline iPad guidance.
 - **Extensions:** installed template packs, chooser, folder access, reload and API docs.
@@ -465,7 +504,7 @@ then select a matching category:
   the folder pane.
 
 Settings are local to the device and are not included in library exports.
-Release checking is manual. Scheduled backups, automatic trash expiry, OCR,
+Release checking is manual. Backups while the app is quit, automatic trash expiry, OCR,
 encryption and executable plugins are not implemented.
 The iPad reader retains its lightweight appearance menu; the full Settings
 window is Mac-only.

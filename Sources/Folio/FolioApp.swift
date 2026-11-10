@@ -12,7 +12,7 @@ struct FolioApp: App {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 720, minHeight: 520)
-                .onAppear { delegate.store = store }
+                .onAppear { delegate.store = store; store.backupManager?.start() }
         }
         .defaultSize(width: 1240, height: 800)
         .commands {
@@ -124,7 +124,7 @@ struct FolioApp: App {
                     .keyboardShortcut(store.shortcut(.tasks).keyboardShortcut)
                     .disabled(FolioCommand.tasks.unavailableReason(in: store) != nil)
                 Divider()
-                Button("Toggle Main Folders") { store.perform(.toggleFolders) }
+                Button("Toggle Notebooks") { store.perform(.toggleFolders) }
                     .keyboardShortcut(store.shortcut(.toggleFolders).keyboardShortcut)
                 Button("Toggle Note List") { store.perform(.toggleNotes) }
                     .keyboardShortcut(store.shortcut(.toggleNotes).keyboardShortcut)
@@ -160,6 +160,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: NotesStore?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if store?.backupManager?.busy == true {
+            let alert = NSAlert()
+            alert.messageText = "A complete backup is still running"
+            alert.informativeText = "Wait for the backup to finish before quitting Deltos."
+            alert.runModal()
+            return .terminateCancel
+        }
         guard let store, store.hasUnsavedChanges else { return .terminateNow }
         store.save()
         guard store.hasUnsavedChanges else { return .terminateNow }

@@ -15,6 +15,7 @@ struct ContentView: View {
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
     @ViewState private var collapsedBranches: Set<String> = []
+    @ViewState private var collapsedNotebookBranches: Set<String> = []
     @FocusState private var searchFocused: Bool
     @Environment(\.openWindow) private var openWindow
 
@@ -84,7 +85,11 @@ struct ContentView: View {
             }
         }
         .navigationTitle("Deltos")
-        .onChange(of: store.scope) { _, _ in store.reconcileSelection() }
+        .onChange(of: store.scope) { _, _ in
+            store.reconcileSelection()
+            revealSelectedNotebook()
+        }
+        .onAppear { revealSelectedNotebook() }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
         .sheet(item: $store.notebookDraft) { draft in
             NotebookSheet(draft: draft)
@@ -282,19 +287,7 @@ struct ContentView: View {
                 }
                 Section {
                     ForEach(NotebookBranch.build(store.library.notebooks.filter { $0.id != store.inboxID })) { branch in
-                        scopeRow(branch.name, icon: "folder", scope: .folder(branch.id, branch.descendants))
-                            .contextMenu {
-                                Button("New Subtopic...") {
-                                    store.notebookDraft = NotebookDraft(name: branch.id + "/")
-                                }
-                                ForEach(branch.notebooks) { notebook in
-                                    Button("Rename \(notebook.name)...") {
-                                        store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
-                                    }
-                                    Button("Delete \(notebook.name)...", role: .destructive) { notebookToDelete = notebook }
-                                        .disabled(store.library.notebooks.count < 2)
-                                }
-                            }
+                        notebookTree(branch)
                     }
                     Button {
                         store.notebookDraft = NotebookDraft()
@@ -305,7 +298,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .disabled(!store.isLoaded)
                 } header: {
-                    Text("Main Folders")
+                    Text("Notebooks")
                 }
                 Section("Smart Folders") {
                     ForEach(store.smartFolders) { folder in
@@ -376,6 +369,51 @@ struct ContentView: View {
             .padding(14)
         }
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func revealSelectedNotebook() {
+        guard let path = store.navigationFolder?.id else { return }
+        collapsedNotebookBranches = collapsedNotebookBranches.filter { !path.hasPrefix($0 + "/") }
+    }
+
+    private func notebookTree(_ branch: NotebookBranch) -> AnyView {
+        let scope = NoteScope.folder(branch.id, branch.descendants)
+        return AnyView(Group {
+            if branch.children.isEmpty {
+                scopeRow(branch.name, icon: "folder", scope: scope)
+                    .help(branch.id)
+                    .contextMenu { notebookActions(branch) }
+            } else {
+                DisclosureGroup(isExpanded: Binding(
+                    get: { !collapsedNotebookBranches.contains(branch.id) },
+                    set: { if $0 { collapsedNotebookBranches.remove(branch.id) } else { collapsedNotebookBranches.insert(branch.id) } }
+                )) {
+                    ForEach(branch.children) { child in notebookTree(child) }
+                } label: {
+                    scopeRow(branch.name, icon: "folder", scope: scope).help(branch.id)
+                }
+                .tag(scope)
+                .contextMenu { notebookActions(branch) }
+            }
+        })
+    }
+
+    @ViewBuilder private func notebookActions(_ branch: NotebookBranch) -> some View {
+        Button("New Subfolder...") {
+            store.notebookDraft = NotebookDraft(name: branch.id + "/")
+        }
+        ForEach(branch.notebooks) { notebook in
+            Button("New Note in \(notebook.name)") {
+                store.scope = .notebook(notebook.id)
+                store.selectedNoteID = nil
+                store.createNote()
+            }
+            Button("Rename \(notebook.name)...") {
+                store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
+            }
+            Button("Delete \(notebook.name)...", role: .destructive) { notebookToDelete = notebook }
+                .disabled(store.library.notebooks.count < 2)
+        }
     }
 
     private func topicView(_ branch: NotebookBranch) -> AnyView {

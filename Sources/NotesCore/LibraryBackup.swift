@@ -41,14 +41,32 @@ public enum LibraryBackup {
     }
 
     public static func imported(from folder: URL, importsDirectory: URL) throws -> JoplinImportResult {
-        guard var library = try LibraryStorage(url: folder.appendingPathComponent("library.json")).load() else {
-            throw JoplinImportError.invalid("This folder is not a Deltos or Folio backup.")
-        }
         let root = folder.standardizedFileURL.resolvingSymlinksInPath()
         let destination = importsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         guard !destination.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root.path + "/") else {
             throw JoplinImportError.invalid("Choose a backup outside Deltos's import storage.")
         }
+        try FileManager.default.createDirectory(at: importsDirectory, withIntermediateDirectories: true)
+        let hasReceipt = FileManager.default.fileExists(atPath: root.appendingPathComponent("backup-receipt.json").path)
+        do {
+            try copyDirectory(root, to: destination)
+            if hasReceipt || FileManager.default.fileExists(atPath: destination.appendingPathComponent("backup-receipt.json").path) {
+                try ManagedBackups.verifyPortableCopy(destination)
+            }
+            return try importedSnapshot(at: destination)
+        } catch {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try JoplinImport.discardSnapshot(destination, after: error)
+            }
+            throw error
+        }
+    }
+
+    private static func importedSnapshot(at destination: URL) throws -> JoplinImportResult {
+        guard var library = try LibraryStorage(url: destination.appendingPathComponent("library.json")).load() else {
+            throw JoplinImportError.invalid("This folder is not a Deltos or Folio backup.")
+        }
+        let root = destination.standardizedFileURL.resolvingSymlinksInPath()
         var ids: [UUID: UUID] = [:]
         library.notebooks = library.notebooks.map { notebook in
             let copy = Notebook(name: notebook.name)
@@ -77,15 +95,6 @@ public enum LibraryBackup {
                 importedSourceURL: try relocate(note.importedSourceURL), importedRootURL: try relocate(note.importedRootURL),
                 format: note.format, history: note.history
             ))
-        }
-        try FileManager.default.createDirectory(at: importsDirectory, withIntermediateDirectories: true)
-        do {
-            try copyDirectory(root, to: destination)
-        } catch {
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try JoplinImport.discardSnapshot(destination, after: error)
-            }
-            throw error
         }
         return JoplinImportResult(notebooks: library.notebooks, notes: remapped, snapshotURL: destination)
     }

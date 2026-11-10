@@ -7,6 +7,12 @@ public struct NotebookBranch: Identifiable, Sendable {
     public let descendants: [UUID]
     public let children: [NotebookBranch]
 
+    public func branch(at path: String) -> NotebookBranch? {
+        if id == path { return self }
+        guard path.hasPrefix(id + "/") else { return nil }
+        return children.lazy.compactMap { $0.branch(at: path) }.first
+    }
+
     public static func build(_ notebooks: [Notebook]) -> [NotebookBranch] {
         build(notebooks.map { (notebook: $0, parts: $0.name.split(separator: "/").map(String.init)) }, prefix: "")
     }

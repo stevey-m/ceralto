@@ -22,7 +22,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .back: "Back"
         case .forward: "Forward"
         case .closeTab: "Close Current Tab"
-        case .toggleFolders: "Toggle Main Folders"
+        case .toggleFolders: "Toggle Notebooks"
         case .toggleNotes: "Toggle Subtopics and Notes"
         case .focus: "Toggle Focused Writing"
         case .importFiles: "Import Markdown or HTML Files..."

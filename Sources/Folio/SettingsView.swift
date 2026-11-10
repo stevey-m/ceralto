@@ -28,7 +28,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "version releases updates help github source license contributors note list preview dates"
         case .appearance: "theme system light dark dracula accent gold blue purple green rose font text size images width panes layout"
         case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates"
-        case .files: "library storage location import export print pdf joplin markdown html attachments backup restore history privacy encryption trash"
+        case .files: "library storage location import export print pdf joplin markdown html attachments backup restore recovery schedule scheduled interval retention history privacy encryption trash"
         case .sync: "icloud dropbox onedrive google drive cloud folder connect disconnect sync offline ipad refresh snapshots conflicts backup"
         case .extensions: "templates packs plugins api community reload install joplin obsidian compatibility inspect folders"
         case .features: "core plugins built in optional tools daily notes templates tasks enable disable"
@@ -181,6 +181,9 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         case .files:
+            if let manager = store.backupManager {
+                BackupReliabilitySettings(manager: manager)
+            }
             Section("Local library") {
                 Text(store.libraryURL.deletingLastPathComponent().path).textSelection(.enabled)
                     .font(.callout.monospaced())
@@ -209,7 +212,7 @@ struct SettingsView: View {
                     .disabled(!store.isLoaded)
                 Button("Import Deltos Backup...", action: store.importBackup)
                     .disabled(!store.isLoaded)
-                Text("Complete backups include notes, history and original attachments. Import adds notes without replacing current ones. Back up regularly or use Time Machine; scheduled backups are not implemented.")
+                Text("Complete backups include notes, history and original attachments. Import adds notes without replacing current ones. Scheduled backups above run while Deltos is open; keep an independent copy or use Time Machine.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Note history retains up to 20 checkpoints, captured at most once every five minutes. Open Note actions > Note History to restore one. Trash is kept until you delete notes permanently; no automatic deletion is enabled.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -231,7 +234,7 @@ struct SettingsView: View {
                 Button("Export Dated Complete Backup...", action: store.exportBackup)
                     .disabled(!store.isLoaded || store.isReadOnly || store.isSyncing)
                 Button("Import Deltos Backup...", action: store.importBackup).disabled(!store.isLoaded)
-                Text("Choose a separate backup location, ideally outside the sync folder or with another provider. Each manual backup creates a new dated copy of notes, history and original attachments. Nothing is overwritten or automatically pruned. No scheduled backups or direct cloud account sign-in are implemented.")
+                Text("Choose a separate backup location, ideally outside the sync folder or with another provider. Manual backups are never automatically pruned. Configure scheduled managed backups in Files & Backups. Direct cloud account sign-in is not implemented.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("A local save does not confirm upload. Check the provider's app before relying on another device. Cloud deletion can remove synced backups too; keep an independent copy. Files are readable, not end-to-end encrypted by Deltos.")
                     .font(.caption).foregroundStyle(.secondary)

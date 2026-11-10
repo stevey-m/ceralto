@@ -16,12 +16,16 @@ struct FolderNavigationTests {
             #expect(folder.children.first?.children.map(\.name) == ["Practice"])
             #expect(!folder.descendants.contains(unrelated.id))
             store.scope = .notebook(nested.id)
-            #expect(store.mainFolderScope == .folder("Study", folder.descendants))
-            #expect(store.outlineNotes.contains { $0.notebookID == topic.id })
+            #expect(store.mainFolderScope == .folder("Study/Networks/Practice", [nested.id]))
+            #expect(store.outlineNotes.map(\.id) == [nestedNote.id])
+            #expect(!store.outlineNotes.contains { $0.notebookID == topic.id })
+            store.scope = .folder("Study/Networks", [topic.id])
+            #expect(Set(store.outlineNotes.map(\.id)) == Set([topicNote.id, nestedNote.id]))
+            #expect(store.navigationFolder?.name == "Networks")
         }
     }
 
-    @Test func searchAndCreationFollowTheSelectedSubtopicAndLinksRevealTheMainFolder() throws {
+    @Test func searchAndCreationFollowTheSelectedSubtopicAndLinksRevealItsExactFolder() throws {
         try withStore { store, root, topic, nested, _, _, topicNote, nestedNote in
             store.scope = .folder("Study", [root.id, topic.id, nested.id])
             store.selectedNoteID = nestedNote.id
@@ -33,7 +37,7 @@ struct FolderNavigationTests {
             #expect(store.selectedNoteID == topicNote.id)
             store.openNote(nestedNote.id)
             #expect(store.query.isEmpty)
-            #expect(store.navigationFolder?.name == "Study")
+            #expect(store.navigationFolder?.name == "Practice")
             #expect(store.selectedNoteID == nestedNote.id)
             store.scope = .tag("review")
             #expect(store.navigationFolder == nil)
@@ -46,6 +50,9 @@ struct FolderNavigationTests {
             store.scope = .folder("Study", [root.id])
             store.addNotebook(name: "Study/New topic")
             let added = try #require(store.currentNotebookID)
+            #expect(store.navigationFolder?.id == "Study/New topic")
+            #expect(store.outlineNotes.isEmpty)
+            store.scope = .folder("Study", [root.id])
             let folder = try #require(store.navigationFolder)
             #expect(folder.children.contains { $0.name == "New topic" && $0.notebooks.contains { $0.id == added } })
             store.scope = .folder("Study", [root.id])

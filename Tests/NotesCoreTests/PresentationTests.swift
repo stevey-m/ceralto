@@ -8,6 +8,51 @@ import WebKit
 @Suite(.serialized)
 @MainActor
 struct PresentationTests {
+    @Test func nestedNotebookSidebarRendersAlongsideScopedNotesWithoutChangingLibrary() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "DeltosNotebookTree-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("Dracula", forKey: "folioTheme")
+        let root = Notebook(name: "Study")
+        let child = Notebook(name: "Study/Networks")
+        let nested = Notebook(name: "Study/Networks/Practice")
+        let sibling = Notebook(name: "Study/Cloud")
+        let unrelated = Notebook(name: "Personal")
+        let note = Note(notebookID: child.id, title: "Routing fundamentals",
+                        body: "## Keep the hierarchy\n\nYour subfolders belong in the notebook tree.", format: .formatted)
+        let exercise = Note(notebookID: nested.id, title: "Practice lab")
+        let other = Note(notebookID: sibling.id, title: "Cloud notes")
+        let library = Library(notebooks: [root, child, nested, sibling, unrelated], notes: [note, exercise, other])
+        let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
+        try storage.save(library)
+        let store = NotesStore(storage: storage, preferences: defaults)
+        store.scope = .folder("Study/Networks", [child.id, nested.id])
+        store.selectedNoteID = note.id
+        let host = NSHostingView(rootView: ContentView().environmentObject(store).defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 900),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        host.frame = NSRect(x: 0, y: 0, width: 1240, height: 900)
+        defer { window.contentView = nil }
+        for _ in 0..<20 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(store.mainFolderScope == .folder("Study/Networks", [child.id, nested.id]))
+        #expect(Set(store.outlineNotes.map(\.id)) == Set([note.id, exercise.id]))
+        #expect(store.library == library)
+        #expect(store.errorMessage == nil)
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        try png.write(to: package.appendingPathComponent("dist/Deltos-notebook-tree-preview.png"))
+    }
+
     @Test func workflowPanelsRenderWithSyntheticNotesAndRealTemplatePacks() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -82,6 +127,15 @@ struct PresentationTests {
                           name: "Folio-features-preview.png")
         try await preview(SettingsView(section: .sync), size: NSSize(width: 1040, height: 900),
                           name: "Folio-cloud-folders-preview.png")
+        let backups = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: backups, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: backups) }
+        let manager = try #require(store.backupManager)
+        try manager.connect(backups)
+        await manager.backup()
+        #expect(manager.backups.count == 1)
+        try await preview(SettingsView(section: .files), size: NSSize(width: 1100, height: 1050),
+                          name: "Deltos-backup-settings-preview.png")
     }
 
     @Test func composedPageKeepsItsSpaceAndProducesASyntheticPreview() async throws {
