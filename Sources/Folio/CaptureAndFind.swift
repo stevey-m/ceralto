@@ -7,14 +7,14 @@ struct QuickCaptureView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @AppStorage("captureDraftTitle") private var title = ""
     @AppStorage("captureDraftBody") private var bodyText = ""
-    @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @ViewState private var failure: String?
     @FocusState private var writing: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: "tray.and.arrow.down.fill").font(.title2).foregroundStyle(.purple)
+                Image(systemName: "tray.and.arrow.down.fill").font(.title2).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Catch a thought").font(.title2.weight(.semibold))
                     Text("Straight to Inbox. Organise it later.")
@@ -57,7 +57,7 @@ struct QuickCaptureView: View {
         .padding(24)
         .frame(minWidth: 420, minHeight: 350)
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
-        .preferredColorScheme(theme == FolioTheme.dracula.rawValue ? .dark : nil)
+        .folioAppearance()
         .onAppear { writing = true }
         .background(CaptureWindowStyle())
     }
@@ -156,6 +156,7 @@ struct NoteFinder: View {
             }.font(.caption).foregroundStyle(.secondary).padding(14)
         }
         .frame(width: 840, height: 560)
+        .folioAppearance()
         .onAppear { searching = true; selection = results.first?.id }
         .onChange(of: query) { _, _ in selection = results.first?.id }
     }

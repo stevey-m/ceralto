@@ -1,6 +1,43 @@
 import NotesCore
 import SwiftUI
 
+extension FolioTheme {
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark, .dracula: .dark
+        }
+    }
+}
+
+extension FolioAccent {
+    func color(for scheme: ColorScheme) -> Color {
+        let hex = scheme == .dark ? darkHex : lightHex
+        let value = UInt32(hex.dropFirst(), radix: 16)!
+        return Color(red: Double((value >> 16) & 255) / 255,
+                     green: Double((value >> 8) & 255) / 255,
+                     blue: Double(value & 255) / 255)
+    }
+}
+
+private struct FolioAppearance: ViewModifier {
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @Environment(\.colorScheme) private var systemScheme
+
+    func body(content: Content) -> some View {
+        let selected = FolioTheme(rawValue: theme) ?? .system
+        content
+            .preferredColorScheme(selected.colorScheme)
+            .tint((FolioAccent(rawValue: accent) ?? .gold).color(for: selected.colorScheme ?? systemScheme))
+    }
+}
+
+extension View {
+    func folioAppearance() -> some View { modifier(FolioAppearance()) }
+}
+
 enum FolioPalette {
     static let background = Color(red: 40 / 255, green: 42 / 255, blue: 54 / 255)
     static let sidebar = Color(red: 33 / 255, green: 34 / 255, blue: 44 / 255)
@@ -20,8 +57,9 @@ extension ReadingFont {
 }
 
 struct AppearanceSettings: View {
-    @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
-    @AppStorage("readingFont") private var readingFont = ReadingFont.monospace.rawValue
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @AppStorage("readingFont") private var readingFont = ReadingFont.system.rawValue
     @AppStorage("editorFontSize") private var fontSize = 15.0
     @AppStorage("imageDisplayWidth") private var thumbnailSize = 0
     @AppStorage("fullWidthNotes") private var fullWidth = false
@@ -30,6 +68,9 @@ struct AppearanceSettings: View {
         Form {
             Picker("Appearance", selection: $theme) {
                 ForEach(FolioTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
+            }
+            Picker("Accent colour", selection: $accent) {
+                ForEach(FolioAccent.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
             }
             Picker("Editor and preview font", selection: $readingFont) {
                 ForEach(ReadingFont.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
@@ -56,12 +97,12 @@ struct AppearanceSettings: View {
                 UserDefaults.standard.set("Preview", forKey: "readingEditorMode")
                 thumbnailSize = 0
             }
-            Text("Dracula is a color theme, paired here with a macOS monospaced font. Choose System or Serif if preferred.")
+            Text("System follows your Mac's appearance. Light and Dark stay fixed. Dracula remains available as an alternative palette.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .padding()
-        .frame(width: 480, height: 410)
-        .preferredColorScheme(theme == FolioTheme.dracula.rawValue ? .dark : nil)
+        .frame(width: 480, height: 480)
+        .folioAppearance()
     }
 }

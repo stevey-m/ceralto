@@ -423,6 +423,8 @@ private final class PageScrollView: NSScrollView {
 }
 
 struct NativePageView: NSViewRepresentable {
+    @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @Environment(\.colorScheme) private var colorScheme
     let html: String
     let resources: ImportedResources?
     let size: Double
@@ -481,6 +483,10 @@ struct NativePageView: NSViewRepresentable {
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
         editor.textColor = color
         editor.insertionPointColor = color
+        editor.linkTextAttributes = [
+            .foregroundColor: NSColor((FolioAccent(rawValue: accent) ?? .gold).color(for: colorScheme)),
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
         guard coordinator.loadedHTML != html || coordinator.size != size ||
                 coordinator.family != family || coordinator.dracula != dracula || coordinator.resources != resources else { return }
         do {

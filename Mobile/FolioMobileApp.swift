@@ -6,6 +6,16 @@ import WebKit
 
 typealias MobileState<Value> = SwiftUI.State<Value>
 
+private extension FolioTheme {
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark, .dracula: .dark
+        }
+    }
+}
+
 @main
 struct FolioMobileApp: App {
     @StateObject private var store = NotesStore(readOnly: true)
@@ -21,6 +31,8 @@ struct MobileReaderView: View {
     @EnvironmentObject private var store: NotesStore
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @Environment(\.colorScheme) private var colorScheme
     @MobileState private var connectingFolder = false
     @MobileState private var searchingAll = false
     @MobileState private var search = ""
@@ -58,6 +70,16 @@ struct MobileReaderView: View {
                         Button("Disconnect", action: store.disconnectSyncFolder).disabled(store.isSyncing)
                     }
                     Text(store.syncMessage).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                Section {
+                    Menu {
+                        Picker("Appearance", selection: $theme) {
+                            ForEach(FolioTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
+                        }
+                        Picker("Accent colour", selection: $accent) {
+                            ForEach(FolioAccent.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
+                        }
+                    } label: { Label("Appearance", systemImage: "circle.lefthalf.filled") }
                 }
             }
             .navigationTitle("Folio")
@@ -107,8 +129,8 @@ struct MobileReaderView: View {
                 }
             }
         }
-        .preferredColorScheme(theme == FolioTheme.dracula.rawValue ? .dark : nil)
-        .tint(theme == FolioTheme.dracula.rawValue ? .purple : .accentColor)
+        .preferredColorScheme((FolioTheme(rawValue: theme) ?? .system).colorScheme)
+        .tint(accentColor)
         .onChange(of: store.scope) { _, _ in store.reconcileSelection() }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
         .onChange(of: scenePhase) { _, phase in
@@ -144,6 +166,16 @@ struct MobileReaderView: View {
                 .toolbar { Button("Done") { searchingAll = false } }
             }
         }
+    }
+
+    private var accentColor: Color {
+        let selected = FolioAccent(rawValue: accent) ?? .gold
+        let scheme = (FolioTheme(rawValue: theme) ?? .system).colorScheme ?? colorScheme
+        let hex = scheme == .dark ? selected.darkHex : selected.lightHex
+        let value = UInt32(hex.dropFirst(), radix: 16)!
+        return Color(red: Double((value >> 16) & 255) / 255,
+                     green: Double((value >> 8) & 255) / 255,
+                     blue: Double(value & 255) / 255)
     }
 
     private func readerNote(_ note: Note) -> some View {
@@ -188,6 +220,8 @@ private struct MobilePreview: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @Environment(\.colorScheme) private var colorScheme
     @MobileState private var html = ""
     @MobileState private var error: String?
     @MobileState private var expanded: MobileImage?
@@ -198,7 +232,9 @@ private struct MobilePreview: View {
     }
 
     private var request: MobileRenderRequest {
-        MobileRenderRequest(source: note.body, format: note.contentFormat, theme: theme,
+        let selected = FolioTheme(rawValue: theme) ?? .system
+        let resolved = selected == .system ? (colorScheme == .dark ? FolioTheme.dark : .light) : selected
+        return MobileRenderRequest(source: note.body, format: note.contentFormat, theme: resolved.rawValue, accent: accent,
                             resources: resources, links: NoteLinks.targets(in: store.library))
     }
 
@@ -245,7 +281,8 @@ private struct MobilePreview: View {
         .task(id: request) {
             do {
                 var options = PreviewOptions()
-                options.theme = FolioTheme(rawValue: theme) ?? .system
+                options.theme = FolioTheme(rawValue: request.theme) ?? .system
+                options.accent = FolioAccent(rawValue: request.accent) ?? .gold
                 options.font = .system
                 options.fontSize = 17
                 html = try PreviewDocument.html(source: note.body, format: note.contentFormat, resources: resources,
@@ -260,6 +297,7 @@ private struct MobileRenderRequest: Equatable {
     let source: String
     let format: NoteFormat
     let theme: String
+    let accent: String
     let resources: ImportedResources?
     let links: [String: UUID]
 }

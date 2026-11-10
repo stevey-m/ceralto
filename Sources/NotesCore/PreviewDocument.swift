@@ -4,7 +4,39 @@ import cmark_gfm
 import cmark_gfm_extensions
 
 public enum FolioTheme: String, CaseIterable, Sendable {
-    case system = "System", dracula = "Dracula"
+    case system = "System", light = "Light", dark = "Dark", dracula = "Dracula"
+
+    public var cssColorScheme: String {
+        switch self {
+        case .system: "light dark"
+        case .light: "light"
+        case .dark, .dracula: "dark"
+        }
+    }
+}
+
+public enum FolioAccent: String, CaseIterable, Sendable {
+    case gold = "Gold", blue = "Blue", purple = "Purple", green = "Green", rose = "Rose"
+
+    public var lightHex: String {
+        switch self {
+        case .gold: "#946200"
+        case .blue: "#0069c2"
+        case .purple: "#7040bd"
+        case .green: "#197345"
+        case .rose: "#b33362"
+        }
+    }
+
+    public var darkHex: String {
+        switch self {
+        case .gold: "#efbe50"
+        case .blue: "#70baff"
+        case .purple: "#c4a0ff"
+        case .green: "#6bd49a"
+        case .rose: "#ff92b7"
+        }
+    }
 }
 
 public enum ReadingFont: String, CaseIterable, Sendable {
@@ -20,8 +52,9 @@ public enum ReadingFont: String, CaseIterable, Sendable {
 }
 
 public struct PreviewOptions: Equatable, Sendable {
-    public var theme: FolioTheme = .dracula
-    public var font: ReadingFont = .monospace
+    public var theme: FolioTheme = .system
+    public var accent: FolioAccent = .gold
+    public var font: ReadingFont = .system
     public var fontSize: Double = 15
     public var thumbnailSize: Int = 0
     public var fullWidth: Bool = false
@@ -122,12 +155,14 @@ public enum PreviewDocument {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src folio-resource:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>
-        :root { color-scheme: \(dracula ? "dark" : "light dark");
+        :root { color-scheme: \(options.theme.cssColorScheme);
           --bg: \(dracula ? "#282a36" : "Canvas"); --fg: \(dracula ? "#f8f8f2" : "CanvasText");
-          --muted: \(dracula ? "#a5a9c5" : "GrayText"); --accent: \(dracula ? "#bd93f9" : "#5c51cc");
+          --muted: \(dracula ? "#a5a9c5" : "GrayText");
+          --accent: \(options.theme == .dark || dracula ? options.accent.darkHex : options.accent.lightHex);
           --line: \(dracula ? "#44475a" : "color-mix(in srgb, CanvasText 18%, Canvas)");
           --code: \(dracula ? "#21222c" : "color-mix(in srgb, CanvasText 5%, Canvas)");
           --green: \(dracula ? "#50fa7b" : "#168143"); --pink: \(dracula ? "#ff79c6" : "#ae287b"); }
+        \(options.theme == .system ? "@media (prefers-color-scheme: dark) { :root { --accent: \(options.accent.darkHex); } }" : "")
         * { box-sizing: border-box; }
         body { margin: 0; padding: 28px 32px 64px; background: var(--bg); color: var(--fg);
           font: \(fontSize)px/1.5 \(options.font.css); overflow-wrap: anywhere; }

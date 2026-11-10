@@ -8,8 +8,10 @@ struct MarkdownPreview: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
     var onImage: ((URL) -> Void)?
-    @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
-    @AppStorage("readingFont") private var font = ReadingFont.monospace.rawValue
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @AppStorage("readingFont") private var font = ReadingFont.system.rawValue
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("editorFontSize") private var fontSize = 15.0
     @AppStorage("imageDisplayWidth") private var thumbnailSize = 0
     @AppStorage("fullWidthNotes") private var fullWidth = false
@@ -24,8 +26,10 @@ struct MarkdownPreview: View {
 
     private var options: PreviewOptions {
         var options = PreviewOptions()
-        options.theme = FolioTheme(rawValue: theme) ?? .dracula
-        options.font = ReadingFont(rawValue: font) ?? .monospace
+        let selected = FolioTheme(rawValue: theme) ?? .system
+        options.theme = selected == .system ? (colorScheme == .dark ? .dark : .light) : selected
+        options.accent = FolioAccent(rawValue: accent) ?? .gold
+        options.font = ReadingFont(rawValue: font) ?? .system
         options.fontSize = fontSize
         options.thumbnailSize = thumbnailSize
         options.fullWidth = fullWidth

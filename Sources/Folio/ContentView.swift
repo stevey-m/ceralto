@@ -8,7 +8,7 @@ struct ContentView: View {
     @EnvironmentObject private var store: NotesStore
     @ViewState private var noteToDelete: Note?
     @ViewState private var notebookToDelete: Notebook?
-    @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
     @ViewState private var collapsedBranches: Set<String> = []
@@ -24,7 +24,7 @@ struct ContentView: View {
             detail
         }
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
-        .preferredColorScheme(theme == FolioTheme.dracula.rawValue ? .dark : nil)
+        .folioAppearance()
         .foregroundStyle(theme == FolioTheme.dracula.rawValue ? FolioPalette.foreground : Color.primary)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
@@ -56,7 +56,6 @@ struct ContentView: View {
             }
         }
         .navigationTitle("Folio")
-        .tint(theme == FolioTheme.dracula.rawValue ? FolioPalette.purple : .indigo)
         .onChange(of: store.scope) { _, _ in store.reconcileSelection() }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
         .sheet(item: $store.notebookDraft) { draft in
@@ -135,7 +134,7 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 Image(systemName: "book.closed.fill")
                     .font(.title2)
-                    .foregroundStyle(theme == FolioTheme.dracula.rawValue ? FolioPalette.purple : .indigo)
+                    .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Folio").font(.title2.weight(.semibold))
                     Text("Your offline library")
@@ -389,7 +388,7 @@ private struct NoteRow: View {
                 Text(note.displayTitle).font(.headline).lineLimit(1)
                 Spacer(minLength: 0)
                 if note.isPinned {
-                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.indigo)
+                    Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.tint)
                         .accessibilityLabel("Pinned")
                 }
             }

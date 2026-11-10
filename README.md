@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.4.1 is a development release, not a finished replacement for your library.**
+**0.4.2 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -28,7 +28,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.4.1-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.4.2-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -86,9 +86,13 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
   Add files with the paperclip, drag files into Compose,
   or paste files copied in Finder. Text paste is intentionally plain text;
   clipboard-only image paste and rich-text paste are not yet supported.
-- **Make it yours, quietly.** System and Dracula appearances, font family, text
+- **Make it yours, quietly.** System, Light, Dark and Dracula appearances, five
+  accent colours (Gold, Blue, Purple, Green and Rose), font family, text
   size, image display size and full-width reading are in Settings. Tags are
   tucked behind the tag button rather than always exposing an editing field.
+  New installations follow the system appearance with a native system font
+  and Gold accent. Existing appearance and font choices are preserved.
+  The iPad reader's sidebar also offers appearance and accent choices.
 
 Notes save atomically to the local library. Save failures are visible; changes
 stay in memory and Folio warns before quitting. History retains up to 20

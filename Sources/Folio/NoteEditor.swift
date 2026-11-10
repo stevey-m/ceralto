@@ -11,8 +11,8 @@ struct NoteEditor: View {
     let onPermanentDelete: () -> Void
     @AppStorage("readingEditorMode") private var mode = EditorMode.preview.rawValue
     @AppStorage("editorFontSize") private var fontSize = 15.0
-    @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
-    @AppStorage("readingFont") private var readingFont = ReadingFont.monospace.rawValue
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @AppStorage("readingFont") private var readingFont = ReadingFont.system.rawValue
     @ViewState private var tagsText = ""
     @FocusState private var tagsFocused: Bool
     @ViewState private var showingHistory = false
@@ -224,7 +224,7 @@ struct NoteEditor: View {
 
     private var sourceEditor: some View {
         TextEditor(text: noteBinding(\.body))
-            .font((ReadingFont(rawValue: readingFont) ?? .monospace).swiftUIFont(size: fontSize))
+            .font((ReadingFont(rawValue: readingFont) ?? .system).swiftUIFont(size: fontSize))
             .scrollContentBackground(.hidden)
             .padding(20)
             .accessibilityLabel(note.contentFormat == .html ? "HTML source editor" : "Markdown editor")
