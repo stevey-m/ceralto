@@ -8,6 +8,65 @@ import WebKit
 @Suite(.serialized)
 @MainActor
 struct PresentationTests {
+    @Test func workflowPanelsRenderWithSyntheticNotesAndRealTemplatePacks() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "FolioWorkflowPresentation-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("Light", forKey: "folioTheme")
+        let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
+        let notebook = Notebook(name: "Work/Release")
+        let note = Note(notebookID: notebook.id, title: "A thoughtful next release",
+                        body: "# Next steps\n\n- [ ] Review the new chapter\n- [x] Capture the original idea\n- [ ] Share the project notes",
+                        tags: ["review"])
+        try storage.save(Library(notebooks: [notebook], notes: [note]))
+        let store = NotesStore(storage: storage, preferences: defaults)
+        let tasks = try NoteTasks.find(in: store.library)
+        #expect(tasks.filter { !$0.isComplete }.count == 2)
+        let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let destination = package.appendingPathComponent("dist")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        func preview<V: View>(_ view: V, size: NSSize, name: String) async throws {
+            let host = NSHostingView(rootView: view.environmentObject(store).defaultAppStorage(defaults))
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                                  styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            window.contentView = host
+            window.appearance = NSAppearance(named: .aqua)
+            defer { window.contentView = nil }
+            host.frame = NSRect(origin: .zero, size: size)
+            try await Task.sleep(for: .milliseconds(250))
+            host.layoutSubtreeIfNeeded()
+            #expect(host.bounds.width == size.width)
+            #expect(store.errorMessage == nil)
+            if name == "Folio-tasks-preview.png" {
+                func descendants(_ view: NSView) -> [NSView] {
+                    [view] + view.subviews.flatMap(descendants)
+                }
+                let search = try #require(descendants(host).compactMap { $0 as? NSTextField }
+                    .first { $0.placeholderString == "Search tasks, notes and notebooks" })
+                let rect = search.convert(search.bounds, to: host)
+                let top = host.isFlipped ? rect.minY : host.bounds.height - rect.maxY
+                #expect(top <= 130, "Task controls must stay near the header, leaving the space for tasks.")
+                #expect(rect.width >= 300)
+                let segments = try #require(descendants(host).compactMap { $0 as? NSSegmentedControl }.first)
+                let segmentRect = segments.convert(segments.bounds, to: host)
+                #expect(segmentRect.minX >= 10 && segmentRect.maxX <= host.bounds.width - 10,
+                        "All task filters must fit without clipping.")
+            }
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try png.write(to: destination.appendingPathComponent(name))
+        }
+        try await preview(TaskOverview(), size: NSSize(width: 820, height: 560), name: "Folio-tasks-preview.png")
+        try await preview(TemplateChooser(), size: NSSize(width: 760, height: 540), name: "Folio-templates-preview.png")
+        try await preview(SettingsView(section: .shortcuts), size: NSSize(width: 900, height: 680),
+                          name: "Folio-shortcuts-preview.png")
+    }
+
     @Test func composedPageKeepsItsSpaceAndProducesASyntheticPreview() async throws {
         _ = NSApplication.shared
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

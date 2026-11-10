@@ -18,11 +18,14 @@ struct FolioApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Note") { openWindow(id: "library"); store.perform(.newNote) }
-                    .keyboardShortcut("n")
+                    .keyboardShortcut(store.shortcut(.newNote).keyboardShortcut)
                     .disabled(!store.isLoaded)
                 Button("New Markdown Source Note") { openWindow(id: "library"); store.perform(.newMarkdown) }
                     .disabled(!store.isLoaded)
                 Menu("New from Template") {
+                    Button("Choose a Template...") { openWindow(id: "library"); store.perform(.templates) }
+                        .keyboardShortcut(store.shortcut(.templates).keyboardShortcut)
+                    Divider()
                     if store.extensions.isEmpty { Text("No template extensions installed") }
                     ForEach(store.extensions) { pack in
                         Menu(pack.name) {
@@ -36,16 +39,16 @@ struct FolioApp: App {
                     Button("Reload Extensions", action: store.reloadExtensions)
                 }.disabled(!store.isLoaded)
                 Button("Quick Capture") { capture() }
-                    .keyboardShortcut(" ", modifiers: [.command, .shift])
+                    .keyboardShortcut(store.shortcut(.capture).keyboardShortcut)
                     .disabled(!store.isLoaded)
                 Button("New Notebook") { store.notebookDraft = NotebookDraft() }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .keyboardShortcut(store.shortcut(.newNotebook).keyboardShortcut)
                     .disabled(!store.isLoaded)
                 Button("New Smart Folder...") { store.perform(.newSmartFolder) }
                     .disabled(FolioCommand.newSmartFolder.unavailableReason(in: store) != nil)
                 Divider()
                 Button("Import Markdown or HTML Files...", action: store.importMarkdown)
-                    .keyboardShortcut("i", modifiers: [.command, .shift])
+                    .keyboardShortcut(store.shortcut(.importFiles).keyboardShortcut)
                     .disabled(!store.isLoaded)
                 Button("Import Joplin Folder...", action: store.importJoplinFolder)
                     .disabled(!store.isLoaded || store.isImportingJoplin)
@@ -54,11 +57,11 @@ struct FolioApp: App {
                 Button("Export Note...") {
                     if let note = store.selectedNote { store.exportMarkdown(note) }
                 }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .keyboardShortcut(store.shortcut(.exportNote).keyboardShortcut)
                 .disabled(store.selectedNote == nil)
                 Divider()
                 Button("Add Images or Attachments...", action: store.addAttachments)
-                    .keyboardShortcut("a", modifiers: [.command, .shift])
+                    .keyboardShortcut(store.shortcut(.addAttachments).keyboardShortcut)
                     .disabled(store.selectedNote == nil || store.selectedNote?.deletedAt != nil)
                 Button("Export Complete Backup...", action: store.exportBackup)
                     .disabled(!store.isLoaded)
@@ -69,7 +72,7 @@ struct FolioApp: App {
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Save") { store.perform(.save) }
-                    .keyboardShortcut("s")
+                    .keyboardShortcut(store.shortcut(.save).keyboardShortcut)
                     .disabled(!store.isLoaded)
                 Button("Show Library in Finder", action: store.revealLibrary)
                 Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
@@ -77,7 +80,7 @@ struct FolioApp: App {
                 Button("Connect iCloud Drive Folder...", action: store.chooseSyncFolder)
                     .disabled(!store.isLoaded || store.isSyncing)
                 Button("Sync Now", action: store.syncNow)
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .keyboardShortcut(store.shortcut(.sync).keyboardShortcut)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
                 Button("Disconnect Shared Folder", action: store.disconnectSyncFolder)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
@@ -87,27 +90,37 @@ struct FolioApp: App {
                     openWindow(id: "library")
                     store.perform(.find)
                 }
-                .keyboardShortcut("k")
+                .keyboardShortcut(store.shortcut(.find).keyboardShortcut)
                 .disabled(!store.isLoaded)
             }
             CommandMenu("Navigate") {
                 Button("Command Palette...") {
                     openWindow(id: "library")
                     store.showingCommands = true
-                }.keyboardShortcut("p", modifiers: [.command, .shift])
+                }.keyboardShortcut(store.shortcut(.palette).keyboardShortcut)
                 Divider()
                 Button("Back") { store.perform(.back) }
-                    .keyboardShortcut("[").disabled(!store.workspace.canGoBack)
+                    .keyboardShortcut(store.shortcut(.back).keyboardShortcut).disabled(!store.workspace.canGoBack)
                 Button("Forward") { store.perform(.forward) }
-                    .keyboardShortcut("]").disabled(!store.workspace.canGoForward)
+                    .keyboardShortcut(store.shortcut(.forward).keyboardShortcut).disabled(!store.workspace.canGoForward)
                 Button("Close Current Tab") { store.perform(.closeTab) }
-                    .keyboardShortcut("w", modifiers: [.command, .option])
+                    .keyboardShortcut(store.shortcut(.closeTab).keyboardShortcut)
                     .disabled(store.selectedNote == nil)
                 Divider()
                 Button("Show Current Note as Reference") { store.perform(.reference) }
                     .disabled(store.selectedNote == nil)
                 Button("Close Reference Pane") { store.perform(.closeReference) }
                     .disabled(store.referenceNote == nil)
+                Divider()
+                Button("Open Today's Note") { openWindow(id: "library"); store.perform(.today) }
+                    .keyboardShortcut(store.shortcut(.today).keyboardShortcut).disabled(!store.isLoaded)
+                Button("Tasks...") { openWindow(id: "library"); store.perform(.tasks) }
+                    .keyboardShortcut(store.shortcut(.tasks).keyboardShortcut).disabled(!store.isLoaded)
+                Divider()
+                Button("Toggle Main Folders") { store.perform(.toggleFolders) }
+                    .keyboardShortcut(store.shortcut(.toggleFolders).keyboardShortcut)
+                Button("Toggle Note List") { store.perform(.toggleNotes) }
+                    .keyboardShortcut(store.shortcut(.toggleNotes).keyboardShortcut)
             }
         }
         Window("Quick Capture", id: "capture") {

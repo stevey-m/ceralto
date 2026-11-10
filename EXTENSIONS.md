@@ -1,7 +1,7 @@
 # Folio extensions: small powers, quiet interface
 
 Folio's first extension API is **data-only template packs**. It is not an
-Obsidian plugin compatibility layer, a JavaScript runtime, or a marketplace.
+Obsidian or Joplin `.jpl` plugin compatibility layer, a JavaScript runtime, or a marketplace.
 No extension code executes. Packs cannot access your library, filesystem,
 network, credentials or other installed extensions.
 
@@ -11,6 +11,13 @@ In the Mac app choose **File > New from Template > Open Extensions Folder**.
 Copy `Examples/Extensions/meeting-notes` from the source repository into that
 folder. Choose **Reload Extensions**. The Meeting Notes menu now creates
 meeting notes or daily pages in your current notebook.
+
+The **Templates** sidebar button, **File > New from Template > Choose a
+Template**, and the command palette open a searchable chooser. Built-in daily,
+meeting and project starters appear alongside installed packs, with a Markdown
+source preview. All template-created notes use the source editor. In
+**Settings > Editor > Daily notes**, a pack template can supply the body and
+tags for Today's Note; its title remains the local `YYYY-MM-DD` date.
 
 The default location is:
 
@@ -46,6 +53,7 @@ Each pack has one UTF-8 `extension.json`:
 
 Pack IDs must be unique. Template IDs must be unique within a pack. IDs use
 lowercase ASCII letters, numbers, dots and hyphens, at most 100 characters.
+The pack ID `dev.folio.builtin` is reserved for Folio's built-in templates.
 Names must not be empty. `tags` is optional. Unknown API versions, duplicate
 IDs, malformed JSON and symbolic links are rejected with a visible error.
 Failed reloads leave the previously loaded packs available.

@@ -25,7 +25,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: "version releases updates help github source license contributors note list preview dates"
         case .appearance: "theme system light dark dracula accent gold blue purple green rose font text size images width panes layout"
-        case .editor: "new note default format compose markdown source spelling spellcheck"
+        case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates"
         case .files: "library storage location import export joplin markdown html attachments backup restore history privacy encryption trash"
         case .sync: "icloud folder connect disconnect sync offline ipad refresh snapshots conflicts"
         case .extensions: "templates packs plugins api community reload install"
@@ -43,12 +43,15 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @EnvironmentObject private var store: NotesStore
+    @Environment(\.openWindow) private var openWindow
     @ViewState private var selection: SettingsSection? = .general
     @ViewState private var query = ""
     @AppStorage("defaultNoteFormat") private var defaultFormat = NoteFormat.formatted.rawValue
     @AppStorage("composeSpellChecking") private var spellChecking = true
     @AppStorage("noteListPreviewLines") private var previewLines = 2
     @AppStorage("noteListShowDates") private var showDates = true
+    @AppStorage("dailyNotebook") private var dailyNotebook = "Journal"
+    @AppStorage("dailyTemplate") private var dailyTemplate = TemplateChoice.daily.id
 
     private var matches: [SettingsSection] { SettingsSection.matching(query) }
 
@@ -162,6 +165,19 @@ struct SettingsView: View {
                 Text("Uses macOS spelling locally. Automatic spelling correction stays off. Use Appearance for font, text size and reading width.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Daily notes") {
+                TextField("Notebook path", text: $dailyNotebook)
+                Picker("Template", selection: $dailyTemplate) {
+                    if !store.templateChoices.contains(where: { $0.id == dailyTemplate }) {
+                        Text("Unavailable template: \(dailyTemplate)").tag(dailyTemplate)
+                    }
+                    ForEach(store.templateChoices) { choice in
+                        Text("\(choice.packName) / \(choice.template.name)").tag(choice.id)
+                    }
+                }
+                Text("Open Today's Note reuses the YYYY-MM-DD title in this notebook, using your Mac's local date. The notebook is created if needed. If you rename the note or notebook, update your workflow or this path. Daily notes use Markdown source; no reminders or background scheduling.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         case .files:
             Section("Local library") {
                 Text(store.libraryURL.deletingLastPathComponent().path).textSelection(.enabled)
@@ -219,28 +235,19 @@ struct SettingsView: View {
                 ForEach(store.extensions) { pack in
                     LabeledContent(pack.name, value: "\(pack.templates.count) templates")
                 }
-                Text("Create notes using File > New from Template. API v1 supports local data-only templates, not executable plugins or Obsidian plugin compatibility.")
+                Button("Choose a Template...") { openWindow(id: "library"); store.showingTemplates = true }
+                Text("Use the template chooser from the main window, sidebar, File menu or command palette. Built-in templates work without extensions. API v1 supports local data-only templates, not executable plugins or Obsidian plugin compatibility.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Extension API & Example") { openProject("blob/main/EXTENSIONS.md") }
             }
         case .shortcuts:
+            ShortcutSettings(bindings: store.shortcutBindings)
             Section("Keyboard shortcuts") {
-                shortcut("New note", "⌘N")
-                shortcut("New notebook", "⇧⌘N")
-                shortcut("Quick Capture (while Folio is active)", "⇧⌘Space")
                 shortcut("Save Quick Capture", "⌘Return")
-                shortcut("Find across all notes", "⌘K")
-                shortcut("Command palette", "⇧⌘P")
-                shortcut("Back / Forward", "⌘[ / ⌘]")
-                shortcut("Close current tab", "⌥⌘W")
                 shortcut("Search this collection", "⌘F")
-                shortcut("Save", "⌘S")
-                shortcut("Sync now", "⇧⌘R")
-                shortcut("Toggle main folders", "⌥⌘S")
-                shortcut("Toggle subtopics and notes", "⌥⌘L")
                 shortcut("Bold / Italic in Compose", "⌘B / ⌘I")
                 shortcut("Back from image", "Esc")
-                Text("Reference only; shortcut remapping and global capture hotkeys are not implemented. Menu items show other available shortcuts.")
+                Text("These contextual editing shortcuts are fixed. Application shortcuts above work while Folio is active; a global capture hotkey is not implemented.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         case .appearance:

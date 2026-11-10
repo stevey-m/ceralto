@@ -50,19 +50,17 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: store.navigateBack) { Image(systemName: "chevron.left") }
-                    .help("Back (Command-[)").accessibilityLabel("Back")
+                    .help("Back (\(store.shortcut(.back).label))").accessibilityLabel("Back")
                     .disabled(!store.workspace.canGoBack)
                 Button(action: store.navigateForward) { Image(systemName: "chevron.right") }
-                    .help("Forward (Command-])").accessibilityLabel("Forward")
+                    .help("Forward (\(store.shortcut(.forward).label))").accessibilityLabel("Forward")
                     .disabled(!store.workspace.canGoForward)
                 Button { showNotebooks.toggle() } label: { Image(systemName: "sidebar.left") }
-                    .help("Toggle notebooks (Command-Option-S)")
+                    .help("Toggle notebooks (\(store.shortcut(.toggleFolders).label))")
                     .accessibilityLabel("Toggle notebooks")
-                    .keyboardShortcut("s", modifiers: [.command, .option])
                 Button { showNotes.toggle() } label: { Image(systemName: "rectangle.split.2x1") }
-                    .help("Toggle note list (Command-Option-L)")
+                    .help("Toggle note list (\(store.shortcut(.toggleNotes).label))")
                     .accessibilityLabel("Toggle note list")
-                    .keyboardShortcut("l", modifiers: [.command, .option])
                 Button {
                     let focused = !showNotebooks && !showNotes
                     showNotebooks = focused
@@ -75,10 +73,10 @@ struct ContentView: View {
                     .accessibilityLabel("Find notes")
                     .keyboardShortcut("f")
                 Button { store.showingFinder = true } label: { Image(systemName: "text.magnifyingglass") }
-                    .help("Find across all notes (Command-K)")
+                    .help("Find across all notes (\(store.shortcut(.find).label))")
                     .accessibilityLabel("Find across all notes")
                 Button { store.showingCommands = true } label: { Image(systemName: "command") }
-                    .help("Command palette (Command-Shift-P)")
+                    .help("Command palette (\(store.shortcut(.palette).label))")
                     .accessibilityLabel("Command palette")
                 Button { openWindow(id: "capture") } label: { Image(systemName: "tray.and.arrow.down") }
                     .help("Quick capture")
@@ -96,6 +94,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showingFinder) {
             NoteFinder().environmentObject(store)
+        }
+        .sheet(isPresented: $store.showingTemplates) {
+            TemplateChooser().environmentObject(store)
+        }
+        .sheet(isPresented: $store.showingTasks) {
+            TaskOverview().environmentObject(store)
         }
         .sheet(isPresented: $store.showingCommands, onDismiss: {
             if let command = pendingCommand {
@@ -259,6 +263,14 @@ struct ContentView: View {
                     }
                     scopeRow("Pinned", icon: "pin", scope: .pinned)
                     scopeRow("Trash", icon: "trash", scope: .trash)
+                }
+                Section("Workspace") {
+                    Button { store.perform(.today) } label: { Label("Today's Note", systemImage: "calendar") }
+                        .buttonStyle(.plain).disabled(!store.isLoaded)
+                    Button { store.perform(.templates) } label: { Label("Templates", systemImage: "doc.on.doc") }
+                        .buttonStyle(.plain).disabled(!store.isLoaded)
+                    Button { store.perform(.tasks) } label: { Label("Tasks", systemImage: "checklist") }
+                        .buttonStyle(.plain).disabled(!store.isLoaded)
                 }
                 Section {
                     ForEach(NotebookBranch.build(store.library.notebooks.filter { $0.id != store.inboxID })) { branch in

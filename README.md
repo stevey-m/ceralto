@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.7.0 is a development release, not a finished replacement for your library.**
+**0.8.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -28,7 +28,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.7.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.8.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -40,6 +40,24 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
 
 ## A notebook, not a control panel
 
+Shortcuts below are defaults. Customize application commands in
+**Settings > Keyboard Shortcuts**; contextual editing shortcuts stay fixed.
+
+- **Start with today.** Open **Today's Note** from the sidebar, Navigate menu,
+  command palette or Command-Shift-D. Folio reuses today's dated note without
+  replacing your words. Choose a notebook path and starter template in
+  **Settings > Editor > Daily notes**.
+- **Choose a useful starting page.** The searchable template chooser combines
+  built-in Daily page, Meeting notes and Project brief templates with installed
+  community packs. Preview the actual Markdown before creating a note in your
+  current notebook. Open it from the sidebar or Command-Shift-T.
+- **See what needs doing.** **Tasks** (Command-Shift-J) gathers Markdown
+  checkboxes from active notes. Filter open/completed/all, search task text and
+  note/notebook names, mark a task complete, or open its original note. No
+  duplicate task database is created.
+- **Use your own keys.** Remap or unassign 18 application commands in Settings.
+  Menus, toolbar hints and command-palette labels follow the saved assignments.
+  Duplicate bindings and reserved standard commands are rejected.
 - **Save a search, not another copy.** Smart folders collect matching notes
   automatically without moving or copying the originals. Choose **Save Search**
   above the note list, **New Smart Folder** in the sidebar, or use the File menu
@@ -65,7 +83,7 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
   show why they cannot run. Command-K remains the note finder. Use
   Command-[ and Command-] or the toolbar arrows to go Back and Forward through
   up to 100 document visits, including links and finder results. Navigating
-  after going Back starts a new history branch. Shortcuts are fixed for now.
+  after going Back starts a new history branch.
 - **Compose directly into the page.** New Mac notes use a native AppKit editor
   for headings, bold, italic, bullets, quotes, code, links and inline images.
   The saved body is ordinary Markdown, not RTF, base64 or an opaque editor model.
@@ -124,6 +142,54 @@ Notes save atomically to the local library. Save failures are visible; changes
 stay in memory and Folio warns before quitting. History retains up to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 Restoring also preserves the current version.
+
+## Daily notes, templates and tasks
+
+Daily notes use your Mac's local Gregorian date and the exact `YYYY-MM-DD` title
+in the configured notebook path (default **Journal**). Repeated opening selects
+the same note and tab; it does not reapply the template or overwrite edits.
+Duplicate notebook records sharing that path are searched together. If multiple
+active notes already have today's title there, the most recently edited is
+opened. A dated note in Trash must be restored explicitly, not silently
+resurrected or duplicated. Renaming a dated note allows a new note with the
+original daily title to be created; changing/renaming the notebook path likewise
+changes where Folio looks. It is not a permanent calendar-ID system.
+
+The configured template supplies the Markdown body and tags; the daily title
+stays the date, and `daily` is added to its tags. Built-in templates work offline
+without installation. A missing community template or invalid notebook path
+shows an error before creating anything. Ordinary template creation still uses
+the current real notebook and respects Pinned/tag collection defaults; smart
+folders do not apply implicit rules to new notes.
+
+Daily and template notes use the **Markdown source editor**, preserving task
+syntax and advanced structures. Their text, tags and tasks are ordinary library
+notes, so they participate in existing exports, history and manual folder
+exchange. Daily-note preferences, shortcut bindings and installed template
+packs are local settings and are not exported or synced.
+
+The Tasks window recognizes list checkboxes such as `- [ ] Read the chapter`,
+`- [x] Finished`, nested bullets, numbered lists and quoted lists. CommonMark
+structure excludes fenced/indented code and HTML blocks; HTML-format notes and
+Trash are not indexed. Task titles show their first source line. Opening a task
+opens its note; the displayed line number helps locate it in source, rather than
+claiming a cursor jump. Toggling validates the current source location and
+changes only that checkbox marker, preserving other content and line endings.
+Stale/moved tasks must be refreshed before editing. Save failures remain visible;
+unsaved changes are retained in memory under the existing library safeguards.
+This is not a reminders/calendar service: due dates, notifications, recurring
+tasks and task editing on iPad are not implemented.
+
+In **Keyboard Shortcuts**, choose a key and optional Shift/Option/Control
+modifiers; Command is always included. Choose **Unassigned** to remove a binding,
+then **Save Shortcuts** to apply all changes. The supported keys are letters,
+digits, Space and the punctuation offered by the picker. Standard editing,
+window-management and selected system combinations remain reserved. Global
+hotkeys and arbitrary key recording are not implemented, and shortcuts owned by
+other applications or external system customizations cannot be detected.
+Malformed/newer saved configurations remain untouched, with an explicit warning
+and default bindings active. **Reset to Defaults** asks before replacing saved
+assignments.
 
 ## Search rules and smart folders
 
@@ -324,18 +390,19 @@ then select a matching category:
   guide, note-list preview lines and date visibility.
 - **Appearance:** System/Light/Dark/Dracula, accent colour, font, text size,
   preview width, image size, pane visibility and reading-layout reset.
-- **Editor:** default format for new notes and local macOS spelling in Compose.
+- **Editor:** default format for new notes, daily-note notebook/template, and local macOS spelling in Compose.
   Existing notes and imports keep their format; automatic correction stays off.
 - **Files & Backups:** actual library location, imports, portable exports,
   complete backups and recovery guidance.
 - **iCloud:** folder connection, manual sync, status and offline iPad guidance.
-- **Extensions:** installed template packs, folder access, reload and API docs.
-- **Keyboard Shortcuts:** a reference for the working commands, not a remapping
-  UI. Sync uses Command-Shift-R; Command-Option-S toggles the folder pane.
+- **Extensions:** installed template packs, chooser, folder access, reload and API docs.
+- **Keyboard Shortcuts:** editable application assignments and fixed contextual
+  editing references. Default Sync is Command-Shift-R; Command-Option-S toggles
+  the folder pane.
 
 Settings are local to the device and are not included in library exports.
 Release checking is manual. Scheduled backups, automatic trash expiry, OCR,
-encryption, executable plugins and shortcut remapping are not implemented.
+encryption and executable plugins are not implemented.
 The iPad reader retains its lightweight appearance menu; the full Settings
 window is Mac-only.
 

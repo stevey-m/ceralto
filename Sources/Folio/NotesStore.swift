@@ -55,6 +55,8 @@ final class NotesStore: ObservableObject {
     @Published private(set) var smartFolders: [SmartFolder] = []
     @Published private(set) var smartFoldersAvailable = true
     @Published var showingFinder = false
+    @Published var showingTemplates = false
+    @Published var showingTasks = false
     @Published private(set) var isSyncing = false
     @Published private(set) var syncFolderName: String?
     @Published private(set) var syncMessage = "Offline. No shared folder connected."
@@ -63,6 +65,10 @@ final class NotesStore: ObservableObject {
     @Published var importSummary: String?
     @Published private(set) var isLoaded = false
     @Published private(set) var hasUnsavedChanges = false
+    #if os(macOS)
+    @Published private(set) var shortcutBindings = ShortcutConfiguration.defaults
+    @Published private(set) var shortcutsAvailable = true
+    #endif
     private let storage: LibraryStorage
     private let preferences: UserDefaults
     private var restoringWorkspace = false
@@ -76,9 +82,6 @@ final class NotesStore: ObservableObject {
         self.preferences = preferences
         isReadOnly = readOnly
         load()
-        #if os(macOS)
-        reloadSmartFolders()
-        #endif
         restoreSyncFolder()
         if !readOnly { reloadExtensions() }
     }
@@ -278,6 +281,8 @@ final class NotesStore: ObservableObject {
             selectedNoteID = visibleNotes.first?.id
             #if os(macOS)
             restoreWorkspace()
+            reloadSmartFolders()
+            reloadShortcuts()
             #else
             restoringWorkspace = false
             #endif
@@ -412,23 +417,124 @@ final class NotesStore: ObservableObject {
         catch { errorMessage = "Could not load extensions: \(error.localizedDescription)" }
     }
 
-    func createFromTemplate(_ template: NoteTemplate) {
-        guard isLoaded, !isReadOnly, let notebookID = currentNotebookID else { return }
+    @discardableResult func createFromTemplate(_ template: NoteTemplate) -> Bool {
+        guard isLoaded, !isReadOnly, let notebookID = currentNotebookID else {
+            errorMessage = "Open an editable notebook before creating a template note."
+            return false
+        }
         let now = Date()
         var tags = template.tags ?? []
         if case .tag(let tag) = scope { tags.append(tag) }
         let note = Note(notebookID: notebookID, title: template.render(template.title, date: now),
                         body: template.render(template.body, date: now), tags: tags,
                         isPinned: scope == .pinned, format: .markdown)
+        var candidate = library
+        candidate.notes.insert(note, at: 0)
+        do { try storage.save(candidate) }
+        catch {
+            errorMessage = "Could not create the template note: \(error.localizedDescription)"
+            return false
+        }
+        library = candidate
+        hasUnsavedChanges = false
         if scope == .trash { scope = .all }
         if case .smart = scope { scope = .all }
         query = ""
-        library.notes.insert(note, at: 0)
         #if os(macOS)
         workspace.select(note.id)
         #endif
         selectedNoteID = note.id
-        save()
+        return true
+    }
+
+    var templateChoices: [TemplateChoice] {
+        TemplateChoice.builtIn + extensions.flatMap { pack in
+            pack.templates.map { TemplateChoice(packID: pack.id, packName: pack.name, template: $0) }
+        }
+    }
+
+    #if os(macOS)
+    func shortcut(_ action: ShortcutAction) -> ShortcutBinding {
+        shortcutBindings[action.rawValue] ?? action.defaultBinding
+    }
+
+    func reloadShortcuts() {
+        do {
+            if let stored = preferences.object(forKey: "keyboardShortcuts"), !(stored is Data) {
+                throw ShortcutError("The saved shortcut configuration is not valid data.")
+            }
+            shortcutBindings = try ShortcutConfiguration.decode(preferences.data(forKey: "keyboardShortcuts"))
+            shortcutsAvailable = true
+        } catch {
+            shortcutBindings = ShortcutConfiguration.defaults
+            shortcutsAvailable = false
+            errorMessage = "Could not load custom shortcuts. Defaults are active; your saved configuration has not been replaced. \(error.localizedDescription)"
+        }
+    }
+
+    func saveShortcuts(_ bindings: [String: ShortcutBinding]) throws {
+        guard shortcutsAvailable else { throw ShortcutError("Reset the unreadable configuration before saving new shortcuts.") }
+        let data = try ShortcutConfiguration.encode(bindings)
+        preferences.set(data, forKey: "keyboardShortcuts")
+        shortcutBindings = bindings
+    }
+
+    func resetShortcuts() {
+        preferences.removeObject(forKey: "keyboardShortcuts")
+        shortcutBindings = ShortcutConfiguration.defaults
+        shortcutsAvailable = true
+    }
+    #endif
+
+    func openDailyNote(on date: Date = Date()) throws {
+        guard isLoaded, !isReadOnly else { throw NoteWorkflowError("Open an editable library before creating a daily note.") }
+        let path = (preferences.string(forKey: "dailyNotebook") ?? "Journal").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty, path.split(separator: "/", omittingEmptySubsequences: false)
+            .allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw NoteWorkflowError("Choose a nonempty notebook path, such as Journal or Personal/Journal, in Settings > Editor.")
+        }
+        let title = TemplateChoice.daily.template.render("{{date}}", date: date)
+        let notebooks = library.notebooks.filter { $0.name == path }.sorted { $0.id.uuidString < $1.id.uuidString }
+        let notebook = notebooks.first ?? Notebook(name: path)
+        let notebookIDs = Set(notebooks.map(\.id))
+        let existing = library.notes.filter { notebookIDs.contains($0.notebookID) && $0.title == title }
+            .sorted {
+                if ($0.deletedAt == nil) != ($1.deletedAt == nil) { return $0.deletedAt == nil }
+                if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+        if let note = existing.first {
+            guard note.deletedAt == nil else {
+                throw NoteWorkflowError("Today's note is in Trash. Restore it there before reopening it.")
+            }
+            openNoteInNewTab(note.id)
+            return
+        }
+        let choiceID = preferences.string(forKey: "dailyTemplate") ?? TemplateChoice.daily.id
+        guard let choice = templateChoices.first(where: { $0.id == choiceID }) else {
+            throw NoteWorkflowError("Your daily-note template is unavailable. Reload its pack or choose another in Settings > Editor.")
+        }
+        let note = Note(notebookID: notebook.id, title: title,
+                        body: choice.template.render(choice.template.body, date: date),
+                        tags: (choice.template.tags ?? []) + ["daily"], format: .markdown)
+        var candidate = library
+        if !candidate.notebooks.contains(where: { $0.id == notebook.id }) { candidate.notebooks.append(notebook) }
+        candidate.notes.insert(note, at: 0)
+        try storage.save(candidate)
+        library = candidate
+        hasUnsavedChanges = false
+        openNoteInNewTab(note.id)
+    }
+
+    func setTask(_ task: NoteTask, complete: Bool) {
+        guard isLoaded, !isReadOnly, let note = library.notes.first(where: { $0.id == task.noteID }) else {
+            errorMessage = "The task's note is unavailable for editing."
+            return
+        }
+        do {
+            let body = try NoteTasks.setting(task, complete: complete, in: note)
+            update(note.id) { $0.body = body }
+        } catch { errorMessage = error.localizedDescription }
     }
 
     var inboxID: UUID? {

@@ -8,6 +8,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
     case reference, closeReference
     case revealRecovery
     case newSmartFolder
+    case today, templates, tasks
 
     var id: String { rawValue }
 
@@ -37,25 +38,16 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .closeReference: "Close Reference Pane"
         case .revealRecovery: "Show Local Recovery Copies"
         case .newSmartFolder: "New Smart Folder from Current Search..."
+        case .today: "Open Today's Note"
+        case .templates: "Choose a Template..."
+        case .tasks: "Show Tasks..."
         }
     }
 
-    var shortcut: String {
-        switch self {
-        case .newNote: "⌘N"
-        case .newNotebook: "⇧⌘N"
-        case .find: "⌘K"
-        case .save: "⌘S"
-        case .back: "⌘["
-        case .forward: "⌘]"
-        case .closeTab: "⌥⌘W"
-        case .toggleFolders: "⌥⌘S"
-        case .toggleNotes: "⌥⌘L"
-        case .importFiles: "⇧⌘I"
-        case .exportNote: "⇧⌘E"
-        case .sync: "⇧⌘R"
-        default: ""
-        }
+    @MainActor func shortcut(in store: NotesStore) -> String {
+        guard let action = ShortcutAction.allCases.first(where: { $0.command == self }) else { return "" }
+        let binding = store.shortcut(action)
+        return binding.key.isEmpty ? "" : binding.label
     }
 
     static func matching(_ query: String) -> [Self] {
@@ -73,6 +65,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .forward: return store.workspace.canGoForward ? nil : "No later document"
         case .closeTab, .exportNote, .reference: return store.selectedNote == nil ? "Select a note first" : nil
         case .closeReference: return store.referenceNote == nil ? "No reference pane open" : nil
+        case .today, .templates: return store.isReadOnly ? "This library is read-only" : nil
         case .newSmartFolder:
             if !store.smartFoldersAvailable { return "Reload saved smart folders first" }
             if store.scope == .trash { return "Smart folders search active notes, not Trash" }
@@ -122,6 +115,11 @@ extension NotesStore {
         case .closeReference: showReference(nil)
         case .revealRecovery: revealRecoveryCopies()
         case .newSmartFolder: draftSmartFolder()
+        case .today:
+            do { try openDailyNote() }
+            catch { errorMessage = "Could not open today's note: \(error.localizedDescription)" }
+        case .templates: showingTemplates = true
+        case .tasks: showingTasks = true
         }
     }
 }
@@ -164,7 +162,7 @@ struct CommandPalette: View {
                                     if let reason { Text(reason).font(.caption).foregroundStyle(.secondary) }
                                 }
                                 Spacer()
-                                Text(command.shortcut).font(.callout.monospaced()).foregroundStyle(.secondary)
+                                Text(command.shortcut(in: store)).font(.callout.monospaced()).foregroundStyle(.secondary)
                             }
                             .padding(8)
                             .frame(maxWidth: .infinity, alignment: .leading)
