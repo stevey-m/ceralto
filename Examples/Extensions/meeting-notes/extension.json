@@ -1,0 +1,21 @@
+{
+  "id": "org.folio.meeting-notes",
+  "name": "Meeting Notes",
+  "apiVersion": 1,
+  "templates": [
+    {
+      "id": "meeting",
+      "name": "Meeting",
+      "title": "Meeting - {{date}}",
+      "body": "## People\n\n- \n\n## Discussion\n\n\n\n## Decisions\n\n\n\n## Next actions\n\n- [ ] \n",
+      "tags": ["meeting"]
+    },
+    {
+      "id": "daily-page",
+      "name": "Daily Page",
+      "title": "{{date}}",
+      "body": "## What matters today\n\n\n\n## Notes\n\n\n\n## One thing to remember\n\n",
+      "tags": ["journal"]
+    }
+  ]
+}

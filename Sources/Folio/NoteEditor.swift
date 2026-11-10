@@ -1,0 +1,228 @@
+import NotesCore
+import SwiftUI
+
+private enum EditorMode: String, CaseIterable {
+    case write = "Write", split = "Split", preview = "Preview"
+}
+
+struct NoteEditor: View {
+    @EnvironmentObject private var store: NotesStore
+    let note: Note
+    let onPermanentDelete: () -> Void
+    @AppStorage("readingEditorMode") private var mode = EditorMode.preview.rawValue
+    @AppStorage("editorFontSize") private var fontSize = 15.0
+    @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
+    @AppStorage("readingFont") private var readingFont = ReadingFont.monospace.rawValue
+    @ViewState private var tagsText = ""
+    @FocusState private var tagsFocused: Bool
+    @ViewState private var showingHistory = false
+    @ViewState private var showingTags = false
+    @ViewState private var confirmingSource = false
+    @ViewState private var showingBacklinks = false
+
+    private var isTrashed: Bool { note.deletedAt != nil }
+    private var editorMode: EditorMode { EditorMode(rawValue: mode) ?? .preview }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if isTrashed {
+                HStack {
+                    Label("This note is in Trash", systemImage: "trash")
+                    Spacer()
+                    Button("Restore") { store.restore(note.id) }
+                    Button("Delete Forever...", role: .destructive, action: onPermanentDelete)
+                }
+                .font(.callout)
+                .padding(12)
+                .background(.orange.opacity(0.1))
+            }
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Menu {
+                        ForEach(store.library.notebooks) { notebook in
+                            Button(notebook.name) {
+                                store.update(note.id) { $0.notebookID = notebook.id }
+                            }
+                        }
+                    } label: {
+                        Label(
+                            store.library.notebooks.first { $0.id == note.notebookID }?.name ?? "Notebook",
+                            systemImage: "book.closed"
+                        )
+                        .font(.caption.weight(.medium))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .disabled(isTrashed)
+                    .help("Move to notebook")
+                    Spacer()
+                    Button { showingTags.toggle() } label: {
+                        Label(note.tags.isEmpty ? "Tags" : "\(note.tags.count)", systemImage: "number")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Show or edit tags")
+                    .accessibilityLabel("Show or edit tags")
+                }
+                TextField("Untitled note", text: noteBinding(\.title))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 32, weight: .bold))
+                    .disabled(isTrashed)
+                    .accessibilityLabel("Note title")
+                if showingTags {
+                    HStack(spacing: 8) {
+                        Image(systemName: "number").foregroundStyle(.tertiary)
+                        TextField("Add tags, separated by commas", text: $tagsText)
+                            .textFieldStyle(.plain)
+                            .font(.callout)
+                            .focused($tagsFocused)
+                            .onChange(of: tagsText) { _, text in
+                                guard tagsFocused else { return }
+                                store.setTags(note.id, text: text)
+                            }
+                            .onSubmit { tagsFocused = false }
+                            .disabled(isTrashed)
+                            .accessibilityLabel("Tags, separated by commas")
+                    }
+                } else if !note.tags.isEmpty {
+                    Text(note.tags.map { "#\($0)" }.joined(separator: "  "))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .padding(28)
+            Divider()
+            if note.contentFormat == .formatted && editorMode != .preview && !isTrashed {
+                FormattedEditor(note: note, fontSize: fontSize,
+                                family: ReadingFont(rawValue: readingFont) ?? .system,
+                                dracula: theme == FolioTheme.dracula.rawValue) { body in
+                    store.update(note.id) { $0.body = body }
+                } onFiles: { urls in
+                    do { try store.attachFiles(urls, to: note.id) }
+                    catch { store.errorMessage = "Could not attach files: \(error.localizedDescription)" }
+                } onError: { store.errorMessage = $0 }
+            } else if editorMode == .split && !isTrashed {
+                HSplitView {
+                    sourceEditor.frame(minWidth: 130)
+                    preview.frame(minWidth: 130)
+                }
+            } else if editorMode == .preview || isTrashed {
+                preview
+            } else {
+                sourceEditor
+            }
+            Divider()
+            HStack(spacing: 14) {
+                Label(store.hasUnsavedChanges ? "Not saved" : "Saved locally",
+                      systemImage: store.hasUnsavedChanges ? "exclamationmark.triangle" : "checkmark.circle")
+                    .foregroundStyle(store.hasUnsavedChanges ? .orange : .secondary)
+                Spacer()
+                Text("\(note.wordCount) words")
+                Text(note.updatedAt, format: .dateTime.month(.abbreviated).day())
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 12)
+        }
+        .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .textBackgroundColor))
+        .onAppear {
+            tagsText = note.tags.joined(separator: ", ")
+            if note.contentFormat == .formatted || (note.body.isEmpty && note.title.isEmpty) {
+                mode = EditorMode.write.rawValue
+            }
+        }
+        .onChange(of: tagsFocused) { _, focused in
+            if !focused { tagsText = note.tags.joined(separator: ", ") }
+        }
+        .sheet(isPresented: $showingHistory) {
+            NoteHistoryView(note: note)
+        }
+        .sheet(isPresented: $showingBacklinks) {
+            LinkedMentionsView(note: note)
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Picker("Editor mode", selection: $mode) {
+                    ForEach(EditorMode.allCases, id: \.rawValue) { mode in
+                        if note.contentFormat != .formatted || mode != .split {
+                            Text(note.contentFormat == .formatted && mode == .write ? "Compose" : mode.rawValue)
+                                .tag(mode.rawValue)
+                        }
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+                .disabled(isTrashed)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: store.addAttachments) { Image(systemName: "paperclip") }
+                    .help("Add images or attachments")
+                    .accessibilityLabel("Add attachments")
+                    .disabled(isTrashed)
+                Button {
+                    store.update(note.id) { $0.isPinned.toggle() }
+                } label: {
+                    Image(systemName: note.isPinned ? "pin.fill" : "pin")
+                }
+                .help(note.isPinned ? "Unpin note" : "Pin note")
+                .accessibilityLabel(note.isPinned ? "Unpin note" : "Pin note")
+                .disabled(isTrashed)
+                Button {
+                    store.exportMarkdown(note)
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .help("Export note in its original format")
+                .accessibilityLabel("Export note")
+                Menu {
+                    Button("Larger Text") { fontSize = min(fontSize + 1, 28) }
+                    Button("Smaller Text") { fontSize = max(fontSize - 1, 11) }
+                    Button("Note History...") { showingHistory = true }
+                        .disabled(isTrashed || (note.history ?? []).isEmpty)
+                    Button("Linked Mentions...") { showingBacklinks = true }
+                    if note.contentFormat == .formatted {
+                        Button("Use Markdown Source Editor...") { confirmingSource = true }
+                    }
+                    Divider()
+                    if isTrashed {
+                        Button("Restore Note") { store.restore(note.id) }
+                    } else {
+                        Button("Move to Trash", role: .destructive) { store.trash(note.id) }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .help("Note actions")
+                .accessibilityLabel("Note actions")
+            }
+        }
+
+        .confirmationDialog("Switch to Markdown source?", isPresented: $confirmingSource, titleVisibility: .visible) {
+            Button("Use Source Editor") {
+                store.update(note.id) { $0.format = .markdown }
+                mode = EditorMode.write.rawValue
+            }
+        } message: {
+            Text("The note is already stored as readable Markdown. Source mode supports advanced Markdown such as tables and nested lists. The note will remain in source mode; its text and attachments will not be converted.")
+        }
+    }
+
+    private var sourceEditor: some View {
+        TextEditor(text: noteBinding(\.body))
+            .font((ReadingFont(rawValue: readingFont) ?? .monospace).swiftUIFont(size: fontSize))
+            .scrollContentBackground(.hidden)
+            .padding(20)
+            .accessibilityLabel(note.contentFormat == .html ? "HTML source editor" : "Markdown editor")
+    }
+
+    private var preview: some View {
+        MarkdownPreview(note: note)
+    }
+
+    private func noteBinding(_ keyPath: WritableKeyPath<Note, String>) -> Binding<String> {
+        Binding(
+            get: { store.library.notes.first { $0.id == note.id }?[keyPath: keyPath] ?? "" },
+            set: { value in store.update(note.id) { $0[keyPath: keyPath] = value } }
+        )
+    }
+}
