@@ -337,10 +337,10 @@ final class FormattingActions: ObservableObject {
     @discardableResult
     func addLink(_ value: String) -> Bool {
         guard let editor, editor.isEditable else { return false }
-        guard FormattedPage.allowedLink(value), let url = URL(string: value),
-              let scheme = url.scheme?.lowercased(),
+        guard FormattedPage.allowedLink(value), let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
               !value.contains(where: \.isWhitespace),
-              scheme == "mailto" ? !url.path.isEmpty : !(url.host ?? "").isEmpty else {
+              scheme == "mailto" ? !components.path.isEmpty : !(components.host ?? "").isEmpty else {
             editor.onError?("Enter a complete http, https, or mailto link.")
             return false
         }

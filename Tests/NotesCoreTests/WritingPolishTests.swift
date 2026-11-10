@@ -101,7 +101,8 @@ struct WritingPolishTests {
         editor.setSelectedRange(NSRange(location: 5, length: 3))
         var error: String?
         editor.onError = { error = $0 }
-        for invalid in ["https://", "mailto:", "relative/page", "javascript:alert(1)", "https://example.com/a b"] {
+        for invalid in ["https://", "mailto:", "mailto:?subject=Hello", "mailto:#fragment",
+                        "relative/page", "javascript:alert(1)", "https://example.com/a b"] {
             #expect(!actions.addLink(invalid))
             #expect(editor.selectedRange() == NSRange(location: 5, length: 3))
             #expect(!markdown(editor).contains("]("))
