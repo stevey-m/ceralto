@@ -96,6 +96,12 @@ struct MobileReaderView: View {
             }
             .navigationTitle(store.navigationFolder?.name ?? store.scopeTitle)
             .searchable(text: $store.query, prompt: "Search this notebook")
+            .safeAreaInset(edge: .bottom) {
+                if let error = store.searchError {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange).padding().background(.bar)
+                }
+            }
             .toolbar {
                 Button("Search All Notes", systemImage: "magnifyingglass") { searchingAll = true }
                 Button("Refresh", systemImage: "arrow.triangle.2.circlepath", action: store.syncNow)
@@ -163,6 +169,15 @@ struct MobileReaderView: View {
                 }
                 .navigationTitle("Find a thought")
                 .searchable(text: $search, prompt: "Titles, text, tags and notebooks")
+                .safeAreaInset(edge: .bottom) {
+                    if let error = NoteQuery(search).errorMessage {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange).padding().background(.bar)
+                    } else {
+                        Text(#"Try tag:work, notebook:"Work/Ideas", is:pinned or -"old phrase"."#)
+                            .font(.caption).foregroundStyle(.secondary).padding().background(.bar)
+                    }
+                }
                 .toolbar { Button("Done") { searchingAll = false } }
             }
         }

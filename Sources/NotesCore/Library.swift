@@ -117,10 +117,8 @@ public struct Note: Identifiable, Codable, Equatable, Sendable {
         }.filter { !$0.isEmpty })).sorted()
     }
 
-    public func matches(_ query: String) -> Bool {
-        let terms = query.split(whereSeparator: \.isWhitespace)
-        let text = ([displayTitle, textContent] + tags).joined(separator: "\n")
-        return terms.allSatisfy { text.localizedStandardContains(String($0)) }
+    public func matches(_ query: String, notebook: String = "") -> Bool {
+        NoteQuery(query).matches(self, notebook: notebook)
     }
 }
 

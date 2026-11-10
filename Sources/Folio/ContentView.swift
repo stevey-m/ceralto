@@ -9,6 +9,8 @@ struct ContentView: View {
     @ViewState private var noteToDelete: Note?
     @ViewState private var notebookToDelete: Notebook?
     @ViewState private var pendingCommand: FolioCommand?
+    @ViewState private var smartFolderToDelete: SmartFolder?
+    @ViewState private var showingSearchHelp = false
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
@@ -89,6 +91,9 @@ struct ContentView: View {
         .sheet(item: $store.notebookDraft) { draft in
             NotebookSheet(draft: draft)
         }
+        .sheet(item: $store.smartFolderDraft) { draft in
+            SmartFolderSheet(draft: draft).environmentObject(store)
+        }
         .sheet(isPresented: $store.showingFinder) {
             NoteFinder().environmentObject(store)
         }
@@ -112,8 +117,10 @@ struct ContentView: View {
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
         )) {
-            Button(store.isLoaded ? "Retry Saving" : "Retry Opening") {
-                if store.isLoaded { store.save() } else { store.load() }
+            if store.hasUnsavedChanges || !store.isLoaded {
+                Button(store.isLoaded ? "Retry Saving" : "Retry Opening") {
+                    if store.isLoaded { store.save() } else { store.load() }
+                }
             }
             Button("Dismiss", role: .cancel) {}
         } message: {
@@ -140,6 +147,17 @@ struct ContentView: View {
             }
         } message: {
             Text("Its notes, including notes in Trash, will move to the first remaining notebook. No notes will be deleted.")
+        }
+        .confirmationDialog("Delete this smart folder?", isPresented: Binding(
+            get: { smartFolderToDelete != nil },
+            set: { if !$0 { smartFolderToDelete = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete Smart Folder", role: .destructive) {
+                if let folder = smartFolderToDelete { store.deleteSmartFolder(folder.id) }
+                smartFolderToDelete = nil
+            }
+        } message: {
+            Text("Only the saved search is removed. No notes or notebooks will be deleted.")
         }
     }
 
@@ -268,6 +286,33 @@ struct ContentView: View {
                     .disabled(!store.isLoaded)
                 } header: {
                     Text("Main Folders")
+                }
+                Section("Smart Folders") {
+                    ForEach(store.smartFolders) { folder in
+                        HStack {
+                            Label(folder.name, systemImage: "folder.badge.gearshape")
+                                .lineLimit(1).help(folder.query)
+                            Spacer()
+                            Text("\(store.smartFolderCount(folder))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .tag(NoteScope.smart(folder.id))
+                        .contextMenu {
+                            Button("Edit Smart Folder...") { store.smartFolderDraft = folder }
+                                .disabled(!store.smartFoldersAvailable)
+                            Button("Delete Smart Folder...", role: .destructive) { smartFolderToDelete = folder }
+                                .disabled(!store.smartFoldersAvailable)
+                        }
+                    }
+                    Button(action: store.draftSmartFolder) {
+                        Label("New Smart Folder", systemImage: "plus").foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(FolioCommand.newSmartFolder.unavailableReason(in: store) != nil)
+                    if !store.smartFoldersAvailable {
+                        Button("Reload Smart Folders", action: store.reloadSmartFolders)
+                        Text("Saved rules unavailable").font(.caption).foregroundStyle(.orange)
+                    }
                 }
                 if !store.tags.isEmpty {
                     Section("Tags") {
@@ -412,6 +457,31 @@ struct ContentView: View {
             .padding(10)
             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
             .padding(.horizontal, 12).padding(.bottom, 12)
+            if let folder = store.activeSmartFolder {
+                HStack(alignment: .top) {
+                    Text(folder.query).font(.caption.monospaced()).lineLimit(3).help(folder.query)
+                    Spacer()
+                    Button { store.smartFolderDraft = folder } label: { Image(systemName: "pencil") }
+                        .buttonStyle(.borderless).accessibilityLabel("Edit smart folder rules")
+                        .disabled(!store.smartFoldersAvailable)
+                }
+                .padding(.horizontal, 12).padding(.bottom, 8)
+            }
+            HStack {
+                Button("Search Help") { showingSearchHelp.toggle() }
+                    .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440) }
+                Spacer()
+                Button("Save Search...", action: store.draftSmartFolder)
+                    .disabled(!store.isLoaded || !store.smartFoldersAvailable || store.scope == .trash ||
+                              store.searchError != nil)
+            }
+            .font(.caption).buttonStyle(.borderless)
+            .padding(.horizontal, 12).padding(.bottom, 10)
+            if let error = store.searchError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12).padding(.bottom, 10)
+            }
             Divider()
             List(selection: $store.selectedNoteID) {
                 if let folder = store.navigationFolder {

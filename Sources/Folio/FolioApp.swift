@@ -41,6 +41,8 @@ struct FolioApp: App {
                 Button("New Notebook") { store.notebookDraft = NotebookDraft() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                     .disabled(!store.isLoaded)
+                Button("New Smart Folder...") { store.perform(.newSmartFolder) }
+                    .disabled(FolioCommand.newSmartFolder.unavailableReason(in: store) != nil)
                 Divider()
                 Button("Import Markdown or HTML Files...", action: store.importMarkdown)
                     .keyboardShortcut("i", modifiers: [.command, .shift])

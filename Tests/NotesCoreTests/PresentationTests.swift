@@ -57,6 +57,37 @@ struct PresentationTests {
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         try png.write(to: destination.appendingPathComponent("Folio-compose-preview.png"))
 
+        let smart = SmartFolder(name: "Ideas to revisit", query: "tag:ideas")
+        try store.saveSmartFolder(smart)
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        #expect(store.visibleNotes.map(\.id) == [note.id])
+        #expect(editor(in: host) === page, "Selecting a smart folder must not rebuild its open writing editor.")
+        let smartBitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: smartBitmap)
+        let smartPNG = try #require(smartBitmap.representation(using: .png, properties: [:]))
+        try smartPNG.write(to: destination.appendingPathComponent("Folio-smart-folders-preview.png"))
+
+        let smartSheet = NSHostingView(rootView: SmartFolderSheet(draft: smart)
+            .environmentObject(store).defaultAppStorage(defaults))
+        let smartWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 500),
+                                   styleMask: [.titled], backing: .buffered, defer: false)
+        smartWindow.contentView = smartSheet
+        defer { smartWindow.contentView = nil }
+        smartSheet.frame = NSRect(x: 0, y: 0, width: 560, height: 500)
+        try await Task.sleep(for: .milliseconds(150))
+        smartSheet.layoutSubtreeIfNeeded()
+        func fields(in view: NSView) -> [NSTextField] {
+            if let field = view as? NSTextField { return [field] }
+            return view.subviews.flatMap { fields(in: $0) }
+        }
+        #expect(fields(in: smartSheet).contains { $0.stringValue == smart.name })
+        #expect(fields(in: smartSheet).contains { $0.stringValue == smart.query })
+        let sheetBitmap = try #require(smartSheet.bitmapImageRepForCachingDisplay(in: smartSheet.bounds))
+        smartSheet.cacheDisplay(in: smartSheet.bounds, to: sheetBitmap)
+        let sheetPNG = try #require(sheetBitmap.representation(using: .png, properties: [:]))
+        try sheetPNG.write(to: destination.appendingPathComponent("Folio-smart-folder-sheet-preview.png"))
+
         store.openNoteInNewTab(other.id)
         store.openNote(note.id)
         store.showReference(other.id)

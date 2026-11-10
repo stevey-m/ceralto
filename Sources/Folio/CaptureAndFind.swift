@@ -93,6 +93,7 @@ struct NoteFinder: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var query = ""
     @ViewState private var selection: UUID?
+    @ViewState private var showingSearchHelp = false
     @FocusState private var searching: Bool
 
     private var results: [NoteSearchResult] { NoteSearch.find(query, in: store.library) }
@@ -109,6 +110,10 @@ struct NoteFinder: View {
                     .onKeyPress(.upArrow) { move(-1); return .handled }
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
             }.padding(22)
+            if let error = NoteQuery(query).errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange).font(.callout).padding(.horizontal, 22).padding(.bottom, 12)
+            }
             Divider()
             HStack(spacing: 0) {
                 List(selection: $selection) {
@@ -150,6 +155,8 @@ struct NoteFinder: View {
             Divider()
             HStack {
                 Text(query.isEmpty ? "Recently edited notes" : "\(results.count) results\(results.count == 80 ? " (first 80)" : "")")
+                Button("Search Help") { showingSearchHelp.toggle() }
+                    .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440) }
                 Spacer()
                 Text("Arrow keys to choose").foregroundStyle(.tertiary)
                 Button("Open Note", action: open).keyboardShortcut(.defaultAction).disabled(selected == nil)

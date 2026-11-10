@@ -10,6 +10,7 @@ enum NoteScope: Hashable {
     case notebook(UUID)
     case tag(String)
     case folder(String, [UUID])
+    case smart(UUID)
 
     func includes(_ note: Note) -> Bool {
         if self == .trash { return note.deletedAt != nil }
@@ -21,6 +22,7 @@ enum NoteScope: Hashable {
         case .notebook(let id): return note.notebookID == id
         case .tag(let tag): return note.tags.contains(tag)
         case .folder(_, let ids): return ids.contains(note.notebookID)
+        case .smart: return true
         }
     }
 }
@@ -49,6 +51,9 @@ final class NotesStore: ObservableObject {
     @Published var query = ""
     @Published var errorMessage: String?
     @Published var notebookDraft: NotebookDraft?
+    @Published var smartFolderDraft: SmartFolder?
+    @Published private(set) var smartFolders: [SmartFolder] = []
+    @Published private(set) var smartFoldersAvailable = true
     @Published var showingFinder = false
     @Published private(set) var isSyncing = false
     @Published private(set) var syncFolderName: String?
@@ -71,13 +76,24 @@ final class NotesStore: ObservableObject {
         self.preferences = preferences
         isReadOnly = readOnly
         load()
+        #if os(macOS)
+        reloadSmartFolders()
+        #endif
         restoreSyncFolder()
         if !readOnly { reloadExtensions() }
     }
 
     var visibleNotes: [Note] {
-        library.notes.filter {
-            resolvedScope.includes($0) && $0.matches(query)
+        let parsed = NoteQuery(query)
+        let saved = activeSmartFolder.map { NoteQuery($0.query) }
+        let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
+        let missingSmartFolder: Bool
+        if case .smart = scope { missingSmartFolder = activeSmartFolder == nil }
+        else { missingSmartFolder = false }
+        return library.notes.filter {
+            !missingSmartFolder && resolvedScope.includes($0) &&
+                parsed.matches($0, notebook: names[$0.notebookID] ?? "") &&
+                (saved?.matches($0, notebook: names[$0.notebookID] ?? "") ?? true)
         }.sorted {
             if $0.isPinned != $1.isPinned { return $0.isPinned }
             if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
@@ -113,8 +129,11 @@ final class NotesStore: ObservableObject {
 
     var outlineNotes: [Note] {
         guard let folder = navigationFolder else { return visibleNotes }
+        let parsed = NoteQuery(query)
+        let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
         return library.notes.filter {
-            $0.deletedAt == nil && folder.descendants.contains($0.notebookID) && $0.matches(query)
+            $0.deletedAt == nil && folder.descendants.contains($0.notebookID) &&
+                parsed.matches($0, notebook: names[$0.notebookID] ?? "")
         }.sorted {
             if $0.isPinned != $1.isPinned { return $0.isPinned }
             if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
@@ -138,10 +157,12 @@ final class NotesStore: ObservableObject {
         case .notebook(let id): library.notebooks.first { $0.id == id }?.name ?? "Notebook"
         case .tag(let tag): "#\(tag)"
         case .folder(let name, _): name
+        case .smart: activeSmartFolder?.name ?? "Smart Folder"
         }
     }
 
     var currentNotebookID: UUID? {
+        if case .smart = scope, let selectedNote { return selectedNote.notebookID }
         if case .notebook(let id) = scope {
             if let selectedNote, navigationFolder?.descendants.contains(selectedNote.notebookID) == true {
                 return selectedNote.notebookID
@@ -153,6 +174,93 @@ final class NotesStore: ObservableObject {
             return navigationFolder?.notebooks.first?.id ?? ids.first
         }
         return library.notebooks.first?.id
+    }
+
+    var activeSmartFolder: SmartFolder? {
+        guard case .smart(let id) = scope else { return nil }
+        return smartFolders.first { $0.id == id }
+    }
+
+    var searchError: String? { NoteQuery(query).errorMessage }
+
+    var smartFolderStorage: SmartFolderStorage {
+        SmartFolderStorage(url: storage.url.deletingLastPathComponent().appendingPathComponent("smart-folders.json"))
+    }
+
+    func reloadSmartFolders() {
+        do {
+            smartFolders = try smartFolderStorage.load()
+            smartFoldersAvailable = true
+        } catch {
+            smartFoldersAvailable = false
+            errorMessage = "Could not open smart folders. Your notes are unaffected and the saved file has not been replaced: \(error.localizedDescription)"
+        }
+    }
+
+    func smartFolderCount(_ folder: SmartFolder) -> Int {
+        let parsed = NoteQuery(folder.query)
+        let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
+        return library.notes.filter {
+            $0.deletedAt == nil && parsed.matches($0, notebook: names[$0.notebookID] ?? "")
+        }.count
+    }
+
+    func draftSmartFolder() {
+        guard isLoaded, !isReadOnly else {
+            errorMessage = "Open an editable library before creating smart folders."
+            return
+        }
+        guard scope != .trash else {
+            errorMessage = "Smart folders search active notes, not Trash."
+            return
+        }
+        guard smartFoldersAvailable else {
+            errorMessage = "Reload your saved smart folders before adding or editing them."
+            return
+        }
+        var terms: [String] = []
+        switch scope {
+        case .notebook(let id):
+            if let notebook = library.notebooks.first(where: { $0.id == id }) {
+                terms.append("notebook:" + NoteQuery.quoted(notebook.name))
+            }
+        case .folder(let path, _): terms.append("notebook:" + NoteQuery.quoted(path))
+        case .tag(let tag): terms.append("tag:" + NoteQuery.quoted(tag))
+        case .pinned: terms.append("is:pinned")
+        case .smart: if let folder = activeSmartFolder { terms.append(folder.query) }
+        default: break
+        }
+        if !query.isEmpty { terms.append(query) }
+        smartFolderDraft = SmartFolder(name: "", query: terms.joined(separator: " "))
+    }
+
+    func saveSmartFolder(_ folder: SmartFolder) throws {
+        guard isLoaded, !isReadOnly, smartFoldersAvailable else {
+            throw SmartFolderError("Open your library and reload your saved smart folders before changing them.")
+        }
+        var candidate = smartFolders
+        if let index = candidate.firstIndex(where: { $0.id == folder.id }) { candidate[index] = folder }
+        else { candidate.append(folder) }
+        try smartFolderStorage.save(candidate)
+        smartFolders = candidate
+        scope = .smart(folder.id)
+        query = ""
+        reconcileSelection()
+    }
+
+    func deleteSmartFolder(_ id: UUID) {
+        guard isLoaded, !isReadOnly, smartFoldersAvailable else {
+            errorMessage = "Open your library and reload your saved smart folders before changing them."
+            return
+        }
+        let candidate = smartFolders.filter { $0.id != id }
+        do {
+            try smartFolderStorage.save(candidate)
+            smartFolders = candidate
+            if scope == .smart(id) { scope = .all; query = ""; reconcileSelection() }
+        } catch {
+            errorMessage = "Could not delete the smart folder. Its saved rules and your notes are unchanged: \(error.localizedDescription)"
+        }
     }
 
     func load() {
@@ -285,6 +393,7 @@ final class NotesStore: ObservableObject {
         if case .tag(let tag) = scope { note.tags = [tag] }
         if scope == .pinned { note.isPinned = true }
         if scope == .trash { scope = .all }
+        if case .smart = scope { scope = .all }
         query = ""
         library.notes.insert(note, at: 0)
         #if os(macOS)
@@ -312,6 +421,7 @@ final class NotesStore: ObservableObject {
                         body: template.render(template.body, date: now), tags: tags,
                         isPinned: scope == .pinned, format: .markdown)
         if scope == .trash { scope = .all }
+        if case .smart = scope { scope = .all }
         query = ""
         library.notes.insert(note, at: 0)
         #if os(macOS)
@@ -360,6 +470,10 @@ final class NotesStore: ObservableObject {
 
     func openNote(_ id: UUID) {
         guard let note = library.notes.first(where: { $0.id == id }) else { return }
+        if activeSmartFolder != nil, visibleNotes.contains(where: { $0.id == id }) {
+            selectedNoteID = id
+            return
+        }
         if note.deletedAt != nil {
             scope = .trash
         } else if let folder = NotebookBranch.build(library.notebooks).first(where: { $0.descendants.contains(note.notebookID) }) {

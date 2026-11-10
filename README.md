@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.6.0 is a development release, not a finished replacement for your library.**
+**0.7.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -28,7 +28,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.6.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.7.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -40,6 +40,13 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
 
 ## A notebook, not a control panel
 
+- **Save a search, not another copy.** Smart folders collect matching notes
+  automatically without moving or copying the originals. Choose **Save Search**
+  above the note list, **New Smart Folder** in the sidebar, or use the File menu
+  or command palette. Name the folder, edit its rules and see the matching count
+  before saving. Right-click a smart folder to edit or delete it; deleting it
+  never deletes notes. Tags, pins, text, notebook moves and Trash changes update
+  membership immediately. Refine a smart folder with the note-list search.
 - **Keep a few thoughts open.** Ordinary note selection reuses the current
   document tab. Right-click a note and choose **Open in New Tab** to keep both;
   new notes also open their own tab. Already-open notes select their existing
@@ -117,6 +124,56 @@ Notes save atomically to the local library. Save failures are visible; changes
 stay in memory and Folio warns before quitting. History retains up to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 Restoring also preserves the current version.
+
+## Search rules and smart folders
+
+The collection search, Command-K finder and iPad reader use the same search
+rules. Plain words still match titles, note text, tags and notebook names,
+ignoring case and accents. All words and filters must match (AND).
+
+| Search | Matches |
+| --- | --- |
+| `"release plan"` | An adjacent phrase, rather than separate words |
+| `-draft` or `-"old plan"` | Notes without that word or phrase |
+| `tag:review -tag:archive` | An exact tag, excluding another exact tag |
+| `notebook:"Work/Ideas"` | That notebook path and all its subtopics, not `Work/Ideas-old` |
+| `title:"Release plan"` | A phrase within the note title only |
+| `is:pinned` or `is:unpinned` | Pin status |
+| `updated-after:2026-01-01` | Updated at or after midnight UTC on that date (inclusive) |
+| `updated-before:2027-01-01` | Updated before midnight UTC on that date (exclusive) |
+
+Prefix any filter with `-` to exclude it. Combine filters, phrases and words:
+`notebook:Work tag:review is:pinned -draft`. Use double quotes around values
+containing spaces; inside quotes, `\"` and `\\` represent a literal quote or
+backslash. Unknown prefixes (including `https:`) remain literal text.
+Malformed recognized filters, impossible dates and unclosed quotes show an
+explicit error instead of silently searching everything. **Search Help** in
+the list and finder summarises the syntax. Searches are limited to 4,096
+characters and 128 terms. OR, wildcards, regular expressions, OCR and
+attachment-content search are not implemented.
+
+Saving a collection search includes the selected notebook path, tag, Pinned
+filter or existing smart-folder rules as well as the current search text.
+The sheet shows the complete rules for review. Smart folders and the finder
+exclude Trash; the Trash collection can still be searched directly.
+Notebook rules follow names/paths, not IDs: edit the rule if you rename a
+notebook. Saved rules do not automatically rewrite themselves.
+
+Smart folders are **local to this Mac**, in `smart-folders.json`, outside the
+note library schema. They restore on relaunch but are not synced to iPad or
+other Macs, nor included in complete backups, open-folder exports or local
+daily library recovery copies. Preserve this file separately, or include the
+entire Folio folder in Time Machine. A corrupt or newer smart-folder file is
+left untouched; the library still opens, and **Reload Smart Folders** lets
+you retry after repairing or preserving/removing the file while Folio is quit.
+
+Selecting a matching open tab keeps the smart folder and refinement. Opening
+a note outside its results reveals that note's real notebook. New notes and
+template notes are created in the selected note's real notebook (or the first
+notebook if nothing is selected), then shown in All Notes; saved rules are
+never applied to new notes as implicit tags or pins.
+
+## Local opening-day recovery
 
 On Mac, Folio also saves the first validated on-disk library from each UTC day
 when opening an existing library, retaining the last seven opening days in
@@ -244,6 +301,7 @@ The Mac working library is:
   Extensions/
   Recovery/
   workspace.json
+  smart-folders.json
   sync-folder.bookmark
 ```
 

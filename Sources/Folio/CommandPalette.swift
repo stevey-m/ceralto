@@ -7,6 +7,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
     case backup, importBackup, sync, revealLibrary, reloadTemplates
     case reference, closeReference
     case revealRecovery
+    case newSmartFolder
 
     var id: String { rawValue }
 
@@ -35,6 +36,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .reference: "Show Current Note as Reference"
         case .closeReference: "Close Reference Pane"
         case .revealRecovery: "Show Local Recovery Copies"
+        case .newSmartFolder: "New Smart Folder from Current Search..."
         }
     }
 
@@ -71,6 +73,10 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .forward: return store.workspace.canGoForward ? nil : "No later document"
         case .closeTab, .exportNote, .reference: return store.selectedNote == nil ? "Select a note first" : nil
         case .closeReference: return store.referenceNote == nil ? "No reference pane open" : nil
+        case .newSmartFolder:
+            if !store.smartFoldersAvailable { return "Reload saved smart folders first" }
+            if store.scope == .trash { return "Smart folders search active notes, not Trash" }
+            return store.searchError
         case .sync:
             if store.isSyncing { return "Sync already in progress" }
             if store.isImportingJoplin { return "Import in progress" }
@@ -115,6 +121,7 @@ extension NotesStore {
         case .reference: showReference(selectedNoteID)
         case .closeReference: showReference(nil)
         case .revealRecovery: revealRecoveryCopies()
+        case .newSmartFolder: draftSmartFolder()
         }
     }
 }

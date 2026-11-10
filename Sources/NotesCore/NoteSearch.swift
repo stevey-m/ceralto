@@ -10,14 +10,14 @@ public struct NoteSearchResult: Identifiable, Sendable {
 
 public enum NoteSearch {
     public static func find(_ query: String, in library: Library, limit: Int = 80) -> [NoteSearchResult] {
-        let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        let parsed = NoteQuery(query)
+        let terms = parsed.textTerms
         let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
         return library.notes.compactMap { note -> NoteSearchResult? in
             guard note.deletedAt == nil else { return nil }
             let notebook = names[note.notebookID] ?? ""
             let body = note.textContent
-            let searchable = ([note.displayTitle, notebook, body] + note.tags).joined(separator: "\n")
-            guard terms.allSatisfy({ searchable.localizedStandardContains($0) }) else { return nil }
+            guard parsed.matches(note, notebook: notebook) else { return nil }
             let score = terms.reduce(0) { total, term in
                 total + (note.displayTitle.localizedStandardContains(term) ? 12 : 0)
                     + (notebook.localizedStandardContains(term) ? 4 : 0)
