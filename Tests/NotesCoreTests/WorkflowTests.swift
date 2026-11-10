@@ -274,32 +274,40 @@ struct KeyboardShortcutTests {
         defer { window.contentView = nil }
         host.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
         window.makeFirstResponder(host)
-        try await Task.sleep(for: .milliseconds(150))
-        host.layoutSubtreeIfNeeded()
         func key(_ character: String, flags: NSEvent.ModifierFlags, code: UInt16) throws -> NSEvent {
             try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
                                          windowNumber: window.windowNumber, context: nil,
                                          characters: character, charactersIgnoringModifiers: character,
                                          isARepeat: false, keyCode: code))
         }
+        func awaitRouting(_ event: NSEvent, handled expected: Bool) async throws {
+            for _ in 0..<100 {
+                host.layoutSubtreeIfNeeded()
+                let before = hits
+                let handled = window.performKeyEquivalent(with: event)
+                #expect(hits == before + (handled ? 1 : 0))
+                if handled == expected { return }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            Issue.record("The native shortcut did not reach the expected routing state: \(expected).")
+        }
         let original = try key("n", flags: .command, code: 45)
-        #expect(window.performKeyEquivalent(with: original))
+        try await awaitRouting(original, handled: true)
         #expect(hits == 1)
         var bindings = store.shortcutBindings
         bindings[ShortcutAction.newNote.rawValue] = ShortcutBinding(key: "d", modifiers: 2)
         try store.saveShortcuts(bindings)
-        try await Task.sleep(for: .milliseconds(150))
-        host.layoutSubtreeIfNeeded()
-        #expect(!window.performKeyEquivalent(with: original))
         let custom = try key("d", flags: [.command, .option], code: 2)
-        #expect(window.performKeyEquivalent(with: custom))
+        try await awaitRouting(custom, handled: true)
+        #expect(!window.performKeyEquivalent(with: original))
         #expect(hits == 2)
         bindings[ShortcutAction.newNote.rawValue] = ShortcutBinding(key: "")
         try store.saveShortcuts(bindings)
-        try await Task.sleep(for: .milliseconds(150))
-        host.layoutSubtreeIfNeeded()
+        try await awaitRouting(custom, handled: false)
+        let disabledHits = hits
         #expect(!window.performKeyEquivalent(with: custom))
-        #expect(hits == 2)
+        #expect(!window.performKeyEquivalent(with: original))
+        #expect(hits == disabledHits)
     }
 
     @Test func defaultAssignmentsAreUniqueAndReservedOrInvalidCombinationsAreRejected() throws {
