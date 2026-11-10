@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.15.0 is a development release, not a finished replacement for your library.**
+**0.16.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.15.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.16.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -82,10 +82,43 @@ separate attachments from surrounding paragraphs. Images remain managed local
 files referenced by readable Markdown, not embedded base64. Undo removes the
 insertion but keeps the file available for redo, history and backups.
 
-Text paste is still plain text, not rich-text/HTML conversion. Image paste and
-caret attachment insertion apply to Compose; source notes and the separate
-live Markdown window keep their existing editing behavior. In source or
+Compose copy, cut and paste exchange **RTF, RTFD and HTML** with rich-text apps
+such as Apple Notes. Supported content includes bold, italic, underline,
+strikethrough, inline code, links, basic headings, bullet lists and embedded
+images. RTFD and HTML copies contain the image bytes, not links back to a
+Deltos attachment directory. Pasted images are copied into managed attachments
+before the text is inserted, and the complete insertion supports undo/redo.
+Formatting is normalized to Deltos's font and theme for readable results;
+arbitrary fonts, text colours and exact application-specific layouts are not
+retained. RTF heading sizes are interpreted as basic headings, not an exact
+Apple Notes document model.
+
+**Paste and Match Style** explicitly pastes the clipboard's text representation
+only. Ordinary paste does not silently flatten tables, numbered/nested lists,
+checklists or non-image attachments. Unsupported content produces an error
+without replacing selected text. HTML clipboard images must be embedded;
+Deltos neither downloads remote images nor follows local image paths supplied
+by clipboard HTML. Copy the image itself or attach its original file instead.
+Formatted clipboard payloads and individual images are limited to 32 MiB.
+These standard-format round trips are covered by isolated synthetic pasteboards;
+they are not a direct Apple Notes importer or a guarantee for scans, drawings,
+locked notes or every Apple Notes clipboard representation.
+
+Rich paste and caret attachment insertion apply to Compose; source notes and
+the separate live Markdown window remain literal-text editors. In source or
 Preview mode, the paperclip still appends attachments to the note.
+
+### Choose an appearance
+
+**Settings > Appearance** keeps **System, Light, Dark and Dracula** selectable.
+Dracula is optional, not the application default. Its palette now covers
+app-owned window backgrounds, notebook navigation, note lists, tabs, Compose,
+source editors, live Markdown, previews, Settings and supporting sheets.
+It uses charcoal backgrounds, off-white text, slate selections and a purple
+accent by default. Choose **Theme default (Dracula purple)** or any of the five
+accent colours; Dracula's accent is remembered separately from the other
+themes. macOS-owned menus, file panels and standard control chrome retain
+native dark styling rather than being replaced with custom controls.
 
 ## A notebook, not a control panel
 
@@ -187,9 +220,9 @@ Shortcuts below are defaults. Customize application commands in
   The iPad reader uses the same in-document navigation with pinch and drag.
   Smaller preview sizes remain available in Settings.
   Add files with the paperclip, drag files into Compose,
-  or paste files copied in Finder. Text paste is intentionally plain text;
-  clipboard-only images can also be pasted directly into Compose. Rich-text
-  paste is not yet supported.
+  or paste files copied in Finder. Compose also accepts supported rich text
+  and embedded clipboard images, with explicit Paste and Match Style for
+  text-only insertion.
 - **Make it yours, quietly.** System, Light, Dark and Dracula appearances, five
   accent colours (Gold, Blue, Purple, Green and Rose), font family, text
   size, image display size and full-width reading are in Settings. Tags are

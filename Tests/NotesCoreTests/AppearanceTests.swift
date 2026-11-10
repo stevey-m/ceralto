@@ -6,6 +6,17 @@ import WebKit
 @testable import Folio
 
 struct AppearanceTests {
+    @Test(arguments: FolioAccent.allCases)
+    func draculaAccentIsAnOptionalChoiceRatherThanALock(accent: FolioAccent) throws {
+        var options = PreviewOptions()
+        options.theme = .dracula
+        options.draculaAccent = accent
+        let html = try PreviewDocument.html(source: "[Link](https://example.com)", format: .markdown,
+                                            resources: nil, options: options)
+        #expect(html.contains("--accent: \(accent.darkHex);"))
+        #expect(html.contains("--bg: #282a36;"))
+    }
+
     @Test func defaultAppearanceIsNativeAndLegacyDraculaStillLoads() {
         let defaults = PreviewOptions()
         #expect(defaults.theme == .system)
@@ -25,13 +36,13 @@ struct AppearanceTests {
         let html = try PreviewDocument.html(source: "[Link](https://example.com)", format: .markdown,
                                             resources: nil, options: options)
         #expect(html.contains("color-scheme: \(theme.cssColorScheme);"))
-        let expected = theme == .dark || theme == .dracula ? FolioAccent.blue.darkHex : FolioAccent.blue.lightHex
+        let expected = theme == .dracula ? "#bd93f9" : theme == .dark ? FolioAccent.blue.darkHex : FolioAccent.blue.lightHex
         #expect(html.contains("--accent: \(expected);"))
         #expect(!html.contains("<script"))
     }
 
     @MainActor
-    @Test(arguments: [FolioTheme.light, .dark])
+    @Test(arguments: [FolioTheme.light, .dark, .dracula])
     func renderedPreviewUsesSelectedSchemeNotTheOperatingSystem(theme: FolioTheme) async throws {
         var options = PreviewOptions()
         options.theme = theme
@@ -56,6 +67,12 @@ struct AppearanceTests {
         let scheme = try await web.evaluateJavaScript("getComputedStyle(document.documentElement).colorScheme")
         #expect(scheme as? String == theme.cssColorScheme)
         let colour = try await web.evaluateJavaScript("getComputedStyle(document.querySelector('a')).color")
-        #expect(colour as? String == (theme == .dark ? "rgb(255, 146, 183)" : "rgb(179, 51, 98)"))
+        #expect(colour as? String == (theme == .dracula ? "rgb(189, 147, 249)" : theme == .dark ? "rgb(255, 146, 183)" : "rgb(179, 51, 98)"))
+        if theme == .dracula {
+            let background = try await web.evaluateJavaScript("getComputedStyle(document.body).backgroundColor")
+            #expect(background as? String == "rgb(40, 42, 54)")
+            let foreground = try await web.evaluateJavaScript("getComputedStyle(document.body).color")
+            #expect(foreground as? String == "rgb(248, 248, 242)")
+        }
     }
 }

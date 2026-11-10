@@ -32,6 +32,7 @@ struct MobileReaderView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
     @Environment(\.colorScheme) private var colorScheme
     @MobileState private var connectingFolder = false
     @MobileState private var searchingAll = false
@@ -76,7 +77,8 @@ struct MobileReaderView: View {
                         Picker("Appearance", selection: $theme) {
                             ForEach(FolioTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
                         }
-                        Picker("Accent colour", selection: $accent) {
+                        Picker("Accent colour", selection: theme == FolioTheme.dracula.rawValue ? $draculaAccent : $accent) {
+                            if theme == FolioTheme.dracula.rawValue { Text("Theme default (Dracula purple)").tag("Theme default") }
                             ForEach(FolioAccent.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
                         }
                     } label: { Label("Appearance", systemImage: "circle.lefthalf.filled") }
@@ -184,9 +186,10 @@ struct MobileReaderView: View {
     }
 
     private var accentColor: Color {
-        let selected = FolioAccent(rawValue: accent) ?? .gold
+        let selected = FolioAccent(rawValue: theme == FolioTheme.dracula.rawValue ? draculaAccent : accent) ?? .gold
         let scheme = (FolioTheme(rawValue: theme) ?? .system).colorScheme ?? colorScheme
-        let hex = scheme == .dark ? selected.darkHex : selected.lightHex
+        let hex = theme == FolioTheme.dracula.rawValue && FolioAccent(rawValue: draculaAccent) == nil
+            ? "#bd93f9" : scheme == .dark ? selected.darkHex : selected.lightHex
         let value = UInt32(hex.dropFirst(), radix: 16)!
         return Color(red: Double((value >> 16) & 255) / 255,
                      green: Double((value >> 8) & 255) / 255,
@@ -236,6 +239,7 @@ private struct MobilePreview: View {
     let note: Note
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
     @Environment(\.colorScheme) private var colorScheme
     @MobileState private var html = ""
     @MobileState private var error: String?
@@ -249,7 +253,7 @@ private struct MobilePreview: View {
     private var request: MobileRenderRequest {
         let selected = FolioTheme(rawValue: theme) ?? .system
         let resolved = selected == .system ? (colorScheme == .dark ? FolioTheme.dark : .light) : selected
-        return MobileRenderRequest(source: note.body, format: note.contentFormat, theme: resolved.rawValue, accent: accent,
+        return MobileRenderRequest(source: note.body, format: note.contentFormat, theme: resolved.rawValue, accent: accent, draculaAccent: draculaAccent,
                             resources: resources, links: NoteLinks.targets(in: store.library))
     }
 
@@ -298,6 +302,7 @@ private struct MobilePreview: View {
                 var options = PreviewOptions()
                 options.theme = FolioTheme(rawValue: request.theme) ?? .system
                 options.accent = FolioAccent(rawValue: request.accent) ?? .gold
+                options.draculaAccent = FolioAccent(rawValue: request.draculaAccent)
                 options.font = .system
                 options.fontSize = 17
                 html = try PreviewDocument.html(source: note.body, format: note.contentFormat, resources: resources,
@@ -313,6 +318,7 @@ private struct MobileRenderRequest: Equatable {
     let format: NoteFormat
     let theme: String
     let accent: String
+    let draculaAccent: String
     let resources: ImportedResources?
     let links: [String: UUID]
 }

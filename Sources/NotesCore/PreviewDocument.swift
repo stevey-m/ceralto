@@ -54,6 +54,7 @@ public enum ReadingFont: String, CaseIterable, Sendable {
 public struct PreviewOptions: Equatable, Sendable {
     public var theme: FolioTheme = .system
     public var accent: FolioAccent = .gold
+    public var draculaAccent: FolioAccent?
     public var font: ReadingFont = .system
     public var fontSize: Double = 15
     public var thumbnailSize: Int = 0
@@ -158,7 +159,7 @@ public enum PreviewDocument {
         :root { color-scheme: \(options.theme.cssColorScheme);
           --bg: \(dracula ? "#282a36" : "Canvas"); --fg: \(dracula ? "#f8f8f2" : "CanvasText");
           --muted: \(dracula ? "#a5a9c5" : "GrayText");
-          --accent: \(options.theme == .dark || dracula ? options.accent.darkHex : options.accent.lightHex);
+          --accent: \(dracula ? options.draculaAccent?.darkHex ?? "#bd93f9" : options.theme == .dark ? options.accent.darkHex : options.accent.lightHex);
           --line: \(dracula ? "#44475a" : "color-mix(in srgb, CanvasText 18%, Canvas)");
           --code: \(dracula ? "#21222c" : "color-mix(in srgb, CanvasText 5%, Canvas)");
           --green: \(dracula ? "#50fa7b" : "#168143"); --pink: \(dracula ? "#ff79c6" : "#ae287b"); }

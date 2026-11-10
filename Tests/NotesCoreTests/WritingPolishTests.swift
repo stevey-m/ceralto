@@ -340,6 +340,11 @@ struct WritingPolishTests {
             if let editor = view as? PageTextView { return editor }
             return view.subviews.compactMap { findEditor(in: $0) }.first
         }
+        for _ in 0..<100 {
+            host.layoutSubtreeIfNeeded()
+            if findEditor(in: host) != nil { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
         let editor = try #require(findEditor(in: host))
         let board = NSPasteboard.withUniqueName()
         defer { board.releaseGlobally() }

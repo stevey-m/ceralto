@@ -230,7 +230,7 @@ struct ContentView: View {
                             .accessibilityLabel("Close \(note.displayTitle)")
                         }
                         .padding(.horizontal, 10)
-                        .background(store.selectedNoteID == id ? Color.accentColor.opacity(0.13) : Color.clear,
+                        .background(store.selectedNoteID == id ? (theme == FolioTheme.dracula.rawValue ? FolioPalette.selection : Color.accentColor.opacity(0.13)) : Color.clear,
                                     in: RoundedRectangle(cornerRadius: 6))
                         .id(id)
                     }
@@ -310,6 +310,7 @@ struct ContentView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         .tag(NoteScope.smart(folder.id))
+                        .folioListRow(selected: store.mainFolderScope == .smart(folder.id))
                         .contextMenu {
                             Button("Edit Smart Folder...") { store.smartFolderDraft = folder }
                                 .disabled(!store.smartFoldersAvailable)
@@ -369,6 +370,7 @@ struct ContentView: View {
             .padding(14)
         }
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .windowBackgroundColor))
+        .foregroundStyle(theme == FolioTheme.dracula.rawValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
     }
 
     private func revealSelectedNotebook() {
@@ -397,6 +399,7 @@ struct ContentView: View {
                         .dropDestination(for: String.self) { items, _ in store.acceptNotebookDrop(items, on: branch.id) }
                 }
                 .tag(scope)
+                .folioListRow(selected: store.mainFolderScope == scope)
                 .contextMenu { notebookActions(branch) }
             }
         })
@@ -465,6 +468,7 @@ struct ContentView: View {
     private func noteRow(_ note: Note) -> some View {
         NoteRow(note: note)
             .tag(note.id)
+            .folioListRow(selected: store.selectedNoteID == note.id)
             .draggable("deltos-note:" + note.id.uuidString)
             .contextMenu {
                 Button("Open in New Tab") { store.openNoteInNewTab(note.id) }
@@ -498,6 +502,7 @@ struct ContentView: View {
                 .font(.caption).foregroundStyle(.tertiary)
         }
         .tag(scope)
+        .folioListRow(selected: store.mainFolderScope == scope)
         .padding(.vertical, 3)
     }
 
@@ -681,6 +686,7 @@ private struct NotebookSheet: View {
         }
         .padding(24)
         .frame(width: 360)
+        .folioAppearance()
     }
 
     private func submit() {

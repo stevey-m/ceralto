@@ -440,8 +440,55 @@ final class PageTextView: DocumentTextView {
         paste(from: .general)
     }
 
+    override func pasteAsPlainText(_ sender: Any?) {
+        pastePlain(from: .general)
+    }
+
+    func pastePlain(from board: NSPasteboard) {
+        guard isEditable else { return }
+        guard let value = board.string(forType: .string) else {
+            onError?("The clipboard has no plain-text representation.")
+            return
+        }
+        insertText(value, replacementRange: selectedRange())
+    }
+
+    override func pasteAsRichText(_ sender: Any?) { paste(sender) }
+
+    override func copy(_ sender: Any?) { copy(to: .general) }
+
+    override func cut(_ sender: Any?) {
+        cut(to: .general)
+    }
+
+    func cut(to board: NSPasteboard) {
+        guard isEditable, copy(to: board) else { return }
+        insertText("", replacementRange: selectedRange())
+    }
+
+    @discardableResult
+    func copy(to board: NSPasteboard) -> Bool {
+        guard selectedRange().length > 0 else { return false }
+        do {
+            try RichClipboard.write(attributedString().attributedSubstring(from: selectedRange()), resources: resources, to: board)
+            return true
+        } catch {
+            onError?("Could not copy formatted content: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     func paste(from board: NSPasteboard) {
         guard isEditable else { return }
+        do {
+            if let content = try RichClipboard.read(board) {
+                try insertRich(content)
+                return
+            }
+        } catch {
+            onError?("Could not paste formatted content; your note was not changed. \(error.localizedDescription)")
+            return
+        }
         if let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
             insertFiles(urls)
@@ -473,6 +520,56 @@ final class PageTextView: DocumentTextView {
         } else {
             onError?("The clipboard does not contain text, a supported image or files.")
         }
+    }
+
+    func insertRich(_ content: RichClipboard.Content) throws {
+        guard isEditable else { throw NoteWorkflowError("This editor is read-only.") }
+        var page = content.page
+        var newResources = resources
+        if !content.images.isEmpty {
+            guard let onImportFiles else { throw NoteWorkflowError("Image attachment insertion is unavailable.") }
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Deltos-rich-paste-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+            defer {
+                do { try FileManager.default.removeItem(at: folder) }
+                catch { onError?("Could not remove clipboard temporary files: \(error.localizedDescription)") }
+            }
+            var files: [URL] = []
+            for image in content.images {
+                let file = folder.appendingPathComponent(image.name)
+                try image.data.write(to: file)
+                files.append(file)
+            }
+            let imported = try onImportFiles(files)
+            let references = try FormattedPage(markdown: imported.fragment).blocks.flatMap(\.runs).compactMap(\.image)
+            guard references.count == content.images.count else { throw NoteWorkflowError("Clipboard images could not be mapped to managed attachments.") }
+            let mapping = Dictionary(uniqueKeysWithValues: zip(content.images.map(\.name), references))
+            for block in page.blocks.indices {
+                for run in page.blocks[block].runs.indices {
+                    if let image = page.blocks[block].runs[run].image {
+                        guard let local = mapping[image] else { throw NoteWorkflowError("A clipboard image has no managed attachment.") }
+                        page.blocks[block].runs[run].image = local
+                    }
+                }
+            }
+            newResources = imported.resources
+        }
+        let value = try NativePageCodec.decode(page.html(), resources: newResources, size: pageFontSize,
+                                              family: pageFont, color: textColor ?? .textColor)
+        resources = newResources
+        window?.makeFirstResponder(self)
+        let selection = selectedRange()
+        // NSTextView.insertText normalizes pasted font sizes to the insertion paragraph.
+        editAttributes(name: "Paste Formatted Content") {
+            $0.replaceCharacters(in: selection, with: value)
+        }
+        setSelectedRange(NSRange(location: selection.location + value.length, length: 0))
+        var typing = value.length > 0 ? value.attributes(at: value.length - 1, effectiveRange: nil) : typingAttributes
+        for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment] {
+            typing.removeValue(forKey: key)
+        }
+        typingAttributes = typing
+        setFrameSize(frame.size)
     }
 
     @discardableResult
@@ -673,6 +770,7 @@ private final class PageScrollView: NSScrollView {
 struct NativePageView: NSViewRepresentable {
     @AppStorage("composeSpellChecking") private var spellChecking = true
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled
     let html: String
@@ -743,14 +841,18 @@ struct NativePageView: NSViewRepresentable {
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
         editor.textColor = color
         editor.insertionPointColor = color
+        FolioPalette.style(editor, dracula: dracula)
+        let linkColor = FolioPalette.accent(dracula ? .dracula : .system, accent: accent,
+                                           draculaAccent: draculaAccent, scheme: colorScheme)
         editor.linkTextAttributes = [
-            .foregroundColor: NSColor((FolioAccent(rawValue: accent) ?? .gold).color(for: colorScheme)),
+            .foregroundColor: NSColor(linkColor),
             .underlineStyle: NSUnderlineStyle.single.rawValue
         ]
         // Resource ownership can change during an insertion without replacing the native buffer or its undo history.
         if coordinator.loadedHTML == html && coordinator.size == size &&
             coordinator.family == family && coordinator.dracula == dracula && previousResources == resources {
             coordinator.resources = resources
+            FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
             return
         }
         do {
@@ -760,6 +862,7 @@ struct NativePageView: NSViewRepresentable {
             coordinator.updating = true
             defer { coordinator.updating = false }
             editor.textStorage?.setAttributedString(decoded)
+            FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
             let location = min(selection.location, decoded.length)
             editor.setSelectedRange(NSRange(location: location, length: min(selection.length, decoded.length - location)))
             var typing = decoded.length > 0

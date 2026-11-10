@@ -54,6 +54,7 @@ struct SettingsView: View {
     @AppStorage("noteListShowDates") private var showDates = true
     @AppStorage("dailyNotebook") private var dailyNotebook = "Journal"
     @AppStorage("dailyTemplate") private var dailyTemplate = TemplateChoice.daily.id
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
 
     private var matches: [SettingsSection] { SettingsSection.matching(query) }
 
@@ -73,6 +74,7 @@ struct SettingsView: View {
                         ForEach(matches) { section in
                             Button { selection = section } label: {
                                 Label(section.rawValue, systemImage: section.symbol)
+                                    .foregroundStyle(theme == FolioTheme.dracula.rawValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 10).padding(.vertical, 8)
                                     .contentShape(Rectangle())
@@ -80,7 +82,8 @@ struct SettingsView: View {
                             .buttonStyle(.plain)
                             .background {
                                 if selection == section {
-                                    RoundedRectangle(cornerRadius: 7).fill(.tint.opacity(0.15))
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(theme == FolioTheme.dracula.rawValue ? FolioPalette.selection : Color.accentColor.opacity(0.15))
                                 }
                             }
                             .accessibilityAddTraits(selection == section ? .isSelected : [])
@@ -90,7 +93,7 @@ struct SettingsView: View {
                 }
             }
             .frame(width: 210)
-            .background(.background)
+            .folioSidebar()
             Divider()
             VStack(alignment: .leading, spacing: 0) {
                 if let selection, matches.contains(selection) {

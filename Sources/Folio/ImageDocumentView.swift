@@ -32,7 +32,7 @@ struct ImageDocumentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(.background)
         .task(id: url) {
             image = NSImage(contentsOf: url)
             loading = false

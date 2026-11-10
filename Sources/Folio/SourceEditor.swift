@@ -10,6 +10,7 @@ struct SourceEditor: NSViewRepresentable {
     let size: Double
     let dracula: Bool
     let currentSource: () -> String
+    var accessibilityLabel = "Note source editor"
     @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -33,7 +34,7 @@ struct SourceEditor: NSViewRepresentable {
         editor.textContainerInset = NSSize(width: 20, height: 20)
         editor.drawsBackground = false
         editor.delegate = context.coordinator
-        editor.setAccessibilityLabel("Note source editor")
+        editor.setAccessibilityLabel(accessibilityLabel)
         scroll.documentView = editor
         updateNSView(scroll, context: context)
         return scroll
@@ -54,6 +55,7 @@ struct SourceEditor: NSViewRepresentable {
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
         if editor.textColor != color { editor.textColor = color }
         editor.insertionPointColor = editor.textColor ?? .textColor
+        FolioPalette.style(editor, dracula: dracula)
         if editor.isEditable != isEnabled { editor.isEditable = isEnabled }
         if editor.isSelectable != isEnabled { editor.isSelectable = isEnabled }
         if !isEnabled, editor.window?.firstResponder === editor { editor.window?.makeFirstResponder(nil) }

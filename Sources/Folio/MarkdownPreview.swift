@@ -11,6 +11,7 @@ struct MarkdownPreview: View {
     var resolveLibraryLinks = true
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
+    @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
     @AppStorage("readingFont") private var font = ReadingFont.system.rawValue
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("editorFontSize") private var fontSize = 15.0
@@ -30,6 +31,7 @@ struct MarkdownPreview: View {
         let selected = FolioTheme(rawValue: theme) ?? .system
         options.theme = selected == .system ? (colorScheme == .dark ? .dark : .light) : selected
         options.accent = FolioAccent(rawValue: accent) ?? .gold
+        options.draculaAccent = FolioAccent(rawValue: draculaAccent)
         options.font = ReadingFont(rawValue: font) ?? .system
         options.fontSize = fontSize
         options.thumbnailSize = thumbnailSize

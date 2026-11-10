@@ -34,7 +34,9 @@ Do not introduce a runtime account or network requirement for core note-taking.
 
 Add focused tests for changed behaviour, including real native-editor or
 WebKit tests when a model-only test cannot demonstrate the result. Run
-`bash scripts/test.sh` before submitting a pull request.
+`bash scripts/test.sh` before submitting a pull request. The runner executes tests
+serially because the native window tests share `NSApplication` and AppKit
+appearance state; each test still uses synthetic notes and isolated preferences.
 
 Data-only template extensions are the first supported extension surface.
 See [EXTENSIONS.md](EXTENSIONS.md) and `Examples/Extensions/meeting-notes`.

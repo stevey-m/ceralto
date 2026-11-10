@@ -442,6 +442,7 @@ struct LiveMarkdownView: View {
     @ViewState private var forget = false
     @ViewState private var mode = "Split"
     @ViewState private var expanded: Set<String> = []
+    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
 
     var body: some View {
         VStack(spacing: 0) {
@@ -491,6 +492,7 @@ struct LiveMarkdownView: View {
                     }
                 }
                 .frame(minWidth: 230, idealWidth: 280, maxWidth: 400)
+                .folioSidebar()
                 VStack(spacing: 0) {
                     if let path = model.selectedPath {
                         HStack {
@@ -506,8 +508,10 @@ struct LiveMarkdownView: View {
                         Divider()
                         HSplitView {
                             if mode != "Preview" {
-                                TextEditor(text: $model.text)
-                                    .font(.system(size: 15, design: .monospaced))
+                                SourceEditor(text: $model.text, family: .monospace, size: 15,
+                                             dracula: theme == FolioTheme.dracula.rawValue,
+                                             currentSource: { model.text }, accessibilityLabel: "Live Markdown source")
+                                    .background(.background)
                                     .frame(minWidth: 220)
                                     .accessibilityLabel("Live Markdown source")
                             }
@@ -551,7 +555,7 @@ struct LiveMarkdownView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.background)
         .background(WindowCloseGuard(model: model))
         .folioAppearance()
         .onChange(of: model.selectedPath) { _, path in revealSelection(path) }
@@ -612,6 +616,7 @@ struct LiveMarkdownView: View {
                             Text(match.excerpt).font(.caption).foregroundStyle(.secondary).lineLimit(3)
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }.buttonStyle(.plain)
+                    .folioListRow(selected: model.selectedPath == match.path)
                 }.listStyle(.sidebar)
             } else { Spacer() }
         }
@@ -648,6 +653,7 @@ struct LiveMarkdownView: View {
                 }.buttonStyle(.plain)
             }
         }
+        .folioListRow(selected: model.selectedPath == entry.path)
         .contextMenu {
             Button("Rename or Move...") { draft = MarkdownPathDraft(source: entry.path, path: entry.path) }
             Button("Reveal in Finder") {
@@ -680,7 +686,7 @@ private struct MarkdownPathSheet: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                 Button("Apply") { submit(path); dismiss() }.keyboardShortcut(.defaultAction).disabled(path.isEmpty)
             }
-        }.padding(24).frame(width: 480)
+        }.padding(24).frame(width: 480).folioAppearance()
     }
 }
 
