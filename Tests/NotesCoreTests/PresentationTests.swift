@@ -13,12 +13,13 @@ struct PresentationTests {
         defer { try? FileManager.default.removeItem(at: temporary) }
         let storage = LibraryStorage(url: temporary.appendingPathComponent("library.json"))
         let notebook = Notebook(name: "Personal")
+        let topic = Notebook(name: "Personal/Ideas")
         let work = Notebook(name: "Work")
-        let note = Note(notebookID: notebook.id, title: "A place for your next idea",
+        let note = Note(notebookID: topic.id, title: "A place for your next idea",
             body: "## Less noise. More thought.\n\nA quiet page for the things worth keeping. Write naturally, collect what matters, and find your way back.\n\n**Your words. Your files. Your pace.**\n\n- Capture the thought before it disappears\n\n- Give it a home when you are ready\n\n- Take your library with you",
             tags: ["ideas"], format: .formatted)
         let other = Note(notebookID: work.id, title: "Something worth remembering", body: "The best tools get out of the way.")
-        try storage.save(Library(notebooks: [notebook, work], notes: [note, other]))
+        try storage.save(Library(notebooks: [notebook, topic, work], notes: [note, other]))
         let store = NotesStore(storage: storage)
         store.openNote(note.id)
         let suite = "FolioPresentation-\(UUID().uuidString)"

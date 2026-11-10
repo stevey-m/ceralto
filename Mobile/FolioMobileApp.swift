@@ -24,17 +24,19 @@ struct MobileReaderView: View {
     @MobileState private var connectingFolder = false
     @MobileState private var searchingAll = false
     @MobileState private var search = ""
+    @MobileState private var collapsedTopics: Set<String> = []
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $store.scope) {
+            List(selection: $store.mainFolderScope) {
                 Section("Library") {
                     Label("All Notes", systemImage: "tray.full").tag(NoteScope.all)
                     Label("Pinned", systemImage: "pin").tag(NoteScope.pinned)
                 }
-                Section("Notebooks") {
+                Section("Main Folders") {
                     ForEach(NotebookBranch.build(store.library.notebooks)) { branch in
-                        readerBranch(branch)
+                        Label(branch.name, systemImage: "folder").lineLimit(1)
+                            .tag(NoteScope.folder(branch.id, branch.descendants))
                     }
                 }
                 if !store.tags.isEmpty {
@@ -61,21 +63,16 @@ struct MobileReaderView: View {
             .navigationTitle("Folio")
         } content: {
             List(selection: $store.selectedNoteID) {
-                ForEach(store.visibleNotes) { note in
-                    NavigationLink(value: note.id) {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(note.displayTitle).font(.headline).lineLimit(1)
-                            Text(note.excerpt).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
-                            HStack {
-                                Text(note.updatedAt, style: .date)
-                                Spacer()
-                                if note.isPinned { Image(systemName: "pin.fill") }
-                            }.font(.caption).foregroundStyle(.tertiary)
-                        }.padding(.vertical, 7)
+                if let folder = store.navigationFolder {
+                    ForEach(store.outlineNotes.filter { note in folder.notebooks.contains { $0.id == note.notebookID } }) { note in
+                        readerNote(note)
                     }
+                    ForEach(folder.children) { branch in readerTopic(branch) }
+                } else {
+                    ForEach(store.visibleNotes) { note in readerNote(note) }
                 }
             }
-            .navigationTitle(store.scopeTitle)
+            .navigationTitle(store.navigationFolder?.name ?? store.scopeTitle)
             .searchable(text: $store.query, prompt: "Search this notebook")
             .toolbar {
                 Button("Search All Notes", systemImage: "magnifyingglass") { searchingAll = true }
@@ -149,18 +146,33 @@ struct MobileReaderView: View {
         }
     }
 
-    private func readerBranch(_ branch: NotebookBranch) -> AnyView {
+    private func readerNote(_ note: Note) -> some View {
+        NavigationLink(value: note.id) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(note.displayTitle).font(.headline).lineLimit(1)
+                Text(note.excerpt).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                HStack {
+                    Text(note.updatedAt, style: .date)
+                    Spacer()
+                    if note.isPinned { Image(systemName: "pin.fill") }
+                }.font(.caption).foregroundStyle(.tertiary)
+            }.padding(.vertical, 7)
+        }
+    }
+
+    private func readerTopic(_ branch: NotebookBranch) -> AnyView {
         AnyView(Group {
-            if branch.children.isEmpty && branch.notebooks.count == 1, let notebook = branch.notebooks.first {
-                Label(branch.name, systemImage: "book.closed").tag(NoteScope.notebook(notebook.id))
-            } else {
-                DisclosureGroup {
-                    ForEach(branch.notebooks) { notebook in
-                        Label("Notes in \(branch.name)", systemImage: "book.closed").tag(NoteScope.notebook(notebook.id))
+            if store.query.isEmpty || store.outlineNotes.contains(where: { branch.descendants.contains($0.notebookID) }) {
+                DisclosureGroup(isExpanded: Binding(
+                    get: { !store.query.isEmpty || !collapsedTopics.contains(branch.id) },
+                    set: { if $0 { collapsedTopics.remove(branch.id) } else { collapsedTopics.insert(branch.id) } }
+                )) {
+                    ForEach(store.outlineNotes.filter { note in branch.notebooks.contains { $0.id == note.notebookID } }) { note in
+                        readerNote(note)
                     }
-                    ForEach(branch.children) { child in readerBranch(child) }
+                    ForEach(branch.children) { child in readerTopic(child) }
                 } label: {
-                    Label(branch.name, systemImage: "folder").tag(NoteScope.folder(branch.id, branch.descendants))
+                    Label(branch.name, systemImage: "folder").lineLimit(1)
                 }
             }
         })

@@ -145,7 +145,7 @@ struct ContentView: View {
             }
             .padding(18)
 
-            List(selection: $store.scope) {
+            List(selection: $store.mainFolderScope) {
                 Section("Library") {
                     scopeRow("All Notes", icon: "tray.full", scope: .all)
                     if let inbox = store.inboxID {
@@ -156,7 +156,19 @@ struct ContentView: View {
                 }
                 Section {
                     ForEach(NotebookBranch.build(store.library.notebooks.filter { $0.id != store.inboxID })) { branch in
-                        branchView(branch)
+                        scopeRow(branch.name, icon: "folder", scope: .folder(branch.id, branch.descendants))
+                            .contextMenu {
+                                Button("New Subtopic...") {
+                                    store.notebookDraft = NotebookDraft(name: branch.id + "/")
+                                }
+                                ForEach(branch.notebooks) { notebook in
+                                    Button("Rename \(notebook.name)...") {
+                                        store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
+                                    }
+                                    Button("Delete \(notebook.name)...", role: .destructive) { notebookToDelete = notebook }
+                                        .disabled(store.library.notebooks.count < 2)
+                                }
+                            }
                     }
                     Button {
                         store.notebookDraft = NotebookDraft()
@@ -167,7 +179,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .disabled(!store.isLoaded)
                 } header: {
-                    Text("Notebooks")
+                    Text("Main Folders")
                 }
                 if !store.tags.isEmpty {
                     Section("Tags") {
@@ -213,35 +225,57 @@ struct ContentView: View {
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .windowBackgroundColor))
     }
 
-    private func branchView(_ branch: NotebookBranch) -> AnyView {
-        AnyView(Group {
-            if branch.children.isEmpty && branch.notebooks.count == 1, let notebook = branch.notebooks.first {
-                notebookRow(notebook, title: branch.name)
-            } else {
+    private func topicView(_ branch: NotebookBranch) -> AnyView {
+        let notes = store.outlineNotes
+        return AnyView(Group {
+            if store.query.isEmpty || notes.contains(where: { branch.descendants.contains($0.notebookID) }) {
                 DisclosureGroup(isExpanded: Binding(
-                    get: { !collapsedBranches.contains(branch.id) },
+                    get: { !store.query.isEmpty || !collapsedBranches.contains(branch.id) },
                     set: { if $0 { collapsedBranches.remove(branch.id) } else { collapsedBranches.insert(branch.id) } }
                 )) {
-                    ForEach(branch.notebooks) { notebook in
-                        notebookRow(notebook, title: "Notes in \(branch.name)")
+                    ForEach(notes.filter { note in branch.notebooks.contains { $0.id == note.notebookID } }) { note in
+                        noteRow(note)
                     }
-                    ForEach(branch.children) { child in branchView(child) }
+                    ForEach(branch.children) { child in topicView(child) }
                 } label: {
-                    scopeRow(branch.name, icon: "folder", scope: .folder(branch.id, branch.descendants))
+                    Label(branch.name, systemImage: "folder")
+                        .font(.headline).lineLimit(1).help(branch.id)
+                        .contextMenu {
+                            Button("New Subtopic...") {
+                                store.notebookDraft = NotebookDraft(name: branch.id + "/")
+                            }
+                            ForEach(branch.notebooks) { notebook in
+                                Button("New Note in \(notebook.name)") {
+                                    store.scope = .notebook(notebook.id)
+                                    store.selectedNoteID = nil
+                                    store.createNote()
+                                }
+                                Button("Rename \(notebook.name)...") {
+                                    store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
+                                }
+                                Button("Delete \(notebook.name)...", role: .destructive) { notebookToDelete = notebook }
+                                    .disabled(store.library.notebooks.count < 2)
+                            }
+                        }
                 }
             }
         })
     }
 
-    private func notebookRow(_ notebook: Notebook, title: String) -> some View {
-        scopeRow(title, icon: "book.closed", scope: .notebook(notebook.id))
-            .help(notebook.name)
+    private func noteRow(_ note: Note) -> some View {
+        NoteRow(note: note)
+            .tag(note.id)
             .contextMenu {
-                Button("Rename Notebook...") {
-                    store.notebookDraft = NotebookDraft(existingID: notebook.id, name: notebook.name)
+                if note.deletedAt != nil {
+                    Button("Restore Note") { store.restore(note.id) }
+                    Button("Delete Forever...", role: .destructive) { noteToDelete = note }
+                } else {
+                    Button(note.isPinned ? "Unpin Note" : "Pin Note") {
+                        store.update(note.id) { $0.isPinned.toggle() }
+                    }
+                    Button("Export Markdown...") { store.exportMarkdown(note) }
+                    Button("Move to Trash", role: .destructive) { store.trash(note.id) }
                 }
-                Button("Delete Notebook...", role: .destructive) { notebookToDelete = notebook }
-                    .disabled(store.library.notebooks.count < 2)
             }
     }
 
@@ -261,8 +295,8 @@ struct ContentView: View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.scopeTitle).font(.title2.weight(.semibold))
-                    Text("\(store.visibleNotes.count) \(store.visibleNotes.count == 1 ? "note" : "notes")")
+                    Text(store.navigationFolder?.name ?? store.scopeTitle).font(.title2.weight(.semibold)).lineLimit(1)
+                    Text("\(store.outlineNotes.count) \(store.outlineNotes.count == 1 ? "note" : "notes")")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -289,27 +323,28 @@ struct ContentView: View {
             .padding(.horizontal, 12).padding(.bottom, 12)
             Divider()
             List(selection: $store.selectedNoteID) {
-                ForEach(store.visibleNotes) { note in
-                    NoteRow(note: note)
-                        .tag(note.id)
-                        .contextMenu {
-                            if note.deletedAt != nil {
-                                Button("Restore Note") { store.restore(note.id) }
-                                Button("Delete Forever...", role: .destructive) { noteToDelete = note }
-                            } else {
-                                Button(note.isPinned ? "Unpin Note" : "Pin Note") {
-                                    store.update(note.id) { $0.isPinned.toggle() }
-                                }
-                                Button("Export Markdown...") { store.exportMarkdown(note) }
-                                Button("Move to Trash", role: .destructive) { store.trash(note.id) }
-                            }
-                        }
+                if let folder = store.navigationFolder {
+                    ForEach(store.outlineNotes.filter { note in folder.notebooks.contains { $0.id == note.notebookID } }) { note in
+                        noteRow(note)
+                    }
+                    ForEach(folder.children) { branch in topicView(branch) }
+                } else {
+                    ForEach(store.visibleNotes) { note in
+                        noteRow(note)
+                    }
+                }
+            }
+            .onChange(of: store.selectedNoteID) { _, id in
+                guard let id, let note = store.outlineNotes.first(where: { $0.id == id }) else { return }
+                if let folder = store.navigationFolder {
+                    let path = store.library.notebooks.first { $0.id == note.notebookID }?.name ?? folder.id
+                    collapsedBranches = collapsedBranches.filter { !(path == $0 || path.hasPrefix($0 + "/")) }
                 }
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
             .overlay {
-                if store.visibleNotes.isEmpty {
+                if store.outlineNotes.isEmpty && (store.navigationFolder?.children.isEmpty != false || !store.query.isEmpty) {
                     ContentUnavailableView(
                         store.query.isEmpty ? "No notes here yet" : "No matching notes",
                         systemImage: store.query.isEmpty ? "note.text" : "magnifyingglass",

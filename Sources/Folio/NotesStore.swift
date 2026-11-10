@@ -63,7 +63,44 @@ final class NotesStore: ObservableObject {
 
     var visibleNotes: [Note] {
         library.notes.filter {
-            (scope ?? .all).includes($0) && $0.matches(query)
+            resolvedScope.includes($0) && $0.matches(query)
+        }.sorted {
+            if $0.isPinned != $1.isPinned { return $0.isPinned }
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+
+    private var resolvedScope: NoteScope {
+        guard case .folder(let path, _) = scope else { return scope ?? .all }
+        let ids = library.notebooks.filter { $0.name == path || $0.name.hasPrefix(path + "/") }.map(\.id)
+        return .folder(path, ids)
+    }
+
+    var navigationFolder: NotebookBranch? {
+        let branches = NotebookBranch.build(library.notebooks)
+        switch scope {
+        case .notebook(let id):
+            return branches.first { $0.descendants.contains(id) }
+        case .folder(let path, _):
+            return branches.first { path == $0.id || path.hasPrefix($0.id + "/") }
+        default:
+            return nil
+        }
+    }
+
+    var mainFolderScope: NoteScope? {
+        get {
+            guard let folder = navigationFolder else { return scope }
+            return .folder(folder.id, folder.descendants)
+        }
+        set { scope = newValue }
+    }
+
+    var outlineNotes: [Note] {
+        guard let folder = navigationFolder else { return visibleNotes }
+        return library.notes.filter {
+            $0.deletedAt == nil && folder.descendants.contains($0.notebookID) && $0.matches(query)
         }.sorted {
             if $0.isPinned != $1.isPinned { return $0.isPinned }
             if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
@@ -91,8 +128,16 @@ final class NotesStore: ObservableObject {
     }
 
     var currentNotebookID: UUID? {
-        if case .notebook(let id) = scope { return id }
-        if case .folder(_, let ids) = scope { return ids.first }
+        if case .notebook(let id) = scope {
+            if let selectedNote, navigationFolder?.descendants.contains(selectedNote.notebookID) == true {
+                return selectedNote.notebookID
+            }
+            return id
+        }
+        if case .folder(_, let ids) = resolvedScope {
+            if let selectedNote, ids.contains(selectedNote.notebookID) { return selectedNote.notebookID }
+            return navigationFolder?.notebooks.first?.id ?? ids.first
+        }
         return library.notebooks.first?.id
     }
 
@@ -123,8 +168,8 @@ final class NotesStore: ObservableObject {
     }
 
     func reconcileSelection() {
-        if !visibleNotes.contains(where: { $0.id == selectedNoteID }) {
-            selectedNoteID = visibleNotes.first?.id
+        if !outlineNotes.contains(where: { $0.id == selectedNoteID }) {
+            selectedNoteID = outlineNotes.first?.id
         }
     }
 
@@ -206,7 +251,13 @@ final class NotesStore: ObservableObject {
 
     func openNote(_ id: UUID) {
         guard let note = library.notes.first(where: { $0.id == id }) else { return }
-        scope = note.deletedAt == nil ? .all : .trash
+        if note.deletedAt != nil {
+            scope = .trash
+        } else if let folder = NotebookBranch.build(library.notebooks).first(where: { $0.descendants.contains(note.notebookID) }) {
+            scope = .folder(folder.id, folder.descendants)
+        } else {
+            scope = .all
+        }
         query = ""
         selectedNoteID = id
     }

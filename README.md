@@ -63,7 +63,11 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
   the current collection. Search works offline; OCR, attachment-text indexing
   and semantic/AI search are not implemented.
 - **Use notebooks that behave like notebooks.** Nested paths form collapsible
-  trees. Tags, pins, moving notes, Trash and restore are included. Navigation
+  trees. Main folders stay on the left; their expandable subtopics and notes
+  appear in the middle; selecting a note displays it on the right. Notes saved
+  directly in a main folder remain visible above its subtopics. Search reveals
+  matching notes inside subtopics. On Mac, use a folder's context menu to add a
+  subtopic or create a note in it. Tags, pins, moving notes, Trash and restore are included. Navigation
   widths are saved and do not grow when selecting long names. Drag dividers,
   hide either pane or toggle focused writing to return the space to the page.
 - **Connect ideas with plain text.** Write `[[Note title]]`, `[[Notebook/Note
