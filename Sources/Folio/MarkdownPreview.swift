@@ -39,7 +39,7 @@ struct MarkdownPreview: View {
         return options
     }
 
-    private var links: [String: UUID] { resolveLibraryLinks ? NoteLinks.targets(in: store.library) : [:] }
+    private var links: [String: UUID] { resolveLibraryLinks ? store.noteLinkTargets : [:] }
 
     var body: some View {
         ZStack {

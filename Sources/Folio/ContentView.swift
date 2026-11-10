@@ -286,7 +286,7 @@ struct ContentView: View {
                     }
                 }
                 Section {
-                    ForEach(NotebookBranch.build(store.library.notebooks.filter { $0.id != store.inboxID })) { branch in
+                    ForEach(store.sidebarNotebooks) { branch in
                         notebookTree(branch)
                     }
                     Button {
@@ -498,7 +498,7 @@ struct ContentView: View {
             Label(title, systemImage: icon)
                 .lineLimit(1)
             Spacer()
-            Text("\(store.library.notes.filter { scope.includes($0) }.count)")
+            Text("\(store.noteCount(in: scope))")
                 .font(.caption).foregroundStyle(.tertiary)
         }
         .tag(scope)
@@ -548,7 +548,9 @@ struct ContentView: View {
             }
             HStack {
                 Button("Search Help") { showingSearchHelp.toggle() }
-                    .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440) }
+                    .popover(isPresented: $showingSearchHelp) {
+                        SearchSyntaxHelp().padding(20).frame(width: 440).folioAppearance()
+                    }
                 Spacer()
                 Button("Save Search...", action: store.draftSmartFolder)
                     .disabled(!store.isLoaded || !store.smartFoldersAvailable || store.scope == .trash ||
@@ -621,6 +623,7 @@ struct ContentView: View {
 }
 
 private struct NoteRow: View {
+    @EnvironmentObject private var store: NotesStore
     let note: Note
     @AppStorage("noteListPreviewLines") private var previewLines = 2
     @AppStorage("noteListShowDates") private var showDates = true
@@ -636,7 +639,7 @@ private struct NoteRow: View {
                 }
             }
             if previewLines > 0 {
-                Text(note.body.isEmpty ? "No additional text" : note.excerpt)
+                Text(note.body.isEmpty ? "No additional text" : store.textSummary(for: note).excerpt)
                     .font(.callout).foregroundStyle(.secondary).lineLimit(min(previewLines, 3))
             }
             if showDates || !note.tags.isEmpty {

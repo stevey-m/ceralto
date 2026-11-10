@@ -34,9 +34,113 @@ struct NotebookDraft: Identifiable {
     var branchPath: String?
 }
 
+struct NoteTextSummary {
+    let excerpt: String
+    let wordCount: Int
+}
+
+private struct CachedNoteText {
+    let source: String
+    let format: NoteFormat
+    let summary: NoteTextSummary
+}
+
+@MainActor
+private final class LibraryNavigationIndex {
+    private let library: Library
+    private var results: [Request: [Note]] = [:]
+    private var queryCounts: [String: Int] = [:]
+    lazy var notebookNames = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
+    lazy var notesByID = Dictionary(uniqueKeysWithValues: library.notes.map { ($0.id, $0) })
+    lazy var linkTargets = NoteLinks.targets(in: library)
+    lazy var sidebarNotebooks: [NotebookBranch] = {
+        let inbox = library.notebooks.first { $0.name.caseInsensitiveCompare("Inbox") == .orderedSame }?.id
+        return NotebookBranch.build(library.notebooks.filter { $0.id != inbox })
+    }()
+    lazy var branchesByPath: [String: NotebookBranch] = {
+        var result: [String: NotebookBranch] = [:]
+        for root in NotebookBranch.build(library.notebooks) { add(root, to: &result) }
+        return result
+    }()
+    lazy var counts: Counts = {
+        var result = Counts()
+        for note in library.notes {
+            guard note.deletedAt == nil else { result.trashed += 1; continue }
+            result.active += 1
+            if note.isPinned { result.pinned += 1 }
+            result.notebooks[note.notebookID, default: 0] += 1
+            for tag in Set(note.tags) { result.tags[tag, default: 0] += 1 }
+        }
+        return result
+    }()
+    private lazy var sortedNotes = library.notes.sorted {
+        if $0.isPinned != $1.isPinned { return $0.isPinned }
+        if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+        return $0.id.uuidString < $1.id.uuidString
+    }
+
+    struct Counts {
+        var active = 0
+        var pinned = 0
+        var trashed = 0
+        var notebooks: [UUID: Int] = [:]
+        var tags: [String: Int] = [:]
+    }
+
+    private struct Request: Hashable {
+        let scope: NoteScope
+        let query: String
+        let savedQuery: String?
+    }
+
+    init(library: Library) { self.library = library }
+
+    func notes(matching scope: NoteScope, query: String, savedQuery: String? = nil) -> [Note] {
+        let request = Request(scope: scope, query: query, savedQuery: savedQuery)
+        if let result = results[request] { return result }
+        let parsed = NoteQuery(query)
+        let saved = savedQuery.map(NoteQuery.init)
+        let folderIDs: Set<UUID>?
+        if case .folder(_, let ids) = scope { folderIDs = Set(ids) }
+        else { folderIDs = nil }
+        let result = sortedNotes.filter { note in
+            let included = folderIDs.map { note.deletedAt == nil && $0.contains(note.notebookID) } ?? scope.includes(note)
+            return included && parsed.matches(note, notebook: notebookNames[note.notebookID] ?? "") &&
+                (saved?.matches(note, notebook: notebookNames[note.notebookID] ?? "") ?? true)
+        }
+        if results.count >= 8 { results.removeAll(keepingCapacity: true) }
+        results[request] = result
+        return result
+    }
+
+    func count(matching query: String) -> Int {
+        if let count = queryCounts[query] { return count }
+        let parsed = NoteQuery(query)
+        let count = library.notes.reduce(0) { count, note in
+            count + (note.deletedAt == nil && parsed.matches(note, notebook: notebookNames[note.notebookID] ?? "") ? 1 : 0)
+        }
+        if queryCounts.count >= 128 { queryCounts.removeAll(keepingCapacity: true) }
+        queryCounts[query] = count
+        return count
+    }
+
+    private func add(_ branch: NotebookBranch, to index: inout [String: NotebookBranch]) {
+        index[branch.id] = branch
+        for child in branch.children { add(child, to: &index) }
+    }
+}
+
 @MainActor
 final class NotesStore: ObservableObject {
-    @Published private(set) var library = Library(notebooks: [])
+    @Published private(set) var library = Library(notebooks: []) {
+        didSet {
+            cachedNavigation = nil
+            if library.notes.count < oldValue.notes.count {
+                let ids = Set(library.notes.map(\.id))
+                cachedText = cachedText.filter { ids.contains($0.key) }
+            }
+        }
+    }
     @Published var scope: NoteScope? = .all
     @Published var selectedNoteID: UUID? {
         didSet {
@@ -79,6 +183,8 @@ final class NotesStore: ObservableObject {
     #endif
     private let storage: LibraryStorage
     private let preferences: UserDefaults
+    private var cachedNavigation: LibraryNavigationIndex?
+    private var cachedText: [UUID: CachedNoteText] = [:]
     private var restoringWorkspace = false
     var libraryURL: URL { storage.url }
     let isReadOnly: Bool
@@ -100,37 +206,23 @@ final class NotesStore: ObservableObject {
     }
 
     var visibleNotes: [Note] {
-        let parsed = NoteQuery(query)
-        let saved = activeSmartFolder.map { NoteQuery($0.query) }
-        let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
-        let missingSmartFolder: Bool
-        if case .smart = scope { missingSmartFolder = activeSmartFolder == nil }
-        else { missingSmartFolder = false }
-        return library.notes.filter {
-            !missingSmartFolder && resolvedScope.includes($0) &&
-                parsed.matches($0, notebook: names[$0.notebookID] ?? "") &&
-                (saved?.matches($0, notebook: names[$0.notebookID] ?? "") ?? true)
-        }.sorted {
-            if $0.isPinned != $1.isPinned { return $0.isPinned }
-            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-            return $0.id.uuidString < $1.id.uuidString
-        }
+        if case .smart = scope, activeSmartFolder == nil { return [] }
+        return navigationIndex.notes(matching: resolvedScope, query: query, savedQuery: activeSmartFolder?.query)
     }
 
     private var resolvedScope: NoteScope {
         guard case .folder(let path, _) = scope else { return scope ?? .all }
-        let ids = library.notebooks.filter { $0.name == path || $0.name.hasPrefix(path + "/") }.map(\.id)
-        return .folder(path, ids)
+        return .folder(path, navigationIndex.branchesByPath[path]?.descendants ?? [])
     }
 
     var navigationFolder: NotebookBranch? {
-        let branches = NotebookBranch.build(library.notebooks)
+        let index = navigationIndex
         switch scope {
         case .notebook(let id):
-            guard let notebook = library.notebooks.first(where: { $0.id == id }) else { return nil }
-            return branches.lazy.compactMap { $0.branch(at: notebook.name) }.first
+            guard let name = index.notebookNames[id] else { return nil }
+            return index.branchesByPath[name]
         case .folder(let path, _):
-            return branches.lazy.compactMap { $0.branch(at: path) }.first
+            return index.branchesByPath[path]
         default:
             return nil
         }
@@ -146,24 +238,45 @@ final class NotesStore: ObservableObject {
 
     var outlineNotes: [Note] {
         guard let folder = navigationFolder else { return visibleNotes }
-        let parsed = NoteQuery(query)
-        let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
-        return library.notes.filter {
-            $0.deletedAt == nil && folder.descendants.contains($0.notebookID) &&
-                parsed.matches($0, notebook: names[$0.notebookID] ?? "")
-        }.sorted {
-            if $0.isPinned != $1.isPinned { return $0.isPinned }
-            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-            return $0.id.uuidString < $1.id.uuidString
-        }
+        return navigationIndex.notes(matching: .folder(folder.id, folder.descendants), query: query)
     }
 
     var selectedNote: Note? {
-        library.notes.first { $0.id == selectedNoteID }
+        selectedNoteID.flatMap { navigationIndex.notesByID[$0] }
     }
 
-    var tags: [String] {
-        Array(Set(library.notes.filter { $0.deletedAt == nil }.flatMap(\.tags))).sorted()
+    var tags: [String] { navigationIndex.counts.tags.keys.sorted() }
+    var sidebarNotebooks: [NotebookBranch] { navigationIndex.sidebarNotebooks }
+    var noteLinkTargets: [String: UUID] { navigationIndex.linkTargets }
+
+    func noteCount(in scope: NoteScope) -> Int {
+        let counts = navigationIndex.counts
+        switch scope {
+        case .all, .smart: return counts.active
+        case .pinned: return counts.pinned
+        case .trash: return counts.trashed
+        case .notebook(let id): return counts.notebooks[id, default: 0]
+        case .tag(let tag): return counts.tags[tag, default: 0]
+        case .folder(_, let ids): return Set(ids).reduce(0) { $0 + counts.notebooks[$1, default: 0] }
+        }
+    }
+
+    func textSummary(for note: Note) -> NoteTextSummary {
+        if let cached = cachedText[note.id], cached.source == note.body, cached.format == note.contentFormat {
+            return cached.summary
+        }
+        let text = note.textContent
+        let summary = NoteTextSummary(excerpt: text.split(whereSeparator: \.isNewline).joined(separator: " "),
+                                      wordCount: text.split(whereSeparator: \.isWhitespace).count)
+        cachedText[note.id] = CachedNoteText(source: note.body, format: note.contentFormat, summary: summary)
+        return summary
+    }
+
+    private var navigationIndex: LibraryNavigationIndex {
+        if let cachedNavigation { return cachedNavigation }
+        let index = LibraryNavigationIndex(library: library)
+        cachedNavigation = index
+        return index
     }
 
     var scopeTitle: String {
@@ -215,11 +328,7 @@ final class NotesStore: ObservableObject {
     }
 
     func smartFolderCount(_ folder: SmartFolder) -> Int {
-        let parsed = NoteQuery(folder.query)
-        let names = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
-        return library.notes.filter {
-            $0.deletedAt == nil && parsed.matches($0, notebook: names[$0.notebookID] ?? "")
-        }.count
+        navigationIndex.count(matching: folder.query)
     }
 
     func draftSmartFolder() {
@@ -289,6 +398,7 @@ final class NotesStore: ObservableObject {
             #endif
             if loaded == nil { try storage.save(next) }
             library = next
+            cachedText.removeAll()
             restoringWorkspace = true
             isLoaded = true
             hasUnsavedChanges = false

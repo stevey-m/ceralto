@@ -29,13 +29,14 @@ struct LinkedMentionsView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(linked.displayTitle).font(.headline)
-                            Text(linked.excerpt).foregroundStyle(.secondary).lineLimit(2)
+                            Text(store.textSummary(for: linked).excerpt).foregroundStyle(.secondary).lineLimit(2)
                         }
                     }.buttonStyle(.plain)
                 }
             }
         }
         .padding(22).frame(width: 520, height: 400)
+        .folioAppearance()
         .task(id: store.library) {
             do { mentions = try NoteLinks.backlinks(to: note, in: store.library) }
             catch { failure = "Could not read linked mentions: \(error.localizedDescription)" }

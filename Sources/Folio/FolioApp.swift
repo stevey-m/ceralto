@@ -179,6 +179,15 @@ struct FolioApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: NotesStore?
     weak var markdown: LiveMarkdownStore?
+    private let appearance = ApplicationAppearance()
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        appearance.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        appearance.stop()
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard markdown?.confirmLeavingDraft() != false else { return .terminateCancel }

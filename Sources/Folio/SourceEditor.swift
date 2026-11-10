@@ -2,7 +2,18 @@ import AppKit
 import NotesCore
 import SwiftUI
 
-final class SourceTextView: DocumentTextView {}
+final class SourceTextView: DocumentTextView {
+    var focusOnAttach = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard focusOnAttach, window != nil else { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.isEditable else { return }
+            self.window?.makeFirstResponder(self)
+        }
+    }
+}
 
 struct SourceEditor: NSViewRepresentable {
     @Binding var text: String
@@ -11,6 +22,8 @@ struct SourceEditor: NSViewRepresentable {
     let dracula: Bool
     let currentSource: () -> String
     var accessibilityLabel = "Note source editor"
+    var textInset = NSSize(width: 20, height: 20)
+    var focusOnAttach = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -31,7 +44,8 @@ struct SourceEditor: NSViewRepresentable {
         editor.autoresizingMask = [.width]
         editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        editor.textContainerInset = NSSize(width: 20, height: 20)
+        editor.textContainerInset = textInset
+        editor.focusOnAttach = focusOnAttach
         editor.drawsBackground = false
         editor.delegate = context.coordinator
         editor.setAccessibilityLabel(accessibilityLabel)

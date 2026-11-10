@@ -721,12 +721,21 @@ struct FormattedEditor: View {
                            onError: onError, onImage: onImage, currentSource: currentSource, onImportFiles: onImportFiles)
         }
         .popover(isPresented: $addingLink) {
+            LinkEditorPopover(link: $link, insert: insertLink)
+        }
+    }
+
+    struct LinkEditorPopover: View {
+        @Binding var link: String
+        let insert: () -> Void
+
+        var body: some View {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Link to a page").font(.headline)
                 TextField("https://", text: $link).textFieldStyle(.roundedBorder)
-                    .onSubmit(insertLink)
-                Button("Insert Link", action: insertLink).keyboardShortcut(.defaultAction)
-            }.padding(20).frame(width: 320)
+                    .onSubmit(insert)
+                Button("Insert Link", action: insert).keyboardShortcut(.defaultAction)
+            }.padding(20).frame(width: 320).folioAppearance()
         }
     }
 
@@ -839,20 +848,27 @@ struct NativePageView: NSViewRepresentable {
         editor.pageFont = family
         editor.pageFontSize = size
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
-        editor.textColor = color
-        editor.insertionPointColor = color
-        FolioPalette.style(editor, dracula: dracula)
         let linkColor = FolioPalette.accent(dracula ? .dracula : .system, accent: accent,
                                            draculaAccent: draculaAccent, scheme: colorScheme)
-        editor.linkTextAttributes = [
-            .foregroundColor: NSColor(linkColor),
-            .underlineStyle: NSUnderlineStyle.single.rawValue
-        ]
+        let paletteChanged = coordinator.loadedHTML == nil || coordinator.dracula != dracula ||
+            coordinator.linkColor != NSColor(linkColor)
+        if paletteChanged {
+            editor.insertionPointColor = color
+            FolioPalette.style(editor, dracula: dracula)
+            editor.linkTextAttributes = [
+                .foregroundColor: NSColor(linkColor),
+                .underlineStyle: NSUnderlineStyle.single.rawValue
+            ]
+            coordinator.linkColor = NSColor(linkColor)
+        }
         // Resource ownership can change during an insertion without replacing the native buffer or its undo history.
         if coordinator.loadedHTML == html && coordinator.size == size &&
             coordinator.family == family && coordinator.dracula == dracula && previousResources == resources {
             coordinator.resources = resources
-            FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
+            if paletteChanged || coordinator.needsRecolor {
+                FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
+                coordinator.needsRecolor = false
+            }
             return
         }
         do {
@@ -863,6 +879,7 @@ struct NativePageView: NSViewRepresentable {
             defer { coordinator.updating = false }
             editor.textStorage?.setAttributedString(decoded)
             FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
+            coordinator.needsRecolor = false
             let location = min(selection.location, decoded.length)
             editor.setSelectedRange(NSRange(location: location, length: min(selection.length, decoded.length - location)))
             var typing = decoded.length > 0
@@ -898,6 +915,8 @@ struct NativePageView: NSViewRepresentable {
         var size = 0.0
         var family = ReadingFont.system
         var dracula = false
+        var linkColor: NSColor?
+        var needsRecolor = false
         var updating = false
 
         init(parent: NativePageView) { self.parent = parent }
@@ -906,6 +925,7 @@ struct NativePageView: NSViewRepresentable {
             guard !updating, let editor = notification.object as? PageTextView,
                   let storage = editor.textStorage else { return }
             loadedHTML = NativePageCodec.encode(storage, markdown: true)
+            needsRecolor = true
             if let loadedHTML { parent.onChange(loadedHTML) }
             var typing = editor.typingAttributes
             typing.removeValue(forKey: .folioMarker)

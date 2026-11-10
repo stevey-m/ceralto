@@ -9,7 +9,6 @@ struct QuickCaptureView: View {
     @AppStorage("captureDraftBody") private var bodyText = ""
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @ViewState private var failure: String?
-    @FocusState private var writing: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -26,10 +25,10 @@ struct QuickCaptureView: View {
                 .textFieldStyle(.plain).font(.title3.weight(.medium))
                 .accessibilityLabel("Quick capture title")
             Divider()
-            TextEditor(text: $bodyText)
-                .font(.system(size: 16))
-                .scrollContentBackground(.hidden)
-                .focused($writing)
+            SourceEditor(text: $bodyText, family: .system, size: 16,
+                         dracula: theme == FolioTheme.dracula.rawValue, currentSource: { bodyText },
+                         accessibilityLabel: "Quick capture text", textInset: NSSize(width: 5, height: 1),
+                         focusOnAttach: true)
                 .accessibilityLabel("Quick capture text")
                 .overlay(alignment: .topLeading) {
                     if bodyText.isEmpty {
@@ -58,7 +57,6 @@ struct QuickCaptureView: View {
         .frame(minWidth: 420, minHeight: 350)
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
-        .onAppear { writing = true }
         .background(CaptureWindowStyle())
     }
 
@@ -156,7 +154,9 @@ struct NoteFinder: View {
             HStack {
                 Text(query.isEmpty ? "Recently edited notes" : "\(results.count) results\(results.count == 80 ? " (first 80)" : "")")
                 Button("Search Help") { showingSearchHelp.toggle() }
-                    .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440) }
+                    .popover(isPresented: $showingSearchHelp) {
+                        SearchSyntaxHelp().padding(20).frame(width: 440).folioAppearance()
+                    }
                 Spacer()
                 Text("Arrow keys to choose").foregroundStyle(.tertiary)
                 Button("Open Note", action: open).keyboardShortcut(.defaultAction).disabled(selected == nil)

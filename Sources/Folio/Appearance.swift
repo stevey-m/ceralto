@@ -3,6 +3,14 @@ import NotesCore
 import SwiftUI
 
 extension FolioTheme {
+    var nativeAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark, .dracula: NSAppearance(named: .darkAqua)
+        }
+    }
+
     var colorScheme: ColorScheme? {
         switch self {
         case .system: nil
@@ -10,6 +18,44 @@ extension FolioTheme {
         case .dark, .dracula: .dark
         }
     }
+}
+
+@MainActor
+final class ApplicationAppearance: NSObject {
+    private let preferences: UserDefaults
+    private var observing = false
+    private var appliedTheme: FolioTheme?
+
+    init(preferences: UserDefaults = .standard) {
+        self.preferences = preferences
+    }
+
+    func start() {
+        guard !observing else { return }
+        observing = true
+        NotificationCenter.default.addObserver(self, selector: #selector(preferencesChanged),
+                                               name: UserDefaults.didChangeNotification, object: preferences)
+        apply()
+    }
+
+    func stop() {
+        NotificationCenter.default.removeObserver(self)
+        observing = false
+        appliedTheme = nil
+    }
+
+    func apply() {
+        let theme = FolioTheme(rawValue: preferences.string(forKey: "folioTheme") ?? "") ?? .system
+        guard appliedTheme != theme else { return }
+        NSApplication.shared.appearance = theme.nativeAppearance
+        appliedTheme = theme
+    }
+
+    @objc nonisolated private func preferencesChanged(_ notification: Notification) {
+        Task { @MainActor [weak self] in self?.apply() }
+    }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 }
 
 extension FolioAccent {
@@ -45,7 +91,7 @@ private struct FolioAppearance: ViewModifier {
             .scrollContentBackground(dracula ? .hidden : .automatic)
             .toolbarBackground(dracula ? FolioPalette.background : Color.clear, for: .windowToolbar)
             .toolbarBackground(dracula ? .visible : .automatic, for: .windowToolbar)
-            .background(ThemeWindowStyle(dracula: dracula))
+            .background(ThemeWindowStyle(theme: selected))
     }
 }
 
@@ -113,34 +159,38 @@ enum FolioPalette {
 }
 
 private struct ThemeWindowStyle: NSViewRepresentable {
-    let dracula: Bool
+    let theme: FolioTheme
 
     func makeNSView(context: Context) -> Probe {
         let view = Probe()
-        view.dracula = dracula
+        view.theme = theme
         return view
     }
 
     func updateNSView(_ view: Probe, context: Context) {
-        view.dracula = dracula
+        view.theme = theme
         view.apply()
     }
 
     @MainActor final class Probe: NSView {
-        var dracula = false
+        var theme = FolioTheme.system
         private weak var styledWindow: NSWindow?
         private var originalBackground: NSColor?
         private var originalTransparent: Bool?
+        private var appliedTheme: FolioTheme?
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); apply() }
         func apply() {
             guard let window else { return }
+            guard styledWindow !== window || appliedTheme != theme else { return }
             if styledWindow !== window {
                 styledWindow = window
                 originalBackground = window.backgroundColor
                 originalTransparent = window.titlebarAppearsTransparent
             }
-            window.backgroundColor = dracula ? NSColor(FolioPalette.background) : originalBackground ?? .windowBackgroundColor
-            window.titlebarAppearsTransparent = dracula || (originalTransparent ?? false)
+            window.appearance = theme.nativeAppearance
+            window.backgroundColor = theme == .dracula ? NSColor(FolioPalette.background) : originalBackground ?? .windowBackgroundColor
+            window.titlebarAppearsTransparent = theme == .dracula || (originalTransparent ?? false)
+            appliedTheme = theme
         }
     }
 }
@@ -205,7 +255,7 @@ struct AppearanceSettings: View {
                 editorMode = "Preview"
                 thumbnailSize = 0
             }
-            Text("System follows your Mac's appearance. Light and Dark stay fixed. Dracula is optional, with its own accent choice: keep the original purple or choose another colour. The other themes keep their separate accent preference. macOS menus and file panels follow system dark appearance.")
+            Text("Your selection applies throughout Deltos, including windows, sheets, popovers and native dialogs. System follows your Mac; Light and Dark stay fixed. Dracula is optional and has its own accent choice. Native macOS menus and controls use the matching light or dark appearance.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

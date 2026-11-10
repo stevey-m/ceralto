@@ -28,8 +28,9 @@ struct NoteHistoryView: View {
                             Text(revision.savedAt, format: .dateTime.month().day().hour().minute().second())
                             Text(revision.title.isEmpty ? "Untitled note" : revision.title).font(.caption).lineLimit(1)
                         }.tag(revision.id)
+                            .folioListRow(selected: selectedID == revision.id)
                     }
-                }.frame(minWidth: 200, idealWidth: 230)
+                }.frame(minWidth: 200, idealWidth: 230).folioSidebar()
                 ScrollView {
                     Text(revision?.body ?? "Select a checkpoint")
                         .font(.system(size: 13, design: .monospaced))
@@ -45,6 +46,7 @@ struct NoteHistoryView: View {
             }.padding(16)
         }
         .frame(width: 760, height: 520)
+        .folioAppearance()
         .confirmationDialog("Restore this version?", isPresented: $confirmingRestore, titleVisibility: .visible) {
             Button("Restore Version") {
                 if let revision { store.restoreRevision(revision, noteID: note.id) }

@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.16.0 is a development release, not a finished replacement for your library.**
+**0.16.1 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.16.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.16.1-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -117,8 +117,18 @@ source editors, live Markdown, previews, Settings and supporting sheets.
 It uses charcoal backgrounds, off-white text, slate selections and a purple
 accent by default. Choose **Theme default (Dracula purple)** or any of the five
 accent colours; Dracula's accent is remembered separately from the other
-themes. macOS-owned menus, file panels and standard control chrome retain
-native dark styling rather than being replaced with custom controls.
+themes. This is one application-wide choice: open windows, newly opened windows,
+history and linked-mentions sheets, search/link popovers, Quick Capture and
+native dialogs follow the same selected appearance immediately, without a
+restart. System restores automatic macOS appearance following. macOS-owned
+menus, file panels and standard control chrome use the matching native light
+or dark styling rather than custom-drawn replacements. Printed/PDF pages remain
+light for paper.
+
+Notebook trees, sidebar counts, search results, link destinations and note-text
+summaries are reused between navigation updates and refreshed when their source
+changes. Switching tabs does not rewrite or recolour unchanged native editor
+buffers; selections and undo histories stay with their tabs.
 
 ## A notebook, not a control panel
 

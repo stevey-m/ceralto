@@ -134,7 +134,7 @@ struct NoteEditor: View {
                       systemImage: store.hasUnsavedChanges ? "exclamationmark.triangle" : "checkmark.circle")
                     .foregroundStyle(store.hasUnsavedChanges ? .orange : .secondary)
                 Spacer()
-                Text("\(note.wordCount) words")
+                Text("\(store.textSummary(for: note).wordCount) words")
                 Text(note.updatedAt, format: .dateTime.month(.abbreviated).day())
             }
             .font(.caption)
