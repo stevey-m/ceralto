@@ -109,7 +109,7 @@ struct ContentView: View {
         }) {
             CommandPalette(onSelect: { pendingCommand = $0 }).environmentObject(store)
         }
-        .alert("Import complete", isPresented: Binding(
+        .alert("Folio", isPresented: Binding(
             get: { store.importSummary != nil },
             set: { if !$0 { store.importSummary = nil } }
         )) {
@@ -348,14 +348,14 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Menu {
                     Text(store.syncMessage)
-                    Button("Connect iCloud Drive Folder...", action: store.chooseSyncFolder)
+                    Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
                         .disabled(store.isSyncing)
                     Button("Sync Now", action: store.syncNow)
                         .disabled(store.syncFolderName == nil || store.isSyncing)
                     Button("Disconnect", action: store.disconnectSyncFolder)
                         .disabled(store.syncFolderName == nil || store.isSyncing)
                 } label: {
-                    Label(store.isSyncing ? "Syncing..." : store.syncFolderName ?? "Connect iCloud Drive",
+                    Label(store.isSyncing ? "Exchanging snapshots..." : store.syncFolderName ?? "Connect Cloud Folder",
                           systemImage: store.isSyncing ? "arrow.triangle.2.circlepath" : "icloud")
                 }
                 .menuStyle(.borderlessButton)

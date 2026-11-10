@@ -83,7 +83,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .sync:
             if store.isSyncing { return "Sync already in progress" }
             if store.isImportingJoplin { return "Import in progress" }
-            return store.syncFolderName == nil ? "Connect an iCloud Drive folder first" : nil
+            return store.syncFolderName == nil ? "Connect a cloud folder first" : nil
         case .importJoplin, .importFiles, .importBackup:
             return store.isImportingJoplin ? "Import in progress" : nil
         default: return nil

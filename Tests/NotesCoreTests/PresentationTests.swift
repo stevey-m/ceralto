@@ -80,6 +80,8 @@ struct PresentationTests {
         store.setFeature(.tasks, enabled: false)
         try await preview(SettingsView(section: .features), size: NSSize(width: 900, height: 680),
                           name: "Folio-features-preview.png")
+        try await preview(SettingsView(section: .sync), size: NSSize(width: 1040, height: 900),
+                          name: "Folio-cloud-folders-preview.png")
     }
 
     @Test func composedPageKeepsItsSpaceAndProducesASyntheticPreview() async throws {

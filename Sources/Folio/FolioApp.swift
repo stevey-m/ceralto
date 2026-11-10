@@ -77,7 +77,7 @@ struct FolioApp: App {
                 Button("Show Library in Finder", action: store.revealLibrary)
                 Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
                 Divider()
-                Button("Connect iCloud Drive Folder...", action: store.chooseSyncFolder)
+                Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
                     .disabled(!store.isLoaded || store.isSyncing)
                 Button("Sync Now", action: store.syncNow)
                     .keyboardShortcut(store.shortcut(.sync).keyboardShortcut)

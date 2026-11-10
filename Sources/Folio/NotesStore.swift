@@ -778,8 +778,12 @@ final class NotesStore: ObservableObject {
     }
 
     func connectSyncFolder(_ folder: URL) throws {
+        guard isLoaded, !isSyncing else {
+            throw JoplinImportError.invalid("Open your library and wait for the current folder exchange to finish before connecting.")
+        }
         let accessing = folder.startAccessingSecurityScopedResource()
         defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
+        try validateCloudFolder(folder)
         #if os(macOS)
         let bookmark = try folder.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
         #else
@@ -788,10 +792,14 @@ final class NotesStore: ObservableObject {
         try bookmark.write(to: bookmarkURL, options: .atomic)
         syncFolder = folder
         syncFolderName = folder.lastPathComponent
-        syncMessage = "Connected. Choose Sync Now to exchange offline changes."
+        syncMessage = "Folder connected. Choose Sync Now for local snapshot exchange. Cloud upload and delivery are managed by your provider and are not verified by Folio."
     }
 
     func disconnectSyncFolder() {
+        guard !isSyncing else {
+            errorMessage = "Wait for the current folder exchange to finish before disconnecting."
+            return
+        }
         do {
             if FileManager.default.fileExists(atPath: bookmarkURL.path) { try FileManager.default.removeItem(at: bookmarkURL) }
             syncFolder = nil
@@ -815,7 +823,7 @@ final class NotesStore: ObservableObject {
             guard !stale else { throw JoplinImportError.invalid("Folder permission expired. Connect the shared folder again.") }
             syncFolder = url
             syncFolderName = url.lastPathComponent
-            syncMessage = "Shared folder connected. Notes are available offline."
+            syncMessage = "Folder connection restored. Local notes are available offline; cloud upload and delivery are not verified by Folio."
         } catch {
             syncMessage = "Shared folder needs reconnection: \(error.localizedDescription)"
         }
@@ -828,7 +836,7 @@ final class NotesStore: ObservableObject {
             return
         }
         guard let folder = syncFolder else {
-            syncMessage = "Connect the same iCloud Drive folder on both devices first."
+            syncMessage = "Connect the same dedicated cloud folder on both devices first. Keep its contents downloaded locally."
             return
         }
         let snapshot = library
@@ -843,6 +851,7 @@ final class NotesStore: ObservableObject {
                 isSyncing = false
             }
             do {
+                try validateCloudFolder(folder)
                 let result = try await Task.detached(priority: .userInitiated) {
                     if readOnly {
                         return try FolderSync.pull(snapshot, folder: folder, assets: assets)
@@ -857,12 +866,52 @@ final class NotesStore: ObservableObject {
                 hasUnsavedChanges = false
                 reconcileSelection()
                 let when = Date().formatted(date: .omitted, time: .shortened)
-                syncMessage = result.conflicts == 0 ? "Synced at \(when). Available offline."
-                    : "Synced at \(when). \(result.conflicts) conflicts preserved; see #sync-conflict."
+                syncMessage = folderExchangeMessage(at: when, conflicts: result.conflicts)
             } catch {
                 syncMessage = "Sync not completed. Local notes are safe. \(error.localizedDescription)"
             }
         }
+    }
+
+    func folderExchangeMessage(at time: String, conflicts: Int) -> String {
+        let operation = isReadOnly ? "Downloaded snapshots read locally" : "Snapshot exchange completed locally"
+        let conflictMessage = conflicts == 0 ? "" : " \(conflicts) conflicts preserved; see #sync-conflict."
+        return "\(operation) at \(time).\(conflictMessage) Cloud upload and delivery are not verified by Folio."
+    }
+
+    func validateCloudFolder(_ folder: URL) throws {
+        guard folder.isFileURL,
+              try folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+            throw JoplinImportError.invalid("Choose an existing, locally downloaded folder managed by your cloud provider.")
+        }
+        let root = folder.standardizedFileURL.resolvingSymlinksInPath().path
+        let local = storage.url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath().path
+        guard root != "/", root != local, !root.hasPrefix(local + "/"), !local.hasPrefix(root + "/") else {
+            throw JoplinImportError.invalid("Choose a dedicated cloud folder outside Folio's local library storage, not that storage or one of its parent folders.")
+        }
+    }
+
+    @discardableResult
+    func exportDatedBackup(to parent: URL, on date: Date = Date()) throws -> URL {
+        guard isLoaded, !isReadOnly, !isSyncing else {
+            throw JoplinImportError.invalid("Open an editable library and wait for folder exchange to finish before exporting a backup.")
+        }
+        let accessing = parent.startAccessingSecurityScopedResource()
+        defer { if accessing { parent.stopAccessingSecurityScopedResource() } }
+        try validateCloudFolder(parent)
+        let name = "Folio Backup " + date.ISO8601Format().replacingOccurrences(of: ":", with: "-") + " " + UUID().uuidString
+        let destination = parent.appendingPathComponent(name, isDirectory: true)
+        var coordinationError: NSError?
+        var result: Result<Void, Error>?
+        NSFileCoordinator().coordinate(writingItemAt: parent, options: .forMerging, error: &coordinationError) { coordinated in
+            result = Result {
+                try LibraryBackup.export(library, to: coordinated.appendingPathComponent(name, isDirectory: true))
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        guard let result else { throw JoplinImportError.invalid("The backup folder could not be coordinated. Retry once it is available locally.") }
+        try result.get()
+        return destination
     }
 
     func importBackup(from folder: URL) throws {
@@ -890,8 +939,8 @@ final class NotesStore: ObservableObject {
 
     func chooseSyncFolder() {
         let panel = NSOpenPanel()
-        panel.title = "Connect an iCloud Drive Folder"
-        panel.message = "Select the same dedicated folder on each device. Folio keeps local offline copies and exchanges immutable snapshots when you choose Sync Now. Start on one device, then let iCloud download the folder before connecting the next."
+        panel.title = "Connect a Cloud Folder"
+        panel.message = "Choose a dedicated, locally downloaded folder in Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Folio exchanges snapshots manually; the provider handles upload. Start on one Mac and wait for delivery before connecting the next. Provider delivery is experimental and unverified."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
@@ -930,15 +979,14 @@ final class NotesStore: ObservableObject {
     func exportBackup() {
         let panel = NSOpenPanel()
         panel.title = "Choose Where to Save a Complete Folio Backup"
-        panel.message = "A new timestamped folder will include all notes and original attachments. This is a backup, not live sync."
+        panel.message = "Choose a local folder or a downloaded Dropbox, OneDrive, Google Drive or iCloud folder. A new dated copy includes notes, history and original attachments. This is a manual backup, not scheduled backup or live sync. Folio cannot confirm cloud upload."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let parent = panel.url else { return }
-        let name = "Folio Backup " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
         do {
-            let folder = parent.appendingPathComponent(name, isDirectory: true)
-            try exportBackup(to: folder)
+            let folder = try exportDatedBackup(to: parent)
+            importSummary = "Complete backup saved locally. Check your cloud provider for upload completion. Keep an independent backup: cloud sync can propagate deletions."
             NSWorkspace.shared.activateFileViewerSelecting([folder])
         } catch { errorMessage = "Backup failed: \(error.localizedDescription)" }
     }

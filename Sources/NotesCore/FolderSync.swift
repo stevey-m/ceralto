@@ -83,7 +83,7 @@ public enum FolderSync {
                     FolderSyncState(folderID: identity.id)
                 let incoming = try snapshots(in: root.appendingPathComponent("snapshots"), folderID: identity.id)
                 guard !incoming.isEmpty else {
-                    throw JoplinImportError.invalid("Sync this folder from your Mac first, then let iCloud download it.")
+                    throw JoplinImportError.invalid("Sync this folder from your Mac first, then let your cloud provider download it.")
                 }
                 return try merge(incoming, localState: state, assets: assets)
             }
@@ -308,7 +308,7 @@ public enum FolderSync {
             let file = folder.appendingPathComponent(path).standardizedFileURL.resolvingSymlinksInPath()
             guard file.path.hasPrefix(folder.standardizedFileURL.resolvingSymlinksInPath().path + "/"),
                   digest(try availableData(at: file)) == hash else {
-                throw JoplinImportError.invalid("A sync snapshot is incomplete or damaged. No local notes were replaced. Retry after iCloud finishes downloading.")
+                throw JoplinImportError.invalid("A sync snapshot is incomplete or damaged. No local notes were replaced. Retry after your cloud provider finishes downloading.")
             }
         }
     }

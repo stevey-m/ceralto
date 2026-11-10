@@ -4,7 +4,7 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general = "General", appearance = "Appearance", editor = "Editor"
-    case files = "Files & Backups", sync = "iCloud", extensions = "Community Extensions"
+    case files = "Files & Backups", sync = "Cloud Folders", extensions = "Community Extensions"
     case features = "Built-in Features"
     case shortcuts = "Keyboard Shortcuts"
 
@@ -29,7 +29,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: "theme system light dark dracula accent gold blue purple green rose font text size images width panes layout"
         case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates"
         case .files: "library storage location import export joplin markdown html attachments backup restore history privacy encryption trash"
-        case .sync: "icloud folder connect disconnect sync offline ipad refresh snapshots conflicts"
+        case .sync: "icloud dropbox onedrive google drive cloud folder connect disconnect sync offline ipad refresh snapshots conflicts backup"
         case .extensions: "templates packs plugins api community reload install joplin obsidian compatibility inspect folders"
         case .features: "core plugins built in optional tools daily notes templates tasks enable disable"
         case .shortcuts: "keyboard shortcuts hotkeys commands palette tabs back forward navigation capture finder search save focus"
@@ -211,19 +211,30 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         case .sync:
-            Section("iCloud Drive folder") {
+            Section("Cloud folder exchange (experimental)") {
+                Text("Choose a dedicated folder managed by Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Install and sign in to that app separately, and keep the entire folder downloaded or available offline.")
+                    .foregroundStyle(.secondary)
                 LabeledContent("Connected folder", value: store.syncFolderName ?? "Not connected")
                 Text(store.syncMessage).textSelection(.enabled)
-                Button("Connect iCloud Drive Folder...", action: store.chooseSyncFolder)
+                Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
                     .disabled(!store.isLoaded || store.isSyncing)
                 Button(store.isSyncing ? "Syncing..." : "Sync Now", action: store.syncNow)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
                 Button("Disconnect", action: store.disconnectSyncFolder)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
             }
+            Section("Backups are separate from sync") {
+                Button("Export Dated Complete Backup...", action: store.exportBackup)
+                    .disabled(!store.isLoaded || store.isReadOnly || store.isSyncing)
+                Button("Import Folio Backup...", action: store.importBackup).disabled(!store.isLoaded)
+                Text("Choose a separate backup location, ideally outside the sync folder or with another provider. Each manual backup creates a new dated copy of notes, history and original attachments. Nothing is overwritten or automatically pruned. No scheduled backups or direct cloud account sign-in are implemented.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("A local save does not confirm upload. Check the provider's app before relying on another device. Cloud deletion can remove synced backups too; keep an independent copy. Files are readable, not end-to-end encrypted by Folio.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Offline reader & limitations") {
-                Text("On iPad, connect the same folder and refresh to keep a local read-only copy. Xcode signing and installation are required.")
-                Text("Experimental manual snapshot exchange, not continuous sync. Physical-device iCloud delivery is unverified. Full snapshots are retained indefinitely, including earlier deleted notes, and are not end-to-end encrypted by Folio.")
+                Text("The iPad reader's existing iCloud path remains experimental. Third-party Files-provider access on iPad is not validated; selecting a Mac cloud folder does not enable direct iPad account access. Xcode signing and installation are required.")
+                Text("Manual snapshot exchange, not continuous sync. Dropbox, OneDrive, Google Drive and physical-device iCloud delivery are unverified. Full snapshots are retained indefinitely, including earlier deleted notes. Do not move the live library.json into a cloud folder.")
                     .foregroundStyle(.secondary)
             }
         case .extensions:

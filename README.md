@@ -15,20 +15,21 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.9.0 is a development release, not a finished replacement for your library.**
+**0.10.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
 
-The iCloud Drive folder exchange is **experimental**. Its merge, conflict,
+The cloud-folder exchange is **experimental**. Its merge, conflict,
 deletion and offline-resource behaviour is covered by local filesystem tests;
-cross-device iCloud delivery has not been validated on physical devices.
+Dropbox, OneDrive, Google Drive and cross-device iCloud delivery have not
+been validated against live accounts or physical devices.
 Keep an independent backup and start with a small test notebook.
 
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.9.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.10.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -151,6 +152,39 @@ stay in memory and Folio warns before quitting. History retains up to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 Restoring also preserves the current version.
 
+## Dropbox, OneDrive, Google Drive and cloud folders
+
+On Mac, choose **Settings > Cloud Folders > Connect Cloud Folder** and select
+a dedicated folder managed by your provider's installed desktop app.
+Sign in using that app, not Folio, and mark the entire folder as downloaded or
+available offline. Select the same folder on another Mac only after the
+provider has delivered the initial snapshot. Use **Sync Now** manually after
+editing, then check the provider's status before refreshing the other Mac.
+Existing iCloud folder bookmarks and the snapshot format are unchanged.
+
+Folio keeps its working library local and exchanges immutable, checksummed
+snapshots with original attachments. Connection rejects folders overlapping
+Folio's local storage. Status reports **local exchange**, never verified
+upload or delivery. Offline placeholders, partially delivered snapshots and
+provider failures may require keeping the folder downloaded and retrying.
+This generic folder path is experimental, not a certified integration with
+any provider. No OAuth, direct cloud API, background scheduling, automatic
+provider detection or cross-provider copying is implemented.
+
+**Export Dated Complete Backup** lets you choose a separate local/cloud
+location. Each manual backup creates a unique dated directory containing
+notes, history and original attachments. Restore with **Import Folio Backup**;
+import adds copies without replacing current notes. Sync snapshots are not a
+substitute for independent backups: cloud deletion can propagate to backups
+in the same account. There is no automatic pruning or scheduled backup.
+Settings, unsaved drafts, smart folders and plugin registrations are not part
+of these library backups. Use Time Machine for the entire local app folder.
+
+Keep an independent copy. Files in cloud folders are readable; Folio does not
+provide end-to-end encryption. The existing iPad iCloud reader remains
+experimental; Dropbox/OneDrive/Google Drive access through iPad Files is not
+validated and is not enabled by connecting a Mac folder.
+
 ## Daily notes, templates and tasks
 
 Daily notes use your Mac's local Gregorian date and the exact `YYYY-MM-DD` title
@@ -272,7 +306,7 @@ search, readable pages and tap-to-open original images in the document area. The
 half-finished editing controls.
 
 1. On Mac, create a dedicated folder in **iCloud Drive**. In Folio choose
-   **File > Connect iCloud Drive Folder**, then **Sync Now**.
+   **File > Connect Cloud Folder**, then **Sync Now**.
 2. Let iCloud upload it. In Files on iPad, make the folder available offline
    using **Keep Downloaded** where available.
 3. In the iPad reader, choose **Connect iCloud Drive Folder** and select that
@@ -385,7 +419,7 @@ export writes only the source body; use an open-folder export or complete
 backup for original attachments.
 
 There is no Folio account, subscription, analytics service or runtime server.
-Your chosen system iCloud account handles file delivery. Local notes, drafts
+Your chosen provider's desktop app handles file delivery. Local notes, drafts
 and snapshots are not encrypted by Folio. Use device protection/FileVault.
 History and retained attachments are not substitutes for independent backups.
 
@@ -402,7 +436,8 @@ then select a matching category:
   Existing notes and imports keep their format; automatic correction stays off.
 - **Files & Backups:** actual library location, imports, portable exports,
   complete backups and recovery guidance.
-- **iCloud:** folder connection, manual sync, status and offline iPad guidance.
+- **Cloud Folders:** provider-neutral folder connection, manual snapshot
+  exchange, dated complete backups, local-only status and offline iPad guidance.
 - **Extensions:** installed template packs, chooser, folder access, reload and API docs.
 - **Keyboard Shortcuts:** editable application assignments and fixed contextual
   editing references. Default Sync is Command-Shift-R; Command-Option-S toggles
