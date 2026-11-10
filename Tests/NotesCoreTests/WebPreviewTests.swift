@@ -28,9 +28,10 @@ struct WebPreviewTests {
         let parent = DocumentWebView(html: html, resources: resources, onImage: { expandedURL = $0 }, onError: { error = $0 })
         let coordinator = DocumentWebView.Coordinator(parent: parent)
         let web = DocumentWebView.makeWebView(coordinator: coordinator)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 600),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = web
+        web.frame = NSRect(x: 0, y: 0, width: 1240, height: 600)
         defer {
             web.stopLoading()
             web.configuration.userContentController.removeScriptMessageHandler(forName: "folioImage", contentWorld: .defaultClient)
@@ -49,7 +50,11 @@ struct WebPreviewTests {
         let width = try await web.evaluateJavaScript("document.querySelector('img').getBoundingClientRect().width")
         let renderedWidth = try #require(width as? Double)
         if imageWidth == 0 {
-            #expect(renderedWidth >= 630, "Default images must not be reduced to tiny thumbnails.")
+            let available = try await web.evaluateJavaScript("document.querySelector('main').getBoundingClientRect().width")
+            let availableWidth = try #require(available as? Double)
+            #expect(availableWidth > 1100)
+            #expect(abs(renderedWidth - availableWidth) <= 2,
+                    "Default images must fill the document width, even beyond the text column and original display size.")
         } else {
             #expect(renderedWidth <= 180)
             #expect(renderedWidth >= 170)

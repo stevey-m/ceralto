@@ -71,10 +71,15 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
   Mac and iPad. **Note actions > Linked Mentions** shows backlinks on Mac.
   Duplicate titles need a qualified notebook path. Code examples are not
   treated as links. Renames do not automatically rewrite existing links.
-- **Read pictures comfortably.** Images fit the available note width without
-  overwriting originals. In Preview, click for Fit, 100% and zoom controls.
-  In Compose, click an attachment image to open its original in the Mac's
-  associated application. Add files with the paperclip, drag files into Compose,
+- **Let pictures fill the page.** Images fill the available document width in
+  Preview and Compose, even when the text uses a narrower reading column.
+  Original files and aspect ratios are preserved. Click an image to open it
+  in the main document area, not a popup or another application. Pinch on the
+  trackpad to zoom, scroll to pan, and choose **Fit to window** to reset.
+  **Back to note** (or Escape on Mac) returns without rebuilding the note view.
+  The iPad reader uses the same in-document navigation with pinch and drag.
+  Smaller preview sizes remain available in Settings.
+  Add files with the paperclip, drag files into Compose,
   or paste files copied in Finder. Text paste is intentionally plain text;
   clipboard-only image paste and rich-text paste are not yet supported.
 - **Make it yours, quietly.** System and Dracula appearances, font family, text
@@ -89,7 +94,7 @@ Restoring also preserves the current version.
 ## Your Mac library on iPad
 
 The first iPad experience is deliberately **viewing only**: notebooks, tags,
-search, readable pages and tap-to-expand original images. There are no
+search, readable pages and tap-to-open original images in the document area. There are no
 half-finished editing controls.
 
 1. On Mac, create a dedicated folder in **iCloud Drive**. In Folio choose

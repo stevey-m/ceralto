@@ -7,6 +7,7 @@ import WebKit
 struct MarkdownPreview: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
+    var onImage: ((URL) -> Void)?
     @AppStorage("folioTheme") private var theme = FolioTheme.dracula.rawValue
     @AppStorage("readingFont") private var font = ReadingFont.monospace.rawValue
     @AppStorage("editorFontSize") private var fontSize = 15.0
@@ -34,13 +35,28 @@ struct MarkdownPreview: View {
     private var links: [String: UUID] { NoteLinks.targets(in: store.library) }
 
     var body: some View {
+        ZStack {
+            previewContent
+                .opacity(expandedImage == nil ? 1 : 0)
+                .allowsHitTesting(expandedImage == nil)
+                .accessibilityHidden(expandedImage != nil)
+            if let expandedImage {
+                ImageDocumentView(url: expandedImage.url) { self.expandedImage = nil }
+            }
+        }
+        .onChange(of: note.id) { _, _ in expandedImage = nil }
+        .accessibilityLabel("Note preview")
+    }
+
+    private var previewContent: some View {
         Group {
             if let renderError {
                 ContentUnavailableView("Could not display this note", systemImage: "exclamationmark.triangle",
                                        description: Text(renderError))
             } else {
                 DocumentWebView(html: document, resources: resources) { url in
-                    expandedImage = ImageSelection(url: url)
+                    if let onImage { onImage(url) }
+                    else { expandedImage = ImageSelection(url: url) }
                 } onError: { renderError = $0 } onNote: { store.openNote($0) }
             }
         }
@@ -61,10 +77,6 @@ struct MarkdownPreview: View {
                 renderError = error.localizedDescription
             }
         }
-        .sheet(item: $expandedImage) { selection in
-            ImageViewer(url: selection.url)
-        }
-        .accessibilityLabel("Note preview")
     }
 }
 
@@ -215,49 +227,5 @@ struct DocumentWebView: NSViewRepresentable {
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             parent.onError("The preview process stopped. Switch notes or change the note to reload it.")
         }
-    }
-}
-
-private struct ImageViewer: View {
-    let url: URL
-    @Environment(\.dismiss) private var dismiss
-    @ViewState private var image: NSImage?
-    @ViewState private var zoom: Double = 1
-    @ViewState private var fit = true
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Text(url.lastPathComponent).font(.headline).lineLimit(1)
-                Spacer()
-                Button("Fit") { fit = true }
-                Button("100%") { fit = false; zoom = 1 }
-                Slider(value: $zoom, in: 0.1...4, onEditingChanged: { _ in fit = false })
-                    .frame(width: 130).accessibilityLabel("Image zoom")
-                Text("\(Int(zoom * 100))%").monospacedDigit().frame(width: 45)
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding(16)
-            Divider()
-            if let image {
-                GeometryReader { geometry in
-                    let scale = fit ? min(geometry.size.width / max(image.size.width, 1),
-                                          geometry.size.height / max(image.size.height, 1), 1) : zoom
-                    ScrollView([.horizontal, .vertical]) {
-                        Image(nsImage: image).resizable().interpolation(.high)
-                            .frame(width: image.size.width * scale, height: image.size.height * scale)
-                            .frame(minWidth: geometry.size.width, minHeight: geometry.size.height)
-                            .accessibilityLabel(url.lastPathComponent)
-                    }
-                }
-                .background(Color.black.opacity(0.35))
-            } else {
-                ContentUnavailableView("Cannot open image", systemImage: "photo.badge.exclamationmark",
-                                       description: Text("The file is missing or is not a supported image."))
-            }
-        }
-        .frame(minWidth: 700, minHeight: 500)
-        .frame(idealWidth: 1000, idealHeight: 740)
-        .onAppear { image = NSImage(contentsOf: url) }
     }
 }

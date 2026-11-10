@@ -3,6 +3,26 @@ import NotesCore
 import Testing
 
 struct PreviewTests {
+    @Test func preservesJoplinStyleLineBreaksAndSemanticTables() throws {
+        let source = """
+        First line
+        Second line
+
+        | Course | Objectives | |
+        | --- | ---: | --- |
+        | **Example** | First<br>Second | |
+        """
+        let html = try PreviewDocument.html(source: source, format: .markdown, resources: nil)
+        #expect(html.contains("First line<br"))
+        #expect(html.contains("class=\"folio-table-scroll\""))
+        #expect(html.contains("<table>"))
+        #expect(html.contains("align=\"right\""))
+        #expect(html.contains("strong,em { color: inherit; }"))
+        #expect(!html.contains("min-width: 60px"))
+        let commonMark = try PreviewDocument.markdownHTML("First line\nSecond line")
+        #expect(!commonMark.contains("<br"))
+    }
+
     @Test func rendersCommonMarkAndGFM() throws {
         let html = try PreviewDocument.markdownHTML("""
         # A heading

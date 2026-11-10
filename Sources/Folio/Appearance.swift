@@ -46,7 +46,7 @@ struct AppearanceSettings: View {
                 Text("Medium (300 px)").tag(300)
             }
             Toggle("Full-width note pages", isOn: $fullWidth)
-            Text("Images fit the note width by default, without shrinking the original. Click an image for Fit, 100%, or zoom controls.")
+            Text("Images fill the available note width without changing the original. Click to open in the document area; pinch to zoom, scroll to pan, and use Back to note to return.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Reset Reading Layout") {
                 UserDefaults.standard.set(220.0, forKey: "notebookPaneWidth")

@@ -191,6 +191,36 @@ private struct MobilePreview: View {
     }
 
     var body: some View {
+        ZStack {
+            previewContent
+                .opacity(expanded == nil ? 1 : 0)
+                .allowsHitTesting(expanded == nil)
+                .accessibilityHidden(expanded != nil)
+            if let expanded {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button { self.expanded = nil } label: {
+                            Label("Back to note", systemImage: "chevron.left")
+                        }
+                        Spacer()
+                        Text(expanded.url.lastPathComponent).lineLimit(1).foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    Divider()
+                    if UIImage(contentsOfFile: expanded.url.path) != nil {
+                        ZoomImage(url: expanded.url).id(expanded.url)
+                    } else {
+                        ContentUnavailableView("Cannot open image", systemImage: "photo.badge.exclamationmark",
+                                               description: Text("The file is missing or is not a supported image."))
+                    }
+                }
+                .background(Color(uiColor: .systemBackground))
+            }
+        }
+        .onChange(of: note.id) { _, _ in expanded = nil }
+    }
+
+    private var previewContent: some View {
         Group {
             if let error {
                 ContentUnavailableView("Preview unavailable", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -211,13 +241,6 @@ private struct MobilePreview: View {
                 error = nil
             } catch { self.error = error.localizedDescription }
         }
-        .sheet(item: $expanded) { image in
-            NavigationStack {
-                ZoomImage(url: image.url).ignoresSafeArea(edges: .bottom)
-                    .navigationTitle("Original image").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button("Done") { expanded = nil } }
-            }
-        }
     }
 }
 
@@ -231,24 +254,53 @@ private struct MobileRenderRequest: Equatable {
 
 private struct ZoomImage: UIViewRepresentable {
     let url: URL
-    func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UIScrollView {
-        let scroll = UIScrollView()
-        scroll.minimumZoomScale = 1
-        scroll.maximumZoomScale = 8
-        scroll.delegate = context.coordinator
-        let image = UIImageView(image: UIImage(contentsOfFile: url.path))
-        image.contentMode = .scaleAspectFit
-        image.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        image.frame = scroll.bounds
-        scroll.addSubview(image)
-        context.coordinator.image = image
-        return scroll
+        MobileImageScrollView(image: UIImage(contentsOfFile: url.path))
     }
     func updateUIView(_ view: UIScrollView, context: Context) {}
-    final class Coordinator: NSObject, UIScrollViewDelegate {
-        var image: UIImageView?
-        func viewForZooming(in scrollView: UIScrollView) -> UIView? { image }
+}
+
+private final class MobileImageScrollView: UIScrollView, UIScrollViewDelegate {
+    private let picture: UIImageView
+    private var viewport = CGSize.zero
+
+    init(image: UIImage?) {
+        picture = UIImageView(image: image)
+        super.init(frame: .zero)
+        picture.contentMode = .scaleAspectFit
+        let size = image?.size ?? CGSize(width: 1, height: 1)
+        picture.frame = CGRect(origin: .zero, size: size)
+        addSubview(picture)
+        contentSize = size
+        delegate = self
+        contentInsetAdjustmentBehavior = .never
+        picture.accessibilityLabel = "Original image. Pinch to zoom and drag to pan."
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if viewport != bounds.size, bounds.width > 0, bounds.height > 0 {
+            let wasFitted = viewport == .zero || abs(zoomScale - minimumZoomScale) < 0.001
+            viewport = bounds.size
+            let size = picture.bounds.size
+            let fit = min(bounds.width / max(size.width, 1), bounds.height / max(size.height, 1))
+            minimumZoomScale = fit
+            maximumZoomScale = max(8, fit * 8)
+            if wasFitted { setZoomScale(fit, animated: false) }
+        }
+        centerImage()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { picture }
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { centerImage() }
+
+    private func centerImage() {
+        let horizontal = max(0, (bounds.width - picture.frame.width) / 2)
+        let vertical = max(0, (bounds.height - picture.frame.height) / 2)
+        let inset = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
+        if contentInset != inset { contentInset = inset }
     }
 }
 

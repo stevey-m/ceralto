@@ -216,8 +216,33 @@ final class PageTextView: NSTextView {
     var resources: ImportedResources?
     var onFiles: (([URL]) -> Void)?
     var onError: ((String) -> Void)?
+    var onImage: ((URL) -> Void)?
     var pageFontSize = 16.0
     var pageFont = ReadingFont.system
+
+    override func mouseDown(with event: NSEvent) {
+        if openImage(at: convert(event.locationInWindow, from: nil)) { return }
+        super.mouseDown(with: event)
+    }
+
+    @discardableResult
+    func openImage(at point: NSPoint) -> Bool {
+        guard let layout = layoutManager, let container = textContainer, let storage = textStorage else { return false }
+        let location = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let glyph = layout.glyphIndex(for: location, in: container)
+        guard glyph < layout.numberOfGlyphs else { return false }
+        let index = layout.characterIndexForGlyph(at: glyph)
+        guard index < storage.length,
+              let reference = storage.attribute(.folioImage, at: index, effectiveRange: nil) as? String,
+              layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).contains(location)
+        else { return false }
+        guard let url = resources?.localURL(for: reference), let onImage else {
+            onError?("This image is missing or its viewer is unavailable.")
+            return true
+        }
+        onImage(url)
+        return true
+    }
 
     override func insertNewline(_ sender: Any?) {
         let style = FormattedBlock.Style(rawValue: typingAttributes[.folioBlock] as? String ?? "") ?? .paragraph
@@ -301,7 +326,7 @@ final class PageTextView: NSTextView {
         storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
             guard let attachment = value as? NSTextAttachment, let image = attachment.image else { return }
             let natural = image.size
-            let fitted = min(width, max(1, natural.width))
+            let fitted = width
             attachment.bounds = NSRect(x: 0, y: 0, width: fitted,
                                       height: fitted * max(1, natural.height) / max(1, natural.width))
         }
@@ -316,6 +341,7 @@ struct FormattedEditor: View {
     var onChange: (String) -> Void
     var onFiles: ([URL]) -> Void
     var onError: (String) -> Void
+    var onImage: (URL) -> Void
     @StateObject private var actions = FormattingActions()
     @ViewState private var addingLink = false
     @ViewState private var link = ""
@@ -346,7 +372,8 @@ struct FormattedEditor: View {
             .padding(.horizontal, 28).padding(.vertical, 12)
             Divider()
             NativePageView(html: note.body, resources: resources, size: fontSize, family: family,
-                           dracula: dracula, actions: actions, onChange: onChange, onFiles: onFiles, onError: onError)
+                           dracula: dracula, actions: actions, onChange: onChange, onFiles: onFiles,
+                           onError: onError, onImage: onImage)
         }
         .popover(isPresented: $addingLink) {
             VStack(alignment: .leading, spacing: 12) {
@@ -405,6 +432,7 @@ struct NativePageView: NSViewRepresentable {
     var onChange: (String) -> Void
     var onFiles: ([URL]) -> Void
     var onError: (String) -> Void
+    var onImage: ((URL) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -447,6 +475,7 @@ struct NativePageView: NSViewRepresentable {
         editor.resources = resources
         editor.onFiles = onFiles
         editor.onError = onError
+        editor.onImage = onImage
         editor.pageFont = family
         editor.pageFontSize = size
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
@@ -520,7 +549,11 @@ struct NativePageView: NSViewRepresentable {
                 parent.onError("This image is missing or outside this note's resource folder.")
                 return
             }
-            if !NSWorkspace.shared.open(url) { parent.onError("Could not open the original image.") }
+            guard let onImage = parent.onImage else {
+                parent.onError("The image viewer is not available.")
+                return
+            }
+            onImage(url)
         }
     }
 }

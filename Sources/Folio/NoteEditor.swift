@@ -19,11 +19,26 @@ struct NoteEditor: View {
     @ViewState private var showingTags = false
     @ViewState private var confirmingSource = false
     @ViewState private var showingBacklinks = false
+    @ViewState private var imageURL: URL?
 
     private var isTrashed: Bool { note.deletedAt != nil }
     private var editorMode: EditorMode { EditorMode(rawValue: mode) ?? .preview }
 
     var body: some View {
+        ZStack {
+            notePage
+                .disabled(imageURL != nil)
+                .opacity(imageURL == nil ? 1 : 0)
+                .allowsHitTesting(imageURL == nil)
+                .accessibilityHidden(imageURL != nil)
+            if let imageURL {
+                ImageDocumentView(url: imageURL) { self.imageURL = nil }
+            }
+        }
+        .onChange(of: note.id) { _, _ in imageURL = nil }
+    }
+
+    private var notePage: some View {
         VStack(spacing: 0) {
             if isTrashed {
                 HStack {
@@ -99,7 +114,7 @@ struct NoteEditor: View {
                 } onFiles: { urls in
                     do { try store.attachFiles(urls, to: note.id) }
                     catch { store.errorMessage = "Could not attach files: \(error.localizedDescription)" }
-                } onError: { store.errorMessage = $0 }
+                } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
             } else if editorMode == .split && !isTrashed {
                 HSplitView {
                     sourceEditor.frame(minWidth: 130)
@@ -216,7 +231,7 @@ struct NoteEditor: View {
     }
 
     private var preview: some View {
-        MarkdownPreview(note: note)
+        MarkdownPreview(note: note, onImage: { imageURL = $0 })
     }
 
     private func noteBinding(_ keyPath: WritableKeyPath<Note, String>) -> Binding<String> {

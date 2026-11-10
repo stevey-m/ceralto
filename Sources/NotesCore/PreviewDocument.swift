@@ -70,7 +70,7 @@ public struct ImportedResources: Equatable, Sendable {
 }
 
 public enum PreviewDocument {
-    public static func markdownHTML(_ source: String) throws -> String {
+    public static func markdownHTML(_ source: String, hardLineBreaks: Bool = false) throws -> String {
         // The extension registry is process-global. Serializing registration and rendering
         // keeps concurrent preview requests from racing cmark's registry.
         registryLock.lock()
@@ -91,7 +91,8 @@ public enum PreviewDocument {
             throw JoplinImportError.invalid("Markdown could not be parsed.")
         }
         defer { cmark_node_free(document) }
-        guard let rendered = cmark_render_html(document, CMARK_OPT_UNSAFE, cmark_parser_get_syntax_extensions(parser)) else {
+        let renderOptions = CMARK_OPT_UNSAFE | (hardLineBreaks ? CMARK_OPT_HARDBREAKS : 0)
+        guard let rendered = cmark_render_html(document, renderOptions, cmark_parser_get_syntax_extensions(parser)) else {
             throw JoplinImportError.invalid("Markdown could not be rendered.")
         }
         defer { free(rendered) }
@@ -102,12 +103,17 @@ public enum PreviewDocument {
 
     public static func html(source: String, format: NoteFormat, resources: ImportedResources?,
                             options: PreviewOptions = PreviewOptions(), noteLinks: [String: UUID] = [:]) throws -> String {
-        let input = format.usesHTML ? source : try markdownHTML(source)
-        let safe = try NoteLinks.linkedBody(sanitizedBody(input, resources: resources), targets: noteLinks)
+        let input = format.usesHTML ? source : try markdownHTML(source, hardLineBreaks: format == .markdown)
+        let linked = try NoteLinks.linkedBody(sanitizedBody(input, resources: resources), targets: noteLinks)
+        let document = try SwiftSoup.parseBodyFragment(linked)
+        for table in try document.select("table") {
+            try table.wrap("<div class=\"folio-table-scroll\"></div>")
+        }
+        let safe = try document.body()?.html() ?? ""
         let thumbnail = min(max(options.thumbnailSize, 64), 400)
         let imageSizing = options.thumbnailSize == 0
-            ? "max-width: 100%; max-height: none;"
-            : "max-width: min(100%, \(thumbnail)px); max-height: \(thumbnail)px;"
+            ? "width: 100% !important; max-width: 100%; max-height: none;"
+            : "width: auto !important; max-width: min(100%, \(thumbnail)px); max-height: \(thumbnail)px;"
         let fontSize = min(max(options.fontSize, 11), 32)
         let dracula = options.theme == .dracula
         return """
@@ -124,22 +130,30 @@ public enum PreviewDocument {
           --green: \(dracula ? "#50fa7b" : "#168143"); --pink: \(dracula ? "#ff79c6" : "#ae287b"); }
         * { box-sizing: border-box; }
         body { margin: 0; padding: 28px 32px 64px; background: var(--bg); color: var(--fg);
-          font: \(fontSize)px/1.7 \(options.font.css); overflow-wrap: anywhere; }
-        main { max-width: \(options.fullWidth ? "none" : "860px"); margin: 0 auto; }
+          font: \(fontSize)px/1.5 \(options.font.css); overflow-wrap: anywhere; }
+        main { max-width: none; margin: 0 auto; }
+        main > * { max-width: \(options.fullWidth ? "none" : "860px"); margin-inline: auto; }
+        main > p:has(img.folio-thumbnail), main > figure { max-width: none; }
+        main > .folio-table-scroll { max-width: none; }
         h1,h2,h3,h4,h5,h6 { line-height: 1.3; margin: 1.4em 0 .6em; color: var(--accent); }
         h1 { font-size: 2em; } h2 { font-size: 1.5em; border-bottom: 1px solid var(--line); padding-bottom: .3em; }
         h3 { font-size: 1.2em; } p { margin: .8em 0; } a { color: var(--accent); }
-        strong { color: var(--pink); } em { color: var(--green); }
+        strong,em { color: inherit; }
         pre { background: var(--code); padding: 18px; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
         code { font-family: 'SF Mono', Menlo, monospace; background: var(--code); border-radius: 4px; padding: .12em .3em; }
         pre code { padding: 0; } blockquote { margin: 1em 0; border-left: 3px solid var(--accent);
           padding: .2em 1em; background: var(--code); border-radius: 0 6px 6px 0; color: var(--muted); }
         ul,ol { padding-left: 1.8em; } li { margin: .3em 0; } li > p { margin: .35em 0; }
-        table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 1em 0; }
-        td,th { border: 1px solid var(--line); padding: 8px 12px; min-width: 60px; }
-        th { background: var(--code); color: var(--accent); } hr { border: 0; border-top: 1px solid var(--line); margin: 1.5em 0; }
+        .folio-table-scroll { overflow-x: auto; margin: .6em 0 .65em; }
+        table { border-collapse: collapse; text-align: left; margin: 0; }
+        td,th { border: 1px solid var(--line); padding: .5em 1em; color: var(--fg); }
+        th { background: var(--code); border-bottom-width: 2px; }
+        td[align=center],th[align=center] { text-align: center; }
+        td[align=right],th[align=right] { text-align: right; }
+        table tr:nth-child(even) { background: var(--code); }
+        hr { border: 0; border-top: 1px solid var(--line); margin: 1.5em 0; }
         img.folio-thumbnail { display: inline-block; \(imageSizing)
-          width: auto !important; height: auto !important; object-fit: contain;
+          height: auto !important; object-fit: contain;
           border: 1px solid var(--line); border-radius: 6px; cursor: zoom-in; vertical-align: middle; margin: 6px 0; }
         img.folio-thumbnail:hover, img.folio-thumbnail:focus { outline: 2px solid var(--accent); }
         .folio-image-placeholder { display: inline-block; padding: 8px; color: var(--muted);

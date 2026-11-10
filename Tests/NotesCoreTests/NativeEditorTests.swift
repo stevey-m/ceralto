@@ -55,6 +55,47 @@ struct NativeEditorTests {
         #expect(restored.blocks[1].runs.map(\.text).joined() == "Body bold")
     }
 
+    @Test func composeImagesFillThePageAndOpenInTheDocument() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bitmap = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 320, pixelsHigh: 200, bitsPerSample: 8,
+            samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0))
+        let bytes = try #require(bitmap.representation(using: .jpeg, properties: [:]))
+        let file = folder.appendingPathComponent("photo.jpg")
+        try bytes.write(to: file)
+        let resources = ImportedResources(source: folder.appendingPathComponent("note.md"), root: folder)
+        let actions = FormattingActions()
+        var opened: URL?
+        var error: String?
+        let view = NativePageView(html: "![Photo](photo.jpg)", resources: resources, size: 17, family: .system,
+            dracula: false, actions: actions, onChange: { _ in }, onFiles: { _ in },
+            onError: { error = $0 }, onImage: { opened = $0 })
+        let host = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 600),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.frame = NSRect(x: 0, y: 0, width: 1000, height: 600)
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        let editor = try #require(actions.editor)
+        let attachment = try #require(editor.textStorage?.attribute(.attachment, at: 0, effectiveRange: nil) as? NSTextAttachment)
+        #expect(attachment.bounds.width >= 900)
+        #expect(abs(attachment.bounds.width / attachment.bounds.height - 1.6) < 0.01)
+        let layout = try #require(editor.layoutManager)
+        let container = try #require(editor.textContainer)
+        let rect = layout.boundingRect(forGlyphRange: NSRange(location: 0, length: 1), in: container)
+        #expect(editor.openImage(at: NSPoint(x: rect.midX + editor.textContainerOrigin.x,
+                                            y: rect.midY + editor.textContainerOrigin.y)))
+        #expect(opened == file)
+        #expect(error == nil)
+        let preserved = try Data(contentsOf: file)
+        #expect(preserved == bytes)
+    }
+
     @Test func imageReferencesSurviveNativeRoundTripWithoutEmbeddingOrShrinkingBytes() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
