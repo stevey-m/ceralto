@@ -56,6 +56,10 @@ struct FolioApp: App {
                     openWindow(id: "live-markdown")
                     markdown.chooseFolder(avoiding: store.libraryURL)
                 }
+                Button("Reopen Last Markdown Folder") {
+                    openWindow(id: "live-markdown")
+                    markdown.reopenLast(avoiding: store.libraryURL)
+                }.disabled(!markdown.hasRememberedFolder)
                 Button("Import Joplin Folder...", action: store.importJoplinFolder)
                     .disabled(!store.isLoaded || store.isImportingJoplin)
                 Button("Import Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }

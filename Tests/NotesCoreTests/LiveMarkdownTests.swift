@@ -226,7 +226,7 @@ struct LiveMarkdownStoreTests {
         try folder.createDirectory(at: "Work")
         try folder.createNote(at: "Work/Research.md", text: "# Research\n\nA real Markdown file in a subfolder.")
         try folder.createNote(at: "Idea.md", text: "# Live Markdown\n\nOrdinary files, separate from your library.")
-        let model = LiveMarkdownStore()
+        let model = LiveMarkdownStore(stateDirectory: root.appendingPathComponent("recovery"))
         try model.open(files, avoiding: local)
         try await action(model, folder, local, original)
     }

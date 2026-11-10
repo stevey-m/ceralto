@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.14.0 is a development release, not a finished replacement for your library.**
+**0.15.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.14.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.15.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -256,14 +256,47 @@ Save checks the original content digest again and refuses stale writes.
 Choose **Save Draft as New Copy** to keep both versions, or explicitly
 discard the draft and reload disk. Switching notes/folders, closing the
 window and quitting prompt about unsaved edits; a failed Save keeps the draft.
-Edits are saved explicitly, not autosaved; unsaved drafts do not survive an
-application crash or forced termination.
+**Save still writes the Markdown file explicitly.** Changed drafts are also
+written atomically to a separate local recovery area after each text change.
+When the live Markdown window opens again, it reopens the last folder and
+selected note and offers the recovered text. The File menu's **Reopen Last
+Markdown Folder** does the same without displaying another folder chooser.
+A security-scoped bookmark remembers folder access; if it cannot be resolved,
+use **Open Markdown Folder** to reconnect. Folder renames that macOS can resolve
+through the bookmark carry their recovery drafts to the new location.
+
+The **Local Drafts** menu lists recoverable notes, including files moved,
+renamed or deleted outside Deltos. Recovery never writes to those disk files.
+If the original changed, the normal stale-write check still blocks Save;
+use **Save Draft as New Copy** to keep both versions. Successful Save, an
+explicit discard or a confirmed disk reload clears that draft's recovery
+record. A failed recovery write shows an orange warning: the newest words may
+then exist only in memory, so save or copy them before quitting.
+
+The clock-arrow menu provides **Forget Remembered Folder** and **Reveal Local
+Recovery Files**. Forgetting clears the startup bookmark and selection, not
+files or drafts. Corrupt session/recovery files are preserved and reported,
+not silently reset. Local recovery lives in
+`~/Library/Application Support/Folio/LiveMarkdown/`, outside the open folder,
+as ordinary local JSON containing draft text; it is not an encrypted vault,
+cloud sync, version history or a substitute for backup.
+
+### Search the live folder
+
+The sidebar search matches all entered words across a note's relative path and
+saved Markdown source, ignoring case and accents. Results include nested notes
+and short matching excerpts. Select a result to open the original note; clearing
+the query returns to the folder tree and reveals the selected note's parents.
+Search runs off the UI thread, cancels replaced queries and shows at most 200
+matches with a visible truncation notice. Unreadable/oversized/non-UTF-8 files
+are reported rather than silently counted as searched. Use the search refresh
+arrow or **Refresh** to rerun against external changes. Search reads saved files
+only; unsaved drafts, attachment contents and OCR are not indexed.
 
 The first live-folder implementation edits UTF-8 Markdown notes up to 16 MB;
 hidden files (including `.obsidian` configuration), symbolic links and
 non-Markdown files are not offered for editing. No files are imported into the
-JSON library and no sidecar library/index is written to your folder. Choose
-the folder again after restarting. The live window does not run plugins,
+JSON library and no sidecar library/index is written to your folder. The live window does not run plugins,
 resolve Deltos-library wiki links, provide native Compose, or share the normal
 library's search/tags/history/Trash, scheduled backups or snapshot sync.
 Keep an independent folder backup (for example Time Machine).

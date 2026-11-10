@@ -8,7 +8,7 @@ public struct MarkdownEntry: Identifiable, Equatable, Sendable {
     public var name: String { (path as NSString).lastPathComponent }
 }
 
-public struct MarkdownSource: Equatable, Sendable {
+public struct MarkdownSource: Codable, Equatable, Sendable {
     public let text: String
     public let digest: String
 }
@@ -37,6 +37,7 @@ public struct LiveMarkdownFolder: Sendable {
         }
         var result: [MarkdownEntry] = []
         for case let file as URL in enumerator {
+            try Task.checkCancellation()
             let values = try file.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey])
             if values.isSymbolicLink == true { enumerator.skipDescendants(); continue }
             guard values.isDirectory == true || (values.isRegularFile == true && Self.isMarkdown(file)) else { continue }
