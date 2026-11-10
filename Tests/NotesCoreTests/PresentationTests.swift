@@ -68,6 +68,11 @@ struct PresentationTests {
             if let web = view as? WKWebView { return web }
             return view.subviews.compactMap { webView(in: $0) }.first
         }
+        for _ in 0..<100 where webView(in: host) == nil {
+            try await Task.sleep(for: .milliseconds(50))
+            host.layoutSubtreeIfNeeded()
+        }
+        #expect(store.referenceNote?.id == other.id)
         let reference = try #require(webView(in: host))
         var referenceText = ""
         for _ in 0..<50 {
