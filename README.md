@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.8.0 is a development release, not a finished replacement for your library.**
+**0.9.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -28,7 +28,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.8.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.9.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -58,6 +58,14 @@ Shortcuts below are defaults. Customize application commands in
 - **Use your own keys.** Remap or unassign 18 application commands in Settings.
   Menus, toolbar hints and command-palette labels follow the saved assignments.
   Duplicate bindings and reserved standard commands are rejected.
+- **Choose your tools.** Settings separates **Built-in Features** from
+  **Community Extensions**. Switch Daily notes, Template chooser and Task
+  overview on or off without changing notes. Enable individual Folio template
+  packs, or disable all community packs. Register extracted Joplin or Obsidian
+  folders to inspect their names, versions and declared host requirements.
+  **Inspection is not execution:** those plugins cannot run in this release.
+  There is no JavaScript compatibility runtime, catalogue, package/URL installer,
+  update service, or import of Obsidian's bundled core plugins.
 - **Save a search, not another copy.** Smart folders collect matching notes
   automatically without moving or copying the originals. Choose **Save Search**
   above the note list, **New Smart Folder** in the sidebar, or use the File menu

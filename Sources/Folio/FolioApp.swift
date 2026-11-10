@@ -26,8 +26,8 @@ struct FolioApp: App {
                     Button("Choose a Template...") { openWindow(id: "library"); store.perform(.templates) }
                         .keyboardShortcut(store.shortcut(.templates).keyboardShortcut)
                     Divider()
-                    if store.extensions.isEmpty { Text("No template extensions installed") }
-                    ForEach(store.extensions) { pack in
+                    if store.activeTemplatePacks.isEmpty { Text("No enabled template packs") }
+                    ForEach(store.activeTemplatePacks) { pack in
                         Menu(pack.name) {
                             ForEach(pack.templates) { template in
                                 Button(template.name) { store.createFromTemplate(template) }
@@ -37,7 +37,7 @@ struct FolioApp: App {
                     Divider()
                     Button("Open Extensions Folder", action: store.revealExtensions)
                     Button("Reload Extensions", action: store.reloadExtensions)
-                }.disabled(!store.isLoaded)
+                }.disabled(FolioCommand.templates.unavailableReason(in: store) != nil)
                 Button("Quick Capture") { capture() }
                     .keyboardShortcut(store.shortcut(.capture).keyboardShortcut)
                     .disabled(!store.isLoaded)
@@ -113,9 +113,11 @@ struct FolioApp: App {
                     .disabled(store.referenceNote == nil)
                 Divider()
                 Button("Open Today's Note") { openWindow(id: "library"); store.perform(.today) }
-                    .keyboardShortcut(store.shortcut(.today).keyboardShortcut).disabled(!store.isLoaded)
+                    .keyboardShortcut(store.shortcut(.today).keyboardShortcut)
+                    .disabled(FolioCommand.today.unavailableReason(in: store) != nil)
                 Button("Tasks...") { openWindow(id: "library"); store.perform(.tasks) }
-                    .keyboardShortcut(store.shortcut(.tasks).keyboardShortcut).disabled(!store.isLoaded)
+                    .keyboardShortcut(store.shortcut(.tasks).keyboardShortcut)
+                    .disabled(FolioCommand.tasks.unavailableReason(in: store) != nil)
                 Divider()
                 Button("Toggle Main Folders") { store.perform(.toggleFolders) }
                     .keyboardShortcut(store.shortcut(.toggleFolders).keyboardShortcut)

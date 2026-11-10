@@ -60,6 +60,16 @@ enum FolioCommand: String, CaseIterable, Identifiable {
     @MainActor func unavailableReason(in store: NotesStore) -> String? {
         if self == .revealLibrary || self == .revealRecovery { return nil }
         guard store.isLoaded else { return "Open your library first" }
+        let feature: BuiltInFeature?
+        switch self {
+        case .today: feature = .dailyNotes
+        case .templates: feature = .templates
+        case .tasks: feature = .tasks
+        default: feature = nil
+        }
+        if let feature, !store.featureEnabled(feature) {
+            return "Enable \(feature.name) in Settings > Built-in Features"
+        }
         switch self {
         case .back: return store.workspace.canGoBack ? nil : "No earlier document"
         case .forward: return store.workspace.canGoForward ? nil : "No later document"

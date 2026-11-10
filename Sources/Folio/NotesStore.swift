@@ -68,6 +68,10 @@ final class NotesStore: ObservableObject {
     #if os(macOS)
     @Published private(set) var shortcutBindings = ShortcutConfiguration.defaults
     @Published private(set) var shortcutsAvailable = true
+    @Published private(set) var extensionConfiguration = ExtensionManagerConfiguration()
+    @Published private(set) var extensionConfigurationAvailable = true
+    @Published private(set) var extensionConfigurationError: String?
+    @Published private(set) var pluginInspections: [PluginInspection] = []
     #endif
     private let storage: LibraryStorage
     private let preferences: UserDefaults
@@ -283,6 +287,7 @@ final class NotesStore: ObservableObject {
             restoreWorkspace()
             reloadSmartFolders()
             reloadShortcuts()
+            reloadExtensionConfiguration()
             #else
             restoringWorkspace = false
             #endif
@@ -418,6 +423,12 @@ final class NotesStore: ObservableObject {
     }
 
     @discardableResult func createFromTemplate(_ template: NoteTemplate) -> Bool {
+        #if os(macOS)
+        guard featureEnabled(.templates), templateChoices.contains(where: { $0.template == template }) else {
+            errorMessage = "Enable the template chooser in Settings > Built-in Features and this template's pack in Community Extensions before using it."
+            return false
+        }
+        #endif
         guard isLoaded, !isReadOnly, let notebookID = currentNotebookID else {
             errorMessage = "Open an editable notebook before creating a template note."
             return false
@@ -448,12 +459,79 @@ final class NotesStore: ObservableObject {
     }
 
     var templateChoices: [TemplateChoice] {
-        TemplateChoice.builtIn + extensions.flatMap { pack in
+        #if os(macOS)
+        let packs = activeTemplatePacks
+        #else
+        let packs = extensions
+        #endif
+        return TemplateChoice.builtIn + packs.flatMap { pack in
             pack.templates.map { TemplateChoice(packID: pack.id, packName: pack.name, template: $0) }
         }
     }
 
     #if os(macOS)
+    func reloadExtensionConfiguration() {
+        do {
+            let candidate: ExtensionManagerConfiguration
+            if let stored = preferences.object(forKey: ExtensionManagerConfiguration.preferenceKey) {
+                guard let data = stored as? Data else {
+                    throw ExtensionManagementError("The saved configuration is not valid data.")
+                }
+                candidate = try JSONDecoder().decode(ExtensionManagerConfiguration.self, from: data)
+            } else {
+                candidate = ExtensionManagerConfiguration()
+            }
+            try candidate.validate()
+            extensionConfiguration = candidate
+            extensionConfigurationAvailable = true
+            extensionConfigurationError = nil
+        } catch {
+            extensionConfigurationAvailable = false
+            extensionConfigurationError = "Could not load extension settings. Saved data is preserved; community template packs are inactive until settings are recovered or explicitly reset. \(error.localizedDescription)"
+        }
+        applyExtensionConfiguration()
+    }
+
+    func saveExtensionConfiguration(_ candidate: ExtensionManagerConfiguration) {
+        guard isLoaded, !isReadOnly, extensionConfigurationAvailable else {
+            errorMessage = "Open an editable library and recover or reset extension settings before changing them."
+            return
+        }
+        do {
+            try candidate.validate()
+            let data = try JSONEncoder().encode(candidate)
+            preferences.set(data, forKey: ExtensionManagerConfiguration.preferenceKey)
+            extensionConfiguration = candidate
+            applyExtensionConfiguration()
+        } catch { errorMessage = "Could not save extension settings: \(error.localizedDescription)" }
+    }
+
+    func resetExtensionConfiguration() {
+        guard isLoaded, !isReadOnly else {
+            errorMessage = "Open an editable library before resetting extension settings."
+            return
+        }
+        preferences.removeObject(forKey: ExtensionManagerConfiguration.preferenceKey)
+        reloadExtensionConfiguration()
+    }
+
+    private func applyExtensionConfiguration() {
+        if !featureEnabled(.templates) { showingTemplates = false }
+        if !featureEnabled(.tasks) { showingTasks = false }
+        refreshPluginInspections()
+    }
+
+    func refreshPluginInspections() {
+        pluginInspections = extensionConfiguration.plugins.map { location in
+            do {
+                return PluginInspection(location: location, metadata: try PluginInspector.inspect(location.folder), error: nil)
+            } catch {
+                return PluginInspection(location: location, metadata: nil,
+                                        error: "Could not read this plugin's metadata: \(error.localizedDescription)")
+            }
+        }
+    }
+
     func shortcut(_ action: ShortcutAction) -> ShortcutBinding {
         shortcutBindings[action.rawValue] ?? action.defaultBinding
     }
@@ -487,6 +565,11 @@ final class NotesStore: ObservableObject {
     #endif
 
     func openDailyNote(on date: Date = Date()) throws {
+        #if os(macOS)
+        guard featureEnabled(.dailyNotes) else {
+            throw NoteWorkflowError("Daily notes are disabled. Enable them in Settings > Built-in Features.")
+        }
+        #endif
         guard isLoaded, !isReadOnly else { throw NoteWorkflowError("Open an editable library before creating a daily note.") }
         let path = (preferences.string(forKey: "dailyNotebook") ?? "Journal").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty, path.split(separator: "/", omittingEmptySubsequences: false)
@@ -527,6 +610,12 @@ final class NotesStore: ObservableObject {
     }
 
     func setTask(_ task: NoteTask, complete: Bool) {
+        #if os(macOS)
+        guard featureEnabled(.tasks) else {
+            errorMessage = "Task overview is disabled. Markdown checkboxes remain editable in your notes."
+            return
+        }
+        #endif
         guard isLoaded, !isReadOnly, let note = library.notes.first(where: { $0.id == task.noteID }) else {
             errorMessage = "The task's note is unavailable for editing."
             return

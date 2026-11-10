@@ -65,6 +65,21 @@ struct PresentationTests {
         try await preview(TemplateChooser(), size: NSSize(width: 760, height: 540), name: "Folio-templates-preview.png")
         try await preview(SettingsView(section: .shortcuts), size: NSSize(width: 900, height: 680),
                           name: "Folio-shortcuts-preview.png")
+        let plugin = directory.appendingPathComponent("sample-obsidian-plugin")
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        try Data(#"{"id":"sample-workflow","name":"Sample workflow (inspection only)","version":"1.0","minAppVersion":"1.0"}"#.utf8)
+            .write(to: plugin.appendingPathComponent("manifest.json"))
+        store.inspectPluginFolder(plugin)
+        let packFolder = store.extensionsDirectory.appendingPathComponent("meeting-notes")
+        try FileManager.default.createDirectory(at: store.extensionsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: package.appendingPathComponent("Examples/Extensions/meeting-notes"),
+                                        to: packFolder)
+        store.reloadExtensions()
+        try await preview(SettingsView(section: .extensions), size: NSSize(width: 1040, height: 900),
+                          name: "Folio-extensions-preview.png")
+        store.setFeature(.tasks, enabled: false)
+        try await preview(SettingsView(section: .features), size: NSSize(width: 900, height: 680),
+                          name: "Folio-features-preview.png")
     }
 
     @Test func composedPageKeepsItsSpaceAndProducesASyntheticPreview() async throws {

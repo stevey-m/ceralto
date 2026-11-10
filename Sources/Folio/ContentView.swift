@@ -264,13 +264,21 @@ struct ContentView: View {
                     scopeRow("Pinned", icon: "pin", scope: .pinned)
                     scopeRow("Trash", icon: "trash", scope: .trash)
                 }
-                Section("Workspace") {
-                    Button { store.perform(.today) } label: { Label("Today's Note", systemImage: "calendar") }
-                        .buttonStyle(.plain).disabled(!store.isLoaded)
-                    Button { store.perform(.templates) } label: { Label("Templates", systemImage: "doc.on.doc") }
-                        .buttonStyle(.plain).disabled(!store.isLoaded)
-                    Button { store.perform(.tasks) } label: { Label("Tasks", systemImage: "checklist") }
-                        .buttonStyle(.plain).disabled(!store.isLoaded)
+                if BuiltInFeature.allCases.contains(where: store.featureEnabled) {
+                    Section("Workspace") {
+                        if store.featureEnabled(.dailyNotes) {
+                            Button { store.perform(.today) } label: { Label("Today's Note", systemImage: "calendar") }
+                                .buttonStyle(.plain).disabled(!store.isLoaded)
+                        }
+                        if store.featureEnabled(.templates) {
+                            Button { store.perform(.templates) } label: { Label("Templates", systemImage: "doc.on.doc") }
+                                .buttonStyle(.plain).disabled(!store.isLoaded)
+                        }
+                        if store.featureEnabled(.tasks) {
+                            Button { store.perform(.tasks) } label: { Label("Tasks", systemImage: "checklist") }
+                                .buttonStyle(.plain).disabled(!store.isLoaded)
+                        }
+                    }
                 }
                 Section {
                     ForEach(NotebookBranch.build(store.library.notebooks.filter { $0.id != store.inboxID })) { branch in

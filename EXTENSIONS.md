@@ -5,6 +5,47 @@ Obsidian or Joplin `.jpl` plugin compatibility layer, a JavaScript runtime, or a
 No extension code executes. Packs cannot access your library, filesystem,
 network, credentials or other installed extensions.
 
+## Extension manager (0.9)
+
+**Settings > Built-in Features** switches Daily notes, Template chooser and
+Task overview on or off. Disabled tools disappear from the Workspace sidebar
+and their menu commands/shortcuts cannot run. Disabling the chooser does not
+disable templates used by daily notes. Disabling Task overview leaves every
+Markdown checkbox intact and editable in its note. Notes, tool preferences
+and shortcuts are retained.
+
+**Settings > Community Extensions** lists installed Folio template packs with
+enable switches and an explicit **Disable All Community Template Packs**
+action. Disabled packs disappear from the chooser and template menus, but their
+files and previously created notes are untouched. A daily template from a
+disabled pack is unavailable for new dates; existing dated notes still open.
+To uninstall a data-only pack, move its folder out of Extensions and reload.
+Malformed reloads retain the last successfully loaded packs and show an error.
+
+**Inspect Joplin or Obsidian Folder** accepts an extracted local folder with
+`manifest.json`. It reads only bounded manifest metadata: ecosystem, name, ID,
+version and declared minimum host version. It registers a reference to the
+original folder, not an installed copy. Recheck rereads its current manifest;
+missing or malformed manifests remain registered with a visible error.
+**Forget Registration** never deletes original files. Symbolic-link folders
+and manifests, ambiguous ecosystems and unsupported Joplin manifest versions
+are rejected.
+
+These registrations are **inspection only, not compatible or runnable plugins**.
+No JavaScript, CSS, executable code, plugin network requests or host APIs are
+loaded. There are no fake enable or update switches for these registrations.
+Joplin `.jpl` archives, repository URLs, downloads, updates, marketplace browsing
+and executable Joplin/Obsidian compatibility remain unimplemented. Obsidian core
+plugins ship inside Obsidian and are not independently importable packages.
+Manifests are not evidence that the underlying code works or is safe.
+
+Manager preferences and folder registrations are Mac-local, versioned data in
+Folio's preferences, not in the note library, complete backups, sync snapshots
+or opening-day recovery copies. Invalid/future manager data is preserved:
+community packs become inactive, manager changes are blocked, and Settings
+provides retry or an explicitly confirmed reset. Reset forgets registrations
+and re-enables tools/packs; it does not change note or plugin files.
+
 ## Install the example
 
 In the Mac app choose **File > New from Template > Open Extensions Folder**.

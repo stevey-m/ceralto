@@ -4,7 +4,8 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general = "General", appearance = "Appearance", editor = "Editor"
-    case files = "Files & Backups", sync = "iCloud", extensions = "Extensions"
+    case files = "Files & Backups", sync = "iCloud", extensions = "Community Extensions"
+    case features = "Built-in Features"
     case shortcuts = "Keyboard Shortcuts"
 
     var id: String { rawValue }
@@ -17,6 +18,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .files: "externaldrive"
         case .sync: "icloud"
         case .extensions: "puzzlepiece.extension"
+        case .features: "switch.2"
         case .shortcuts: "keyboard"
         }
     }
@@ -28,7 +30,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates"
         case .files: "library storage location import export joplin markdown html attachments backup restore history privacy encryption trash"
         case .sync: "icloud folder connect disconnect sync offline ipad refresh snapshots conflicts"
-        case .extensions: "templates packs plugins api community reload install"
+        case .extensions: "templates packs plugins api community reload install joplin obsidian compatibility inspect folders"
+        case .features: "core plugins built in optional tools daily notes templates tasks enable disable"
         case .shortcuts: "keyboard shortcuts hotkeys commands palette tabs back forward navigation capture finder search save focus"
         }
     }
@@ -43,7 +46,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @EnvironmentObject private var store: NotesStore
-    @Environment(\.openWindow) private var openWindow
     @ViewState private var selection: SettingsSection? = .general
     @ViewState private var query = ""
     @AppStorage("defaultNoteFormat") private var defaultFormat = NoteFormat.formatted.rawValue
@@ -225,21 +227,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         case .extensions:
-            Section("Template packs") {
-                Button("Open Extensions Folder", action: store.revealExtensions)
-                Button("Reload Template Packs", action: store.reloadExtensions)
-                if store.extensions.isEmpty {
-                    Text("No template packs installed. Place a pack folder containing extension.json in Extensions, then reload.")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(store.extensions) { pack in
-                    LabeledContent(pack.name, value: "\(pack.templates.count) templates")
-                }
-                Button("Choose a Template...") { openWindow(id: "library"); store.showingTemplates = true }
-                Text("Use the template chooser from the main window, sidebar, File menu or command palette. Built-in templates work without extensions. API v1 supports local data-only templates, not executable plugins or Obsidian plugin compatibility.")
-                    .font(.caption).foregroundStyle(.secondary)
+            CommunityExtensionsSettings()
+            Section("Documentation") {
                 Button("Extension API & Example") { openProject("blob/main/EXTENSIONS.md") }
             }
+        case .features:
+            BuiltInFeaturesSettings()
         case .shortcuts:
             ShortcutSettings(bindings: store.shortcutBindings)
             Section("Keyboard shortcuts") {
