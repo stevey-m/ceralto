@@ -2,6 +2,56 @@ import AppKit
 import NotesCore
 import SwiftUI
 
+struct ReferenceLayout<Primary: View, Reference: View>: View {
+    let showReference: Bool
+    @ViewBuilder let primary: () -> Primary
+    @ViewBuilder let reference: () -> Reference
+    @AppStorage("referencePaneFraction") private var fraction = 0.45
+    @ViewState private var dragStart: Double?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let available = max(0, geometry.size.width - PaneWidths.divider)
+            let minimum = min(130.0, available / 2)
+            let referenceWidth = min(max(available * fraction, minimum), available - minimum)
+            HStack(spacing: 0) {
+                primary()
+                    .frame(width: showReference ? available - referenceWidth : geometry.size.width,
+                           height: geometry.size.height)
+                    .clipped()
+                if showReference {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.1))
+                        .frame(width: PaneWidths.divider)
+                        .contentShape(Rectangle())
+                        .onHover { inside in
+                            if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                        }
+                        .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                            .onChanged { value in
+                                let start = dragStart ?? referenceWidth
+                                dragStart = start
+                                fraction = min(max((start - value.translation.width) / max(1, available), 0.2), 0.8)
+                            }
+                            .onEnded { _ in dragStart = nil })
+                        .accessibilityLabel("Reference pane width")
+                        .accessibilityValue("\(Int(referenceWidth)) points")
+                        .accessibilityAdjustableAction { direction in
+                            switch direction {
+                            case .increment: fraction = min(0.8, fraction + 0.05)
+                            case .decrement: fraction = max(0.2, fraction - 0.05)
+                            @unknown default: break
+                            }
+                        }
+                    reference()
+                        .frame(width: referenceWidth, height: geometry.size.height)
+                        .clipped()
+                }
+            }
+        }
+    }
+}
+
 struct NotebookLayout<Notebooks: View, Notes: View, Document: View>: View {
     let showNotebooks: Bool
     let showNotes: Bool

@@ -22,8 +22,9 @@ struct ContentView: View {
         } notes: {
             noteList
         } document: {
-            HSplitView {
-                detail.frame(minWidth: 130)
+            ReferenceLayout(showReference: store.referenceNote != nil) {
+                detail
+            } reference: {
                 if let note = store.referenceNote {
                     VStack(spacing: 0) {
                         HStack {
@@ -38,7 +39,6 @@ struct ContentView: View {
                         Divider()
                         MarkdownPreview(note: note).id(note.id)
                     }
-                    .frame(minWidth: 130)
                 }
             }
         }
