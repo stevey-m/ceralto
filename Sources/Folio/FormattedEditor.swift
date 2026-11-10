@@ -272,8 +272,12 @@ final class PageTextView: NSTextView {
         guard let storage = textStorage else { return }
         let previous = NSAttributedString(attributedString: storage)
         let selection = selectedRange()
-        undoManager?.registerUndo(withTarget: self) { target in
+        let restore: @MainActor (PageTextView) -> Void = { target in
             target.restore(previous, selection: selection, name: name)
+        }
+        undoManager?.registerUndo(withTarget: self) { target in
+            // This text view's undo manager is invoked synchronously on the main thread.
+            MainActor.assumeIsolated { restore(target) }
         }
         undoManager?.setActionName(name)
         storage.beginEditing()
