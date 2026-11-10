@@ -141,6 +141,14 @@ struct NavigationTests {
         }
         let firstEditor = try #require(editors(host).first { $0.string == "First page" })
         let secondEditor = try #require(editors(host).first { $0.string == "Second page" })
+        func awaitActivation(_ active: NSTextView, inactive: NSTextView) async throws {
+            for _ in 0..<100 {
+                host.layoutSubtreeIfNeeded()
+                if active.isEditable && !inactive.isEditable { return }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        try await awaitActivation(firstEditor, inactive: secondEditor)
         #expect(firstEditor.isEditable)
         #expect(!secondEditor.isEditable)
         window.makeFirstResponder(firstEditor)
@@ -152,14 +160,14 @@ struct NavigationTests {
         let undo = try #require(firstEditor.undoManager)
         #expect(undo.canUndo)
         store.openNote(second.id)
-        try await Task.sleep(for: .milliseconds(100))
+        try await awaitActivation(secondEditor, inactive: firstEditor)
         host.layoutSubtreeIfNeeded()
         #expect(!firstEditor.isEditable)
         #expect(secondEditor.isEditable)
         #expect(firstEditor.undoManager !== secondEditor.undoManager)
         #expect(store.library.notes.first { $0.id == second.id }?.body == "Second page")
         store.openNote(first.id)
-        try await Task.sleep(for: .milliseconds(100))
+        try await awaitActivation(firstEditor, inactive: secondEditor)
         host.layoutSubtreeIfNeeded()
         #expect(editors(host).contains { $0 === firstEditor })
         #expect(firstEditor.selectedRange() == NSRange(location: 0, length: 5))
