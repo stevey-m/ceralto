@@ -49,12 +49,15 @@ final class NotesStore: ObservableObject {
     @Published private(set) var isLoaded = false
     @Published private(set) var hasUnsavedChanges = false
     private let storage: LibraryStorage
+    private let preferences: UserDefaults
+    var libraryURL: URL { storage.url }
     let isReadOnly: Bool
     private var syncFolder: URL?
     private var bookmarkURL: URL { storage.url.deletingLastPathComponent().appendingPathComponent("sync-folder.bookmark") }
 
-    init(storage: LibraryStorage = .applicationDefault, readOnly: Bool = false) {
+    init(storage: LibraryStorage = .applicationDefault, readOnly: Bool = false, preferences: UserDefaults = .standard) {
         self.storage = storage
+        self.preferences = preferences
         isReadOnly = readOnly
         load()
         restoreSyncFolder()
@@ -175,7 +178,9 @@ final class NotesStore: ObservableObject {
 
     func createNote() {
         #if os(macOS)
-        createNote(format: .formatted)
+        let format = preferences.string(forKey: "defaultNoteFormat") == NoteFormat.markdown.rawValue
+            ? NoteFormat.markdown : .formatted
+        createNote(format: format)
         #else
         createNote(format: .markdown)
         #endif

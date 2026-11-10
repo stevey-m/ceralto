@@ -63,6 +63,11 @@ struct AppearanceSettings: View {
     @AppStorage("editorFontSize") private var fontSize = 15.0
     @AppStorage("imageDisplayWidth") private var thumbnailSize = 0
     @AppStorage("fullWidthNotes") private var fullWidth = false
+    @AppStorage("notebookPaneWidth") private var notebookWidth = 220.0
+    @AppStorage("noteListPaneWidth") private var noteListWidth = 250.0
+    @AppStorage("showNotebookPane") private var showNotebooks = true
+    @AppStorage("showNoteListPane") private var showNotes = true
+    @AppStorage("readingEditorMode") private var editorMode = "Preview"
 
     var body: some View {
         Form {
@@ -86,23 +91,22 @@ struct AppearanceSettings: View {
                 Text("Small (180 px)").tag(180)
                 Text("Medium (300 px)").tag(300)
             }
-            Toggle("Full-width note pages", isOn: $fullWidth)
+            Toggle("Full-width preview text", isOn: $fullWidth)
+            Toggle("Show main folders", isOn: $showNotebooks)
+            Toggle("Show subtopics and notes", isOn: $showNotes)
             Text("Images fill the available note width without changing the original. Click to open in the document area; pinch to zoom, scroll to pan, and use Back to note to return.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Reset Reading Layout") {
-                UserDefaults.standard.set(220.0, forKey: "notebookPaneWidth")
-                UserDefaults.standard.set(250.0, forKey: "noteListPaneWidth")
-                UserDefaults.standard.set(true, forKey: "showNotebookPane")
-                UserDefaults.standard.set(true, forKey: "showNoteListPane")
-                UserDefaults.standard.set("Preview", forKey: "readingEditorMode")
+                notebookWidth = 220
+                noteListWidth = 250
+                showNotebooks = true
+                showNotes = true
+                editorMode = "Preview"
                 thumbnailSize = 0
             }
             Text("System follows your Mac's appearance. Light and Dark stay fixed. Dracula remains available as an alternative palette.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
-        .padding()
-        .frame(width: 480, height: 480)
-        .folioAppearance()
     }
 }

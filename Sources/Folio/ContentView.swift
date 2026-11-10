@@ -381,6 +381,8 @@ struct ContentView: View {
 
 private struct NoteRow: View {
     let note: Note
+    @AppStorage("noteListPreviewLines") private var previewLines = 2
+    @AppStorage("noteListShowDates") private var showDates = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -392,14 +394,18 @@ private struct NoteRow: View {
                         .accessibilityLabel("Pinned")
                 }
             }
-            Text(note.body.isEmpty ? "No additional text" : note.excerpt)
-                .font(.callout).foregroundStyle(.secondary).lineLimit(2)
-            HStack {
-                Text(note.updatedAt, format: .dateTime.month(.abbreviated).day())
-                Spacer()
-                if let tag = note.tags.first { Text("#\(tag)").lineLimit(1) }
+            if previewLines > 0 {
+                Text(note.body.isEmpty ? "No additional text" : note.excerpt)
+                    .font(.callout).foregroundStyle(.secondary).lineLimit(min(previewLines, 3))
             }
-            .font(.caption2).foregroundStyle(.tertiary)
+            if showDates || !note.tags.isEmpty {
+                HStack {
+                    if showDates { Text(note.updatedAt, format: .dateTime.month(.abbreviated).day()) }
+                    Spacer()
+                    if let tag = note.tags.first { Text("#\(tag)").lineLimit(1) }
+                }
+                .font(.caption2).foregroundStyle(.tertiary)
+            }
         }
         .padding(.vertical, 10)
         .accessibilityElement(children: .combine)

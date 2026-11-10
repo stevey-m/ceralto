@@ -423,6 +423,7 @@ private final class PageScrollView: NSScrollView {
 }
 
 struct NativePageView: NSViewRepresentable {
+    @AppStorage("composeSpellChecking") private var spellChecking = true
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
     @Environment(\.colorScheme) private var colorScheme
     let html: String
@@ -478,6 +479,7 @@ struct NativePageView: NSViewRepresentable {
         editor.onFiles = onFiles
         editor.onError = onError
         editor.onImage = onImage
+        editor.isContinuousSpellCheckingEnabled = spellChecking
         editor.pageFont = family
         editor.pageFontSize = size
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor

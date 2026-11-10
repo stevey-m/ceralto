@@ -74,7 +74,7 @@ struct FolioApp: App {
                 Button("Connect iCloud Drive Folder...", action: store.chooseSyncFolder)
                     .disabled(!store.isLoaded || store.isSyncing)
                 Button("Sync Now", action: store.syncNow)
-                    .keyboardShortcut("s", modifiers: [.command, .option])
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(store.syncFolderName == nil || store.isSyncing)
                 Button("Disconnect Shared Folder", action: store.disconnectSyncFolder)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
@@ -104,7 +104,7 @@ struct FolioApp: App {
             Divider()
             Button("Quit Folio") { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
-        Settings { AppearanceSettings() }
+        Settings { SettingsView().environmentObject(store) }
     }
 
     private func capture() {

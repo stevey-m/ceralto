@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.4.2 is a development release, not a finished replacement for your library.**
+**0.5.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -28,7 +28,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.4.2-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.5.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -219,6 +219,30 @@ There is no Folio account, subscription, analytics service or runtime server.
 Your chosen system iCloud account handles file delivery. Local notes, drafts
 and snapshots are not encrypted by Folio. Use device protection/FileVault.
 History and retained attachments are not substitutes for independent backups.
+
+## Settings that stay out of your way
+
+Open **Folio > Settings** (Command-comma). Search settings by name or purpose,
+then select a matching category:
+
+- **General:** version, manual release downloads, documentation, contributor
+  guide, note-list preview lines and date visibility.
+- **Appearance:** System/Light/Dark/Dracula, accent colour, font, text size,
+  preview width, image size, pane visibility and reading-layout reset.
+- **Editor:** default format for new notes and local macOS spelling in Compose.
+  Existing notes and imports keep their format; automatic correction stays off.
+- **Files & Backups:** actual library location, imports, portable exports,
+  complete backups and recovery guidance.
+- **iCloud:** folder connection, manual sync, status and offline iPad guidance.
+- **Extensions:** installed template packs, folder access, reload and API docs.
+- **Keyboard Shortcuts:** a reference for the working commands, not a remapping
+  UI. Sync uses Command-Shift-R; Command-Option-S toggles the folder pane.
+
+Settings are local to the device and are not included in library exports.
+Release checking is manual. Scheduled backups, automatic trash expiry, OCR,
+encryption, executable plugins and shortcut remapping are not implemented.
+The iPad reader retains its lightweight appearance menu; the full Settings
+window is Mac-only.
 
 ## Build and contribute
 
