@@ -31,7 +31,8 @@ struct PresentationTests {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.contentView = host
-        window.makeKeyAndOrderFront(nil)
+        // Keep the fixture offscreen so a small CI display cannot constrain its width.
+        host.frame = NSRect(x: 0, y: 0, width: 1240, height: 800)
         defer { window.orderOut(nil); window.contentView = nil }
         try await Task.sleep(for: .milliseconds(250))
         host.layoutSubtreeIfNeeded()
@@ -40,6 +41,7 @@ struct PresentationTests {
             return view.subviews.compactMap { editor(in: $0) }.first
         }
         let page = try #require(editor(in: host))
+        #expect(host.bounds.width == 1240)
         #expect(page.frame.width >= 700)
         #expect(page.string.contains("Less noise. More thought."))
         #expect(!page.string.contains("**"))
