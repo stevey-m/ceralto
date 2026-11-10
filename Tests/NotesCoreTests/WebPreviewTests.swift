@@ -47,11 +47,17 @@ struct WebPreviewTests {
         #expect(error == nil)
         #expect(ready, "The original JPEG must load through the restricted resource handler.")
         guard ready else { return }
-        let width = try await web.evaluateJavaScript("document.querySelector('img').getBoundingClientRect().width")
-        let renderedWidth = try #require(width as? Double)
+        // Sample the same layout frame: native scrollbar changes can resize the page between calls.
+        let geometry = try await web.evaluateJavaScript("""
+        ({
+          image: document.querySelector('img').getBoundingClientRect().width,
+          available: document.querySelector('main').getBoundingClientRect().width
+        })
+        """)
+        let dimensions = try #require(geometry as? [String: Double])
+        let renderedWidth = try #require(dimensions["image"])
         if imageWidth == 0 {
-            let available = try await web.evaluateJavaScript("document.querySelector('main').getBoundingClientRect().width")
-            let availableWidth = try #require(available as? Double)
+            let availableWidth = try #require(dimensions["available"])
             #expect(availableWidth > 1100)
             #expect(abs(renderedWidth - availableWidth) <= 2,
                     "Default images must fill the document width, even beyond the text column and original display size.")
