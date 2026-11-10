@@ -2,6 +2,7 @@ import AppKit
 import NotesCore
 import SwiftUI
 import Testing
+import WebKit
 @testable import Folio
 
 @Suite(.serialized)
@@ -18,7 +19,8 @@ struct PresentationTests {
         let note = Note(notebookID: topic.id, title: "A place for your next idea",
             body: "## Less noise. More thought.\n\nA quiet page for the things worth keeping. Write naturally, collect what matters, and find your way back.\n\n**Your words. Your files. Your pace.**\n\n- Capture the thought before it disappears\n\n- Give it a home when you are ready\n\n- Take your library with you",
             tags: ["ideas"], format: .formatted)
-        let other = Note(notebookID: work.id, title: "Something worth remembering", body: "The best tools get out of the way.")
+        let other = Note(notebookID: work.id, title: "Something worth remembering",
+                         body: "## Keep the idea in view\n\nThe best tools get out of the way.\n\nRead a reference while writing your next thought. Your original stays unchanged.\n\n- Keep things simple\n- Make room for the details\n- Build on what works")
         try storage.save(Library(notebooks: [notebook, topic, work], notes: [note, other]))
         let store = NotesStore(storage: storage)
         store.openNote(note.id)
@@ -54,5 +56,48 @@ struct PresentationTests {
         let destination = package.appendingPathComponent("dist")
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         try png.write(to: destination.appendingPathComponent("Folio-compose-preview.png"))
+
+        store.openNoteInNewTab(other.id)
+        store.openNote(note.id)
+        store.showReference(other.id)
+        try await Task.sleep(for: .milliseconds(500))
+        host.layoutSubtreeIfNeeded()
+        #expect(editor(in: host) === page, "Opening a reference must not rebuild the writing editor.")
+        #expect(page.frame.width >= 200)
+        func webView(in view: NSView) -> WKWebView? {
+            if let web = view as? WKWebView { return web }
+            return view.subviews.compactMap { webView(in: $0) }.first
+        }
+        let reference = try #require(webView(in: host))
+        var referenceText = ""
+        for _ in 0..<50 {
+            referenceText = try await reference.evaluateJavaScript("document.body.innerText") as? String ?? ""
+            if referenceText.contains("Keep the idea in view") { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(referenceText.contains("Keep the idea in view"))
+        #expect(reference.bounds.width >= 200)
+        let referenceImage = try await reference.takeSnapshot(configuration: nil)
+        let referenceData = try #require(referenceImage.tiffRepresentation)
+        let referenceBitmap = try #require(NSBitmapImageRep(data: referenceData))
+        let referencePNG = try #require(referenceBitmap.representation(using: .png, properties: [:]))
+        try referencePNG.write(to: destination.appendingPathComponent("Folio-reference-preview.png"))
+        let workspaceBitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: workspaceBitmap)
+        let workspacePNG = try #require(workspaceBitmap.representation(using: .png, properties: [:]))
+        try workspacePNG.write(to: destination.appendingPathComponent("Folio-workspace-preview.png"))
+
+        let palette = NSHostingView(rootView: CommandPalette(onSelect: { _ in }).environmentObject(store).defaultAppStorage(defaults))
+        let paletteWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 500),
+                                     styleMask: [.titled], backing: .buffered, defer: false)
+        paletteWindow.contentView = palette
+        defer { paletteWindow.contentView = nil }
+        palette.frame = NSRect(x: 0, y: 0, width: 580, height: 500)
+        try await Task.sleep(for: .milliseconds(150))
+        palette.layoutSubtreeIfNeeded()
+        let paletteBitmap = try #require(palette.bitmapImageRepForCachingDisplay(in: palette.bounds))
+        palette.cacheDisplay(in: palette.bounds, to: paletteBitmap)
+        let palettePNG = try #require(paletteBitmap.representation(using: .png, properties: [:]))
+        try palettePNG.write(to: destination.appendingPathComponent("Folio-command-palette-preview.png"))
     }
 }

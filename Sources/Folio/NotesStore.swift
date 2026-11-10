@@ -35,7 +35,17 @@ struct NotebookDraft: Identifiable {
 final class NotesStore: ObservableObject {
     @Published private(set) var library = Library(notebooks: [])
     @Published var scope: NoteScope? = .all
-    @Published var selectedNoteID: UUID?
+    @Published var selectedNoteID: UUID? {
+        didSet {
+            #if os(macOS)
+            guard isLoaded, !restoringWorkspace, oldValue != selectedNoteID else { return }
+            workspace.select(selectedNoteID, replacingCurrent: true)
+            persistWorkspace()
+            #endif
+        }
+    }
+    @Published private(set) var workspace = DocumentWorkspace()
+    @Published var showingCommands = false
     @Published var query = ""
     @Published var errorMessage: String?
     @Published var notebookDraft: NotebookDraft?
@@ -50,6 +60,7 @@ final class NotesStore: ObservableObject {
     @Published private(set) var hasUnsavedChanges = false
     private let storage: LibraryStorage
     private let preferences: UserDefaults
+    private var restoringWorkspace = false
     var libraryURL: URL { storage.url }
     let isReadOnly: Bool
     private var syncFolder: URL?
@@ -148,11 +159,20 @@ final class NotesStore: ObservableObject {
         do {
             let loaded = try storage.load()
             let next = loaded ?? (isReadOnly ? Library(notebooks: [Notebook(name: "Shared library")]) : Library.starter())
+            #if os(macOS)
+            if !isReadOnly { try storage.prepareRecoveryCopy() }
+            #endif
             if loaded == nil { try storage.save(next) }
             library = next
+            restoringWorkspace = true
             isLoaded = true
             hasUnsavedChanges = false
             selectedNoteID = visibleNotes.first?.id
+            #if os(macOS)
+            restoreWorkspace()
+            #else
+            restoringWorkspace = false
+            #endif
         } catch {
             isLoaded = false
             errorMessage = "Could not open your notes: \(error.localizedDescription)\n\nYour existing library has not been overwritten. Location: \(storage.url.path)"
@@ -176,6 +196,77 @@ final class NotesStore: ObservableObject {
         }
     }
 
+    private var workspaceURL: URL { storage.url.deletingLastPathComponent().appendingPathComponent("workspace.json") }
+
+    private func restoreWorkspace() {
+        restoringWorkspace = true
+        defer { restoringWorkspace = false }
+        workspace = DocumentWorkspace()
+        do {
+            if FileManager.default.fileExists(atPath: workspaceURL.path) {
+                workspace = try JSONDecoder().decode(DocumentWorkspace.self, from: Data(contentsOf: workspaceURL))
+                try workspace.validate()
+                workspace.retainNotes(Set(library.notes.map(\.id)))
+                if let id = workspace.activeID { openNote(id) }
+                else { selectedNoteID = nil }
+            } else {
+                workspace.select(selectedNoteID)
+            }
+        } catch {
+            workspace = DocumentWorkspace()
+            workspace.select(selectedNoteID)
+            errorMessage = "Could not restore your document tabs. Your notes are unaffected: \(error.localizedDescription)"
+        }
+    }
+
+    private func persistWorkspace() {
+        guard !restoringWorkspace else { return }
+        do {
+            workspace.retainNotes(Set(library.notes.map(\.id)))
+            try workspace.validate()
+            try JSONEncoder().encode(workspace).write(to: workspaceURL, options: .atomic)
+        } catch {
+            errorMessage = "Could not save your document tabs. Note saving is separate: \(error.localizedDescription)"
+        }
+    }
+
+    func closeTab(_ id: UUID) {
+        let wasActive = workspace.activeID == id
+        workspace.close(id)
+        if wasActive {
+            if let next = workspace.activeID { openNote(next) }
+            else { selectedNoteID = nil }
+        }
+        persistWorkspace()
+    }
+
+    func navigateBack() {
+        if let id = workspace.goBack() { openNote(id); persistWorkspace() }
+    }
+
+    func navigateForward() {
+        if let id = workspace.goForward() { openNote(id); persistWorkspace() }
+    }
+
+    func showReference(_ id: UUID?) {
+        guard id == nil || library.notes.contains(where: { $0.id == id }) else { return }
+        workspace.setReference(id)
+        persistWorkspace()
+    }
+
+    var referenceNote: Note? { library.notes.first { $0.id == workspace.referenceID } }
+
+    func preferencesValue(_ key: String) -> Bool {
+        preferences.object(forKey: key) == nil || preferences.bool(forKey: key)
+    }
+
+    func preferencesToggle(_ key: String) { preferences.set(!preferencesValue(key), forKey: key) }
+
+    func setPaneVisibility(folders: Bool, notes: Bool) {
+        preferences.set(folders, forKey: "showNotebookPane")
+        preferences.set(notes, forKey: "showNoteListPane")
+    }
+
     func createNote() {
         #if os(macOS)
         let format = preferences.string(forKey: "defaultNoteFormat") == NoteFormat.markdown.rawValue
@@ -196,6 +287,9 @@ final class NotesStore: ObservableObject {
         if scope == .trash { scope = .all }
         query = ""
         library.notes.insert(note, at: 0)
+        #if os(macOS)
+        workspace.select(note.id)
+        #endif
         selectedNoteID = note.id
         save()
     }
@@ -220,6 +314,9 @@ final class NotesStore: ObservableObject {
         if scope == .trash { scope = .all }
         query = ""
         library.notes.insert(note, at: 0)
+        #if os(macOS)
+        workspace.select(note.id)
+        #endif
         selectedNoteID = note.id
         save()
     }
@@ -252,6 +349,13 @@ final class NotesStore: ObservableObject {
         library = candidate
         hasUnsavedChanges = false
         return note.id
+    }
+
+    func openNoteInNewTab(_ id: UUID) {
+        guard library.notes.contains(where: { $0.id == id }) else { return }
+        workspace.select(id)
+        openNote(id)
+        persistWorkspace()
     }
 
     func openNote(_ id: UUID) {
@@ -307,6 +411,8 @@ final class NotesStore: ObservableObject {
         guard isLoaded, !isReadOnly, library.notes.contains(where: { $0.id == id && $0.deletedAt != nil }) else { return }
         library.notes.removeAll { $0.id == id }
         save()
+        workspace.retainNotes(Set(library.notes.map(\.id)))
+        persistWorkspace()
         reconcileSelection()
     }
 
@@ -459,6 +565,13 @@ final class NotesStore: ObservableObject {
     }
 
     #if os(macOS)
+    func revealRecoveryCopies() {
+        do {
+            try FileManager.default.createDirectory(at: storage.recoveryDirectory, withIntermediateDirectories: true)
+            NSWorkspace.shared.activateFileViewerSelecting([storage.recoveryDirectory])
+        } catch { errorMessage = "Could not open recovery copies: \(error.localizedDescription)" }
+    }
+
     func revealExtensions() {
         do {
             try FileManager.default.createDirectory(at: extensionsDirectory, withIntermediateDirectories: true)

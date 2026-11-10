@@ -29,7 +29,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .files: "library storage location import export joplin markdown html attachments backup restore history privacy encryption trash"
         case .sync: "icloud folder connect disconnect sync offline ipad refresh snapshots conflicts"
         case .extensions: "templates packs plugins api community reload install"
-        case .shortcuts: "keyboard shortcuts hotkeys commands capture finder search save focus"
+        case .shortcuts: "keyboard shortcuts hotkeys commands palette tabs back forward navigation capture finder search save focus"
         }
     }
 
@@ -178,13 +178,20 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }.disabled(!store.isLoaded || store.isImportingJoplin)
             Section("Backups & recovery") {
+                Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
+                Text("Before opening an existing Mac library for editing, Folio keeps its first validated copy of the day. The last seven opening days are retained. These JSON copies contain notes and history, but not attachment files or unsaved drafts. They are not complete backups.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("To recover a whole library copy, quit Folio, preserve the current library.json, then copy the chosen recovery file to that location as library.json. Attachments must still exist in their original locations. Never replace the file while Folio is running.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Button("Export Complete Backup...", action: store.exportBackup)
+                    .disabled(!store.isLoaded)
                 Button("Import Folio Backup...", action: store.importBackup)
+                    .disabled(!store.isLoaded)
                 Text("Complete backups include notes, history and original attachments. Import adds notes without replacing current ones. Back up regularly or use Time Machine; scheduled backups are not implemented.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Note history retains up to 20 checkpoints, captured at most once every five minutes. Open Note actions > Note History to restore one. Trash is kept until you delete notes permanently; no automatic deletion is enabled.")
                     .font(.caption).foregroundStyle(.secondary)
-            }.disabled(!store.isLoaded)
+            }
         case .sync:
             Section("iCloud Drive folder") {
                 LabeledContent("Connected folder", value: store.syncFolderName ?? "Not connected")
@@ -223,6 +230,9 @@ struct SettingsView: View {
                 shortcut("Quick Capture (while Folio is active)", "⇧⌘Space")
                 shortcut("Save Quick Capture", "⌘Return")
                 shortcut("Find across all notes", "⌘K")
+                shortcut("Command palette", "⇧⌘P")
+                shortcut("Back / Forward", "⌘[ / ⌘]")
+                shortcut("Close current tab", "⌥⌘W")
                 shortcut("Search this collection", "⌘F")
                 shortcut("Save", "⌘S")
                 shortcut("Sync now", "⇧⌘R")

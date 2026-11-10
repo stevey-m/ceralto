@@ -210,9 +210,25 @@ final class FormattingActions: ObservableObject {
 }
 
 @MainActor
-final class PageTextView: NSTextView {
-    private let pageUndo = UndoManager()
-    override var undoManager: UndoManager? { pageUndo }
+class DocumentTextView: NSTextView {
+    private lazy var documentUndo: UndoManager = {
+        let manager = UndoManager()
+        NotificationCenter.default.addObserver(self, selector: #selector(publishUndo),
+            name: .NSUndoManagerDidUndoChange, object: manager)
+        NotificationCenter.default.addObserver(self, selector: #selector(publishUndo),
+            name: .NSUndoManagerDidRedoChange, object: manager)
+        return manager
+    }()
+    override var undoManager: UndoManager? { documentUndo }
+
+    @objc private func publishUndo(_ notification: Notification) {
+        // NSTextView's private undo operations do not always notify our persistence delegate.
+        didChangeText()
+    }
+}
+
+@MainActor
+final class PageTextView: DocumentTextView {
     var resources: ImportedResources?
     var onFiles: (([URL]) -> Void)?
     var onError: ((String) -> Void)?
@@ -342,6 +358,7 @@ struct FormattedEditor: View {
     var onFiles: ([URL]) -> Void
     var onError: (String) -> Void
     var onImage: (URL) -> Void
+    var currentSource: (() -> String)?
     @StateObject private var actions = FormattingActions()
     @ViewState private var addingLink = false
     @ViewState private var link = ""
@@ -373,7 +390,7 @@ struct FormattedEditor: View {
             Divider()
             NativePageView(html: note.body, resources: resources, size: fontSize, family: family,
                            dracula: dracula, actions: actions, onChange: onChange, onFiles: onFiles,
-                           onError: onError, onImage: onImage)
+                           onError: onError, onImage: onImage, currentSource: currentSource)
         }
         .popover(isPresented: $addingLink) {
             VStack(alignment: .leading, spacing: 12) {
@@ -426,6 +443,7 @@ struct NativePageView: NSViewRepresentable {
     @AppStorage("composeSpellChecking") private var spellChecking = true
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
     let html: String
     let resources: ImportedResources?
     let size: Double
@@ -436,6 +454,7 @@ struct NativePageView: NSViewRepresentable {
     var onFiles: ([URL]) -> Void
     var onError: (String) -> Void
     var onImage: ((URL) -> Void)?
+    var currentSource: (() -> String)?
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -473,6 +492,8 @@ struct NativePageView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let editor = scroll.documentView as? PageTextView else { return }
+        // A queued split-view update can still contain the note's pre-edit snapshot.
+        let html = currentSource?() ?? self.html
         let coordinator = context.coordinator
         coordinator.parent = self
         editor.resources = resources
@@ -480,6 +501,11 @@ struct NativePageView: NSViewRepresentable {
         editor.onError = onError
         editor.onImage = onImage
         editor.isContinuousSpellCheckingEnabled = spellChecking
+        editor.isEditable = isEnabled && coordinator.loadedHTML == html
+        editor.isSelectable = isEnabled
+        if !isEnabled, editor.window?.firstResponder === editor {
+            editor.window?.makeFirstResponder(nil)
+        }
         editor.pageFont = family
         editor.pageFontSize = size
         let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
@@ -500,7 +526,7 @@ struct NativePageView: NSViewRepresentable {
             editor.textStorage?.setAttributedString(decoded)
             editor.typingAttributes = NativePageCodec.attributes(style: .paragraph, size: size, family: family, color: color)
             editor.setSelectedRange(NSRange(location: min(selection.location, decoded.length), length: 0))
-            editor.isEditable = true
+            editor.isEditable = isEnabled
             if coordinator.loadedHTML != nil && coordinator.loadedHTML != html { editor.undoManager?.removeAllActions() }
             coordinator.loadedHTML = html
             coordinator.size = size

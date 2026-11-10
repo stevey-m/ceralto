@@ -8,6 +8,7 @@ struct ContentView: View {
     @EnvironmentObject private var store: NotesStore
     @ViewState private var noteToDelete: Note?
     @ViewState private var notebookToDelete: Notebook?
+    @ViewState private var pendingCommand: FolioCommand?
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
@@ -21,13 +22,37 @@ struct ContentView: View {
         } notes: {
             noteList
         } document: {
-            detail
+            HSplitView {
+                detail.frame(minWidth: 130)
+                if let note = store.referenceNote {
+                    VStack(spacing: 0) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Reference · Read only").font(.caption).foregroundStyle(.secondary)
+                                Text(note.displayTitle).font(.headline).lineLimit(1)
+                            }
+                            Spacer()
+                            Button { store.showReference(nil) } label: { Image(systemName: "xmark") }
+                                .buttonStyle(.borderless).accessibilityLabel("Close reference pane")
+                        }.padding(14)
+                        Divider()
+                        MarkdownPreview(note: note).id(note.id)
+                    }
+                    .frame(minWidth: 130)
+                }
+            }
         }
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
         .foregroundStyle(theme == FolioTheme.dracula.rawValue ? FolioPalette.foreground : Color.primary)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
+                Button(action: store.navigateBack) { Image(systemName: "chevron.left") }
+                    .help("Back (Command-[)").accessibilityLabel("Back")
+                    .disabled(!store.workspace.canGoBack)
+                Button(action: store.navigateForward) { Image(systemName: "chevron.right") }
+                    .help("Forward (Command-])").accessibilityLabel("Forward")
+                    .disabled(!store.workspace.canGoForward)
                 Button { showNotebooks.toggle() } label: { Image(systemName: "sidebar.left") }
                     .help("Toggle notebooks (Command-Option-S)")
                     .accessibilityLabel("Toggle notebooks")
@@ -47,9 +72,12 @@ struct ContentView: View {
                     .help("Find notes (Command-F)")
                     .accessibilityLabel("Find notes")
                     .keyboardShortcut("f")
-                Button { store.showingFinder = true } label: { Image(systemName: "command") }
+                Button { store.showingFinder = true } label: { Image(systemName: "text.magnifyingglass") }
                     .help("Find across all notes (Command-K)")
                     .accessibilityLabel("Find across all notes")
+                Button { store.showingCommands = true } label: { Image(systemName: "command") }
+                    .help("Command palette (Command-Shift-P)")
+                    .accessibilityLabel("Command palette")
                 Button { openWindow(id: "capture") } label: { Image(systemName: "tray.and.arrow.down") }
                     .help("Quick capture")
                     .accessibilityLabel("Quick capture")
@@ -63,6 +91,14 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showingFinder) {
             NoteFinder().environmentObject(store)
+        }
+        .sheet(isPresented: $store.showingCommands, onDismiss: {
+            if let command = pendingCommand {
+                pendingCommand = nil
+                store.perform(command)
+            }
+        }) {
+            CommandPalette(onSelect: { pendingCommand = $0 }).environmentObject(store)
         }
         .alert("Import complete", isPresented: Binding(
             get: { store.importSummary != nil },
@@ -107,26 +143,79 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder private var detail: some View {
-            if let note = store.selectedNote {
-                NoteEditor(note: note, onPermanentDelete: { noteToDelete = note })
-                    .id(note.id)
-            } else {
-                ContentUnavailableView {
-                    Label(store.isLoaded ? "Room for a new thought" : "Your library is unavailable",
-                          systemImage: store.isLoaded ? "square.and.pencil" : "externaldrive.badge.exclamationmark")
-                } description: {
-                    Text(store.isLoaded
-                         ? "Select a note, or create something new."
-                         : "Retry opening your library. Folio will not overwrite a file it cannot read.")
-                } actions: {
-                    if store.isLoaded {
-                        Button("New Note", action: store.createNote)
-                    } else {
-                        Button("Retry Opening Library", action: store.load)
+    private var detail: some View {
+        VStack(spacing: 0) {
+            if !store.workspace.tabs.isEmpty {
+                documentTabs
+                Divider()
+            }
+            ZStack {
+                ForEach(store.workspace.tabs, id: \.self) { id in
+                    if let note = store.library.notes.first(where: { $0.id == id }) {
+                        let active = store.selectedNoteID == id
+                        NoteEditor(note: note, onPermanentDelete: { noteToDelete = note }, isActive: active)
+                            .opacity(active ? 1 : 0)
+                            .allowsHitTesting(active)
+                            .accessibilityHidden(!active)
+                            .disabled(!active || !store.isLoaded)
+                            .zIndex(active ? 1 : 0)
                     }
                 }
+                if store.selectedNote == nil {
+                    ContentUnavailableView {
+                        Label(store.isLoaded ? "Room for a new thought" : "Your library is unavailable",
+                              systemImage: store.isLoaded ? "square.and.pencil" : "externaldrive.badge.exclamationmark")
+                    } description: {
+                        Text(store.isLoaded
+                             ? "Select a note, or create something new."
+                             : "Retry opening your library. Folio will not overwrite a file it cannot read.")
+                    } actions: {
+                        if store.isLoaded {
+                            Button("New Note", action: store.createNote)
+                        } else {
+                            Button("Retry Opening Library", action: store.load)
+                        }
+                    }
+                    .zIndex(2)
+                }
             }
+        }
+    }
+
+    private var documentTabs: some View {
+        ScrollViewReader { proxy in
+        ScrollView(.horizontal) {
+            HStack(spacing: 4) {
+                ForEach(store.workspace.tabs, id: \.self) { id in
+                    if let note = store.library.notes.first(where: { $0.id == id }) {
+                        HStack(spacing: 8) {
+                            Button { store.openNote(id) } label: {
+                                Text(note.displayTitle).lineLimit(1).frame(maxWidth: 170)
+                                    .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                            .help(note.displayTitle)
+                            .accessibilityAddTraits(store.selectedNoteID == id ? .isSelected : [])
+                            Button { store.closeTab(id) } label: {
+                                Image(systemName: "xmark").font(.caption2)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Close \(note.displayTitle)")
+                        }
+                        .padding(.horizontal, 10)
+                        .background(store.selectedNoteID == id ? Color.accentColor.opacity(0.13) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6))
+                        .id(id)
+                    }
+                }
+            }.padding(6)
+        }
+        .scrollIndicators(.hidden)
+        .frame(height: 42)
+        .onChange(of: store.selectedNoteID) { _, id in
+            if let id { proxy.scrollTo(id) }
+        }
+        }
     }
 
     private var sidebar: some View {
@@ -265,6 +354,9 @@ struct ContentView: View {
         NoteRow(note: note)
             .tag(note.id)
             .contextMenu {
+                Button("Open in New Tab") { store.openNoteInNewTab(note.id) }
+                Button("Show as Reference") { store.showReference(note.id) }
+                Divider()
                 if note.deletedAt != nil {
                     Button("Restore Note") { store.restore(note.id) }
                     Button("Delete Forever...", role: .destructive) { noteToDelete = note }

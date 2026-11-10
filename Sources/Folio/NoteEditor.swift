@@ -9,7 +9,10 @@ struct NoteEditor: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
     let onPermanentDelete: () -> Void
-    @AppStorage("readingEditorMode") private var mode = EditorMode.preview.rawValue
+    var isActive = true
+    @AppStorage("readingEditorMode") private var preferredMode = EditorMode.preview.rawValue
+    @ViewState private var mode = EditorMode.preview.rawValue
+    @ViewState private var initialized = false
     @AppStorage("editorFontSize") private var fontSize = 15.0
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("readingFont") private var readingFont = ReadingFont.system.rawValue
@@ -115,6 +118,7 @@ struct NoteEditor: View {
                     do { try store.attachFiles(urls, to: note.id) }
                     catch { store.errorMessage = "Could not attach files: \(error.localizedDescription)" }
                 } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
+                  currentSource: { noteBinding(\.body).wrappedValue }
             } else if editorMode == .split && !isTrashed {
                 HSplitView {
                     sourceEditor.frame(minWidth: 130)
@@ -141,11 +145,15 @@ struct NoteEditor: View {
         }
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .textBackgroundColor))
         .onAppear {
+            guard !initialized else { return }
+            initialized = true
             tagsText = note.tags.joined(separator: ", ")
+            mode = preferredMode
             if note.contentFormat == .formatted || (note.body.isEmpty && note.title.isEmpty) {
                 mode = EditorMode.write.rawValue
             }
         }
+        .onChange(of: mode) { _, value in preferredMode = value }
         .onChange(of: tagsFocused) { _, focused in
             if !focused { tagsText = note.tags.joined(separator: ", ") }
         }
@@ -156,19 +164,20 @@ struct NoteEditor: View {
             LinkedMentionsView(note: note)
         }
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Picker("Editor mode", selection: $mode) {
-                    ForEach(EditorMode.allCases, id: \.rawValue) { mode in
-                        if note.contentFormat != .formatted || mode != .split {
-                            Text(note.contentFormat == .formatted && mode == .write ? "Compose" : mode.rawValue)
-                                .tag(mode.rawValue)
+            if isActive {
+                ToolbarItem(placement: .automatic) {
+                    Picker("Editor mode", selection: $mode) {
+                        ForEach(EditorMode.allCases, id: \.rawValue) { mode in
+                            if note.contentFormat != .formatted || mode != .split {
+                                Text(note.contentFormat == .formatted && mode == .write ? "Compose" : mode.rawValue)
+                                    .tag(mode.rawValue)
+                            }
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                    .disabled(isTrashed)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
-                .disabled(isTrashed)
-            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: store.addAttachments) { Image(systemName: "paperclip") }
                     .help("Add images or attachments")
@@ -210,6 +219,7 @@ struct NoteEditor: View {
                 .help("Note actions")
                 .accessibilityLabel("Note actions")
             }
+            }
         }
 
         .confirmationDialog("Switch to Markdown source?", isPresented: $confirmingSource, titleVisibility: .visible) {
@@ -223,10 +233,8 @@ struct NoteEditor: View {
     }
 
     private var sourceEditor: some View {
-        TextEditor(text: noteBinding(\.body))
-            .font((ReadingFont(rawValue: readingFont) ?? .system).swiftUIFont(size: fontSize))
-            .scrollContentBackground(.hidden)
-            .padding(20)
+        SourceEditor(text: noteBinding(\.body), family: ReadingFont(rawValue: readingFont) ?? .system,
+                     size: fontSize, dracula: theme == FolioTheme.dracula.rawValue)
             .accessibilityLabel(note.contentFormat == .html ? "HTML source editor" : "Markdown editor")
     }
 

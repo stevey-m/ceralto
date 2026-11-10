@@ -17,10 +17,10 @@ struct FolioApp: App {
         .defaultSize(width: 1240, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Note") { openWindow(id: "library"); store.createNote() }
+                Button("New Note") { openWindow(id: "library"); store.perform(.newNote) }
                     .keyboardShortcut("n")
                     .disabled(!store.isLoaded)
-                Button("New Markdown Source Note") { openWindow(id: "library"); store.createMarkdownNote() }
+                Button("New Markdown Source Note") { openWindow(id: "library"); store.perform(.newMarkdown) }
                     .disabled(!store.isLoaded)
                 Menu("New from Template") {
                     if store.extensions.isEmpty { Text("No template extensions installed") }
@@ -66,10 +66,11 @@ struct FolioApp: App {
                     .disabled(!store.isLoaded)
             }
             CommandGroup(replacing: .saveItem) {
-                Button("Save", action: store.save)
+                Button("Save") { store.perform(.save) }
                     .keyboardShortcut("s")
                     .disabled(!store.isLoaded)
                 Button("Show Library in Finder", action: store.revealLibrary)
+                Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
                 Divider()
                 Button("Connect iCloud Drive Folder...", action: store.chooseSyncFolder)
                     .disabled(!store.isLoaded || store.isSyncing)
@@ -82,10 +83,29 @@ struct FolioApp: App {
             CommandGroup(after: .textEditing) {
                 Button("Find Across All Notes") {
                     openWindow(id: "library")
-                    store.showingFinder = true
+                    store.perform(.find)
                 }
                 .keyboardShortcut("k")
                 .disabled(!store.isLoaded)
+            }
+            CommandMenu("Navigate") {
+                Button("Command Palette...") {
+                    openWindow(id: "library")
+                    store.showingCommands = true
+                }.keyboardShortcut("p", modifiers: [.command, .shift])
+                Divider()
+                Button("Back") { store.perform(.back) }
+                    .keyboardShortcut("[").disabled(!store.workspace.canGoBack)
+                Button("Forward") { store.perform(.forward) }
+                    .keyboardShortcut("]").disabled(!store.workspace.canGoForward)
+                Button("Close Current Tab") { store.perform(.closeTab) }
+                    .keyboardShortcut("w", modifiers: [.command, .option])
+                    .disabled(store.selectedNote == nil)
+                Divider()
+                Button("Show Current Note as Reference") { store.perform(.reference) }
+                    .disabled(store.selectedNote == nil)
+                Button("Close Reference Pane") { store.perform(.closeReference) }
+                    .disabled(store.referenceNote == nil)
             }
         }
         Window("Quick Capture", id: "capture") {

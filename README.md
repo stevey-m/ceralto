@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.5.0 is a development release, not a finished replacement for your library.**
+**0.6.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -28,7 +28,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Folio-0.5.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
+Open `Folio-0.6.0-arm64.dmg`, drag **Folio** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio before replacing it. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -40,6 +40,25 @@ you trust, macOS may require **System Settings > Privacy & Security > Open Anywa
 
 ## A notebook, not a control panel
 
+- **Keep a few thoughts open.** Ordinary note selection reuses the current
+  document tab. Right-click a note and choose **Open in New Tab** to keep both;
+  new notes also open their own tab. Already-open notes select their existing
+  tab instead of creating duplicates. Close a tab with its cross or
+  Command-Option-W; closing never deletes a note. Open Compose and source tabs
+  retain their native editor, selection, scroll position and independent undo
+  history while switching between them. Tabs, the active note and navigation
+  history restore on relaunch; cursor, scroll and undo state are session-only.
+- **Read beside your writing.** Right-click a note and choose **Show as
+  Reference**, or use the Navigate menu. A resizable, read-only preview stays
+  beside the main document while you open and edit other notes. Its images
+  use the same in-document viewer. This is a reference reader, not a second
+  independent editing pane.
+- **Find the action, not the menu.** Command-Shift-P opens the searchable command
+  palette. Use arrow keys and Return, or click an action. Unavailable commands
+  show why they cannot run. Command-K remains the note finder. Use
+  Command-[ and Command-] or the toolbar arrows to go Back and Forward through
+  up to 100 document visits, including links and finder results. Navigating
+  after going Back starts a new history branch. Shortcuts are fixed for now.
 - **Compose directly into the page.** New Mac notes use a native AppKit editor
   for headings, bold, italic, bullets, quotes, code, links and inline images.
   The saved body is ordinary Markdown, not RTF, base64 or an opaque editor model.
@@ -98,6 +117,22 @@ Notes save atomically to the local library. Save failures are visible; changes
 stay in memory and Folio warns before quitting. History retains up to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 Restoring also preserves the current version.
+
+On Mac, Folio also saves the first validated on-disk library from each UTC day
+when opening an existing library, retaining the last seven opening days in
+`Recovery/`. Reopening on the same day does not overwrite that day's copy.
+Recovery-copy failures stop the library opening for editing and show an error;
+unsupported future formats and corrupt libraries are not overwritten.
+These copies include note text, metadata and note history, **not attachment
+files or unsaved capture drafts**. They are local and unencrypted, can contain
+previously deleted notes, and are not a replacement for complete backups.
+There is no library-schema migration in this release.
+
+Use **Settings > Files & Backups > Show Local Recovery Copies** to find them.
+To recover: quit Folio, preserve the current `library.json` separately, copy
+the chosen JSON file into the library folder as `library.json`, then reopen.
+Original attachment folders must still exist. Do not replace the live library
+while Folio is running.
 
 ## Your Mac library on iPad
 
@@ -207,6 +242,8 @@ The Mac working library is:
   Attachments/
   SyncAssets/
   Extensions/
+  Recovery/
+  workspace.json
   sync-folder.bookmark
 ```
 
