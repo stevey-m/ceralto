@@ -65,10 +65,14 @@ struct NoteExportPanelTests {
         accessory.layoutSubtreeIfNeeded()
         let label = try #require(accessory.subviews.compactMap { $0 as? NSTextField }.first)
         let labelRect = accessory.convert(label.alignmentRect(forFrame: label.frame), from: label.superview)
-        let pickerRect = export.formatPicker.convert(export.formatPicker.bounds, to: accessory)
+        let pickerRect = accessory.convert(
+            export.formatPicker.alignmentRect(forFrame: export.formatPicker.frame),
+            from: export.formatPicker.superview)
+        let pickerFrame = export.formatPicker.convert(export.formatPicker.bounds, to: accessory)
         #expect(labelRect.minX >= 24)
         #expect(pickerRect.minX >= labelRect.maxX + 8)
         #expect(pickerRect.maxX <= width - 24)
+        #expect(pickerFrame.minX >= 20 && pickerFrame.maxX <= width - 20)
         #expect(pickerRect.width >= 170 && pickerRect.height >= 22)
         #expect(labelRect.minY >= 8 && labelRect.maxY <= accessory.bounds.height - 8)
         #expect(pickerRect.minY >= 8 && pickerRect.maxY <= accessory.bounds.height - 8)
