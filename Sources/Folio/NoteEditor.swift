@@ -211,10 +211,10 @@ struct NoteEditor: View {
         if #available(macOS 26.0, *) {
             ToolbarSpacer(.flexible, placement: .primaryAction)
         } else {
-            ToolbarItem(placement: .principal) { Spacer() }
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
         }
         #else
-        ToolbarItem(placement: .principal) { Spacer() }
+        ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
         #endif
         ToolbarItem(id: "note-export", placement: .primaryAction) {
                 Button {
@@ -263,17 +263,19 @@ struct NoteEditor: View {
                 .accessibilityLabel("Note actions")
                 .menuIndicator(.hidden)
         }
-        ToolbarItem(id: "library-search", placement: .primaryAction) {
-                if toolbarWidth >= 560 {
-                    searchField.frame(width: min(220, toolbarWidth - 340))
-                } else {
-                    Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
-                        .help("Search notes").accessibilityLabel("Search notes")
-                        .popover(isPresented: $showingSearch) {
-                            searchField.padding().frame(width: 280).folioAppearance()
-                                .onAppear { searchFocus.wrappedValue = true }
-                        }
-                }
+        if toolbarWidth >= 560 {
+            ToolbarItem(id: "library-search", placement: .primaryAction) {
+                searchField.frame(width: min(220, toolbarWidth - 340))
+            }
+        } else {
+            ToolbarItem(id: "library-search-compact", placement: .primaryAction) {
+                Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
+                    .help("Search notes").accessibilityLabel("Search notes")
+                    .popover(isPresented: $showingSearch) {
+                        searchField.padding().frame(width: 280).folioAppearance()
+                            .onAppear { searchFocus.wrappedValue = true }
+                    }
+            }
         }
     }
 

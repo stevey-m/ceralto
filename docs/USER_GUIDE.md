@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.0.
+their original names; the instructions below describe Ceralto 0.23.1.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -27,7 +27,7 @@ Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.23.0 is a development release, not a finished replacement for your library.**
+**0.23.1 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -46,7 +46,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/ceralto/releases).
-Open `Ceralto-0.23.0-arm64.dmg`, drag **Ceralto 0.23.0** to **Applications**, eject the
+Open `Ceralto-0.23.1-arm64.dmg`, drag **Ceralto 0.23.1** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.

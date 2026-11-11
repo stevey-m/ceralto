@@ -8,7 +8,7 @@ import WebKit
 @Suite(.serialized)
 @MainActor
 struct PresentationTests {
-    @Test(arguments: [FolioTheme.light, .dark, .dracula], [720.0, 1240.0])
+    @Test(arguments: [FolioTheme.light, .dark, .dracula], [720.0, 1240.0, 2152.0])
     func libraryWorkspaceRespectsTheNativeTitlebar(theme: FolioTheme, width: Double) async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -17,6 +17,10 @@ struct PresentationTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(theme.rawValue, forKey: "folioTheme")
+        let notebookWidth = width > 1240 ? 362.0 : 220.0
+        let noteWidth = width > 1240 ? 475.0 : 250.0
+        defaults.set(notebookWidth, forKey: "notebookPaneWidth")
+        defaults.set(noteWidth, forKey: "noteListPaneWidth")
         let notebook = Notebook(name: "Ideas")
         let notes = ["First thought", "Second thought"].map {
             Note(notebookID: notebook.id, title: $0, body: "Synthetic sample text.", format: .formatted)
@@ -51,8 +55,14 @@ struct PresentationTests {
         #expect(store.library.notes == notes)
         let frame = try #require(host.superview)
         let toolbar = try #require(window.toolbar)
+        func searchIdentifier() -> String {
+            let current = PaneWidths(available: width, notebooks: notebookWidth, notes: noteWidth,
+                                     showNotebooks: defaults.object(forKey: "showNotebookPane") as? Bool ?? true,
+                                     showNotes: defaults.object(forKey: "showNoteListPane") as? Bool ?? true)
+            return current.document >= 560 ? "library-search" : "library-search-compact"
+        }
         let required = ["sidebar-options", "note-list-title", "note-list-options", "note-new",
-                        "note-formatting", "note-attachments", "note-export", "note-actions", "library-search"]
+                        "note-formatting", "note-attachments", "note-export", "note-actions", searchIdentifier()]
         func toolbarRect(_ identifier: String) throws -> NSRect {
             let item = try #require(toolbar.visibleItems?.first { $0.itemIdentifier.rawValue == identifier },
                                     "\(identifier) must be visible, not relegated to toolbar overflow.")
@@ -68,7 +78,7 @@ struct PresentationTests {
             #expect(control.minX >= 0 && control.maxX <= width,
                     "Every primary control must fit, including at the 720-point minimum width.")
         }
-        let widths = PaneWidths(available: width)
+        let widths = PaneWidths(available: width, notebooks: notebookWidth, notes: noteWidth)
         let notesStart = widths.notebooks + PaneWidths.divider
         let notesEnd = notesStart + widths.notes
         let title = try toolbarRect("note-list-title")
@@ -76,7 +86,7 @@ struct PresentationTests {
         #expect(try toolbarRect("note-new").maxX <= notesEnd + 8,
                 "New note belongs above the note-list column, not above the editor.")
         #expect(try toolbarRect("note-formatting").minX >= notesEnd)
-        #expect(abs(try toolbarRect("library-search").maxX - (width - 8)) <= 8,
+        #expect(abs(try toolbarRect(searchIdentifier()).maxX - (width - 8)) <= 8,
                 "Search and sharing must remain at the right edge of the toolbar.")
         let searchFields = descendants(frame).compactMap { $0 as? NSTextField }
             .filter { $0.placeholderString == "Search" }
@@ -92,7 +102,7 @@ struct PresentationTests {
             defaults.set(false, forKey: key)
             try await Task.sleep(for: .milliseconds(150))
             host.layoutSubtreeIfNeeded()
-            for identifier in ["sidebar-options", "note-new", "note-formatting", "note-export", "library-search"] {
+            for identifier in ["sidebar-options", "note-new", "note-formatting", "note-export", searchIdentifier()] {
                 let control = try toolbarRect(identifier)
                 #expect(control.minX >= 0 && control.maxX <= width)
             }
