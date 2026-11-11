@@ -40,70 +40,81 @@ struct FolioApp: App {
                 Button("New Note") { openWindow(id: "library"); store.perform(.newNote) }
                     .keyboardShortcut(store.shortcut(.newNote).keyboardShortcut)
                     .disabled(!store.isLoaded)
-                Button("New Markdown Source Note") { openWindow(id: "library"); store.perform(.newMarkdown) }
-                    .disabled(!store.isLoaded)
-                Menu("New from Template") {
-                    Button("Choose a Template...") { openWindow(id: "library"); store.perform(.templates) }
-                        .keyboardShortcut(store.shortcut(.templates).keyboardShortcut)
-                    Divider()
-                    if store.activeTemplatePacks.isEmpty { Text("No enabled template packs") }
-                    ForEach(store.activeTemplatePacks) { pack in
-                        Menu(pack.name) {
-                            ForEach(pack.templates) { template in
-                                Button(template.name) { store.createFromTemplate(template) }
+                Menu("New") {
+                    Button("Notebook") { store.notebookDraft = NotebookDraft() }
+                        .keyboardShortcut(store.shortcut(.newNotebook).keyboardShortcut)
+                        .disabled(!store.isLoaded)
+                    Button("Smart Folder...") { store.perform(.newSmartFolder) }
+                        .disabled(FolioCommand.newSmartFolder.unavailableReason(in: store) != nil)
+                    Button("Markdown Source Note") { openWindow(id: "library"); store.perform(.newMarkdown) }
+                        .disabled(!store.isLoaded)
+                    Menu("From Template") {
+                        Button("Choose a Template...") { openWindow(id: "library"); store.perform(.templates) }
+                            .keyboardShortcut(store.shortcut(.templates).keyboardShortcut)
+                        Divider()
+                        if store.activeTemplatePacks.isEmpty { Text("No enabled template packs") }
+                        ForEach(store.activeTemplatePacks) { pack in
+                            Menu(pack.name) {
+                                ForEach(pack.templates) { template in
+                                    Button(template.name) { store.createFromTemplate(template) }
+                                }
                             }
                         }
-                    }
-                    Divider()
-                    Button("Open Extensions Folder", action: store.revealExtensions)
-                    Button("Reload Extensions", action: store.reloadExtensions)
-                }.disabled(FolioCommand.templates.unavailableReason(in: store) != nil)
-                Button("Quick Capture") { capture() }
-                    .keyboardShortcut(store.shortcut(.capture).keyboardShortcut)
-                    .disabled(!store.isLoaded)
-                Button("New Notebook") { store.notebookDraft = NotebookDraft() }
-                    .keyboardShortcut(store.shortcut(.newNotebook).keyboardShortcut)
-                    .disabled(!store.isLoaded)
-                Button("New Smart Folder...") { store.perform(.newSmartFolder) }
-                    .disabled(FolioCommand.newSmartFolder.unavailableReason(in: store) != nil)
-                Divider()
-                Button("Import Markdown or HTML Files...", action: store.importMarkdown)
-                    .keyboardShortcut(store.shortcut(.importFiles).keyboardShortcut)
-                    .disabled(!store.isLoaded)
-                Button("Open Live Markdown Folder...") {
-                    openWindow(id: "live-markdown")
-                    markdown.chooseFolder(avoiding: store.libraryURL)
+                        Divider()
+                        Button("Open Extensions Folder", action: store.revealExtensions)
+                        Button("Reload Extensions", action: store.reloadExtensions)
+                    }.disabled(FolioCommand.templates.unavailableReason(in: store) != nil)
+                    Button("Quick Capture") { capture() }
+                        .keyboardShortcut(store.shortcut(.capture).keyboardShortcut)
+                        .disabled(!store.isLoaded)
                 }
-                Button("Reopen Last Markdown Folder") {
-                    openWindow(id: "live-markdown")
-                    markdown.reopenLast(avoiding: store.libraryURL)
-                }.disabled(!markdown.hasRememberedFolder)
-                Button("Import Joplin Folder...", action: store.importJoplinFolder)
-                    .disabled(!store.isLoaded || store.isImportingJoplin)
-                Button("Import Joplin JEX Archive...", action: store.importJoplinArchive)
-                    .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing)
-                Button("Import Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }
-                    .disabled(!store.isLoaded || store.isImportingJoplin)
-                Button("Export Note...") {
-                    if let note = store.selectedNote { store.exportMarkdown(note) }
-                }
-                .keyboardShortcut(store.shortcut(.exportNote).keyboardShortcut)
-                .disabled(store.selectedNote == nil)
                 Divider()
                 Button("Add Images or Attachments...", action: store.addAttachments)
                     .keyboardShortcut(store.shortcut(.addAttachments).keyboardShortcut)
                     .disabled(store.selectedNote == nil || store.selectedNote?.deletedAt != nil)
-                Button("Export Complete Backup...", action: store.exportBackup)
-                    .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing)
-                Button("Export Encrypted Complete Backup...") { store.encryptedBackup(exporting: true) }
-                    .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
-                Button("Import Encrypted Backup...") { store.encryptedBackup(exporting: false) }
-                    .disabled(store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
-                    .disabled(!store.isLoaded)
-                Button("Export Open Markdown Folder...", action: store.exportVault)
-                    .disabled(!store.isLoaded)
-                Button("Import Ceralto Backup...", action: store.importBackup)
-                    .disabled(!store.isLoaded)
+                Menu("Import") {
+                    Button("Import Markdown or HTML Files...", action: store.importMarkdown)
+                        .keyboardShortcut(store.shortcut(.importFiles).keyboardShortcut)
+                        .disabled(!store.isLoaded)
+                    Button("Import Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }
+                        .disabled(!store.isLoaded || store.isImportingJoplin)
+                    Divider()
+                    Button("Import Joplin Folder...", action: store.importJoplinFolder)
+                        .disabled(!store.isLoaded || store.isImportingJoplin)
+                    Button("Import Joplin JEX Archive...", action: store.importJoplinArchive)
+                        .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing)
+                }
+                Menu("Export") {
+                    Button("Export Note...") {
+                        if let note = store.selectedNote { store.exportMarkdown(note) }
+                    }
+                    .keyboardShortcut(store.shortcut(.exportNote).keyboardShortcut)
+                    .disabled(store.selectedNote == nil)
+                    Button("Export Open Markdown Folder...", action: store.exportVault)
+                        .disabled(!store.isLoaded)
+                }
+                Menu("Backups") {
+                    Button("Export Complete Backup...", action: store.exportBackup)
+                        .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing)
+                    Button("Export Encrypted Complete Backup...") { store.encryptedBackup(exporting: true) }
+                        .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
+                    Divider()
+                    Button("Import Ceralto Backup...", action: store.importBackup)
+                        .disabled(!store.isLoaded)
+                    Button("Import Encrypted Backup...") { store.encryptedBackup(exporting: false) }
+                        .disabled(store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
+                        .disabled(!store.isLoaded)
+                }
+                Menu("Markdown Folders") {
+                    Button("Open Live Markdown Folder...") {
+                        openWindow(id: "live-markdown")
+                        markdown.chooseFolder(avoiding: store.libraryURL)
+                    }
+                    Button("Reopen Last Markdown Folder") {
+                        openWindow(id: "live-markdown")
+                        markdown.reopenLast(avoiding: store.libraryURL)
+                    }.disabled(!markdown.hasRememberedFolder)
+                }
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Save") {
@@ -112,16 +123,20 @@ struct FolioApp: App {
                 }
                     .keyboardShortcut(store.shortcut(.save).keyboardShortcut)
                     .disabled(focusedMarkdown == nil && !store.isLoaded)
-                Button("Show Library in Finder", action: store.revealLibrary)
-                Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
                 Divider()
-                Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
-                    .disabled(!store.isLoaded || store.isSyncing)
-                Button("Sync Now", action: store.syncNow)
-                    .keyboardShortcut(store.shortcut(.sync).keyboardShortcut)
-                    .disabled(store.syncFolderName == nil || store.isSyncing)
-                Button("Disconnect Shared Folder", action: store.disconnectSyncFolder)
-                    .disabled(store.syncFolderName == nil)
+                Menu("Cloud Sync") {
+                    Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
+                        .disabled(!store.isLoaded || store.isSyncing)
+                    Button("Sync Now", action: store.syncNow)
+                        .keyboardShortcut(store.shortcut(.sync).keyboardShortcut)
+                        .disabled(store.syncFolderName == nil || store.isSyncing)
+                    Button("Disconnect Shared Folder", action: store.disconnectSyncFolder)
+                        .disabled(store.syncFolderName == nil)
+                }
+                Menu("Library") {
+                    Button("Show Library in Finder", action: store.revealLibrary)
+                    Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
+                }
             }
             CommandGroup(replacing: .printItem) {
                 Button(store.isPreparingPrint ? "Preparing Print..." : "Print...") { store.perform(.printNote) }

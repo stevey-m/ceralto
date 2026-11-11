@@ -77,7 +77,7 @@ library at once.
 ## Save or export a note
 
 **Save** keeps the note in Ceralto's local library; it does not create a separate
-document. Choose **File > Export Note...** or the share icon to save a file.
+document. Choose **File > Export > Export Note...** or the share icon to save a file.
 The save panel now has a **File format** selector: **Markdown (.md)**,
 **HTML (.html)** or **Plain Text (.txt)**. Its filename extension follows your
 choice. Markdown notes default to Markdown; imported HTML notes default to HTML.
@@ -103,6 +103,11 @@ using it must be reset in Keyboard Shortcuts (the saved configuration is kept).
 
 ## Write and format in Compose
 
+The File menu keeps **New Note**, **Add Images or Attachments**, **Save** and
+**Print** at the top level. Other actions are grouped under **New**, **Import**,
+**Export**, **Backups**, **Markdown Folders**, **Cloud Sync** and **Library**.
+Existing keyboard shortcuts still work from these submenus.
+
 Click the labelled **New Note** button above the note list, or press **Command-N**.
 The new note is selected and its title is focused, ready to type. With the default
 Compose format, press Return after its title to move into the note body.
@@ -112,6 +117,8 @@ and click **Aa**. Its popover puts Bold, Italic, Underline and Strikethrough
 above the paragraph styles. There is no **Edit Note** step or remembered
 read-only mode. **Note actions > Preview** is an explicit, per-tab choice;
 returning to editing retains the editor's undo history.
+Use **Edit > Undo** or **Command-Z** to restore deleted text, and
+**Command-Shift-Z** to redo it. Restored text is saved automatically.
 Merely opening the editor does not rewrite the saved source or
 change its format: Markdown stays Markdown, and HTML stays HTML when edited.
 If Compose cannot represent the note's structure, a visible notice explains why
@@ -369,11 +376,11 @@ change the note's content.
   Native undo/redo and spelling are available. Formatting shortcuts include
   Command-B and Command-I.
 - **Keep advanced source intact.** Imported Markdown and HTML remain in their
-  original source format with Write, Split and Preview modes. The formatted
+  original source format. Notes open editable, with Preview available explicitly. The formatted
   editor supports common ordered/nested lists, checklists and GFM tables;
   unsupported or malformed structures are rejected rather than silently
   flattened. For advanced Markdown, choose **Note actions > Use Markdown
-  Source Editor** or **File > New Markdown Source Note**. Switching changes
+  Source Editor** or **File > New > Markdown Source Note**. Switching changes
   only the editing mode, not the body.
 - **Capture without organising.** Quick Capture is a separate floating window,
   available from the menu bar, File menu or Command-Shift-Space while Ceralto is
@@ -456,7 +463,7 @@ deletion. For bulk note operations, see [Sort and select multiple notes](#sort-a
 
 ## Live Markdown folders
 
-Choose **File > Open Live Markdown Folder** on Mac. This opens a separate
+Choose **File > Markdown Folders > Open Live Markdown Folder** on Mac. This opens a separate
 native window, not a conversion of your current Ceralto library. The normal
 library and its notes stay untouched. Open an ordinary folder or Obsidian
 vault containing `.md`/`.markdown` files, **not Joplin's internal sync folder**.
@@ -593,7 +600,7 @@ of these library backups. Use Time Machine for the entire local app folder.
 
 ### Password-encrypted manual backups
 
-Choose **File > Export Encrypted Complete Backup** or the same action in
+Choose **File > Backups > Export Encrypted Complete Backup** or the same action in
 **Settings > Files & Backups**. Each `.deltosbackup` archive includes notebooks,
 notes, Trash, checkpoints and original linked attachments. Filenames, metadata
 and contents are encrypted with AES-256-GCM and a fresh random nonce and salt;
@@ -781,7 +788,7 @@ search, readable pages and tap-to-open original images in the document area. The
 half-finished editing controls.
 
 1. On Mac, create a dedicated folder in **iCloud Drive**. In Ceralto choose
-   **File > Connect Cloud Folder**, then **Sync Now**.
+   **File > Cloud Sync > Connect Cloud Folder**, then **Cloud Sync > Sync Now**.
 2. Let iCloud upload it. In Files on iPad, make the folder available offline
    using **Keep Downloaded** where available.
 3. In the iPad reader, choose **Connect iCloud Drive Folder** and select that
@@ -840,10 +847,10 @@ on your iPad.
 ## Import your existing notes
 
 **Joplin:** export **MD - Markdown + Front Matter**, then choose **File >
-Import Joplin Folder**. Titles, tags, dates and notebook paths are preserved.
+Import > Import Joplin Folder**. Titles, tags, dates and notebook paths are preserved.
 The export and its original resources are copied into Ceralto; the source export
 can then be removed. Other YAML fields remain in the copied originals.
-For a JEX export, choose **File > Import Joplin JEX Archive**. Ceralto validates
+For a JEX export, choose **File > Import > Import Joplin JEX Archive**. Ceralto validates
 the entire archive and imports notes, nested notebooks, tags and original
 attachments without replacing existing notes. Joplin resource and note links
 are translated to managed relative attachments and internal note links.
@@ -880,14 +887,14 @@ Evernote ENEX, web clipping and OCR are not implemented.
 
 ## Open formats and backups
 
-**File > Export Open Markdown Folder** creates ordinary Markdown/HTML files,
+**File > Export > Export Open Markdown Folder** creates ordinary Markdown/HTML files,
 notebook folders, metadata and original linked attachments. Markdown has YAML
 front matter; HTML has a metadata sidecar. Notes have separate resource trees
 so relative links keep working, which can duplicate shared attachments.
 This is a portable snapshot you can open with other tools, not a live Obsidian
 vault backend.
 
-**File > Export Complete Backup** includes the full library, history and copied
+**File > Backups > Export Complete Backup** includes the full library, history and copied
 original resource trees. **Import Ceralto Backup** adds records without replacing
 existing notes. Backups use portable relative paths and can be moved between
 devices. Device-local sync state and folder permissions are not exported.

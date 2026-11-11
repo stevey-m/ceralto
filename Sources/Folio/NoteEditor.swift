@@ -175,7 +175,8 @@ struct NoteEditor: View {
         .onAppear {
             guard !initialized else { return }
             tagsText = note.tags.joined(separator: ", ")
-            if !isTrashed { beginEditing() }
+            let newSourceNote = note.contentFormat == .markdown && note.title.isEmpty && note.body.isEmpty
+            if !isTrashed && !newSourceNote { beginEditing() }
             initialized = true
         }
         .onChange(of: isTrashed) { _, trashed in
@@ -278,7 +279,7 @@ struct NoteEditor: View {
         }
         if toolbarWidth >= 560 {
             ToolbarItem(id: "library-search", placement: .primaryAction) {
-                searchField.frame(width: min(220, toolbarWidth - 340))
+                searchField.frame(width: min(220, max(120, toolbarWidth - 600)))
             }
         } else {
             ToolbarItem(id: "library-search-compact", placement: .primaryAction) {

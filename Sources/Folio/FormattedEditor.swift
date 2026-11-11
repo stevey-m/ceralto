@@ -683,6 +683,22 @@ class DocumentTextView: NSTextView {
     }()
     override var undoManager: UndoManager? { documentUndo }
 
+    @objc func undo(_ sender: Any?) {
+        guard isEditable, documentUndo.canUndo else { return }
+        documentUndo.undo()
+    }
+
+    @objc func redo(_ sender: Any?) {
+        guard isEditable, documentUndo.canRedo else { return }
+        documentUndo.redo()
+    }
+
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(undo(_:)) { return isEditable && documentUndo.canUndo }
+        if menuItem.action == #selector(redo(_:)) { return isEditable && documentUndo.canRedo }
+        return super.validateMenuItem(menuItem)
+    }
+
     @objc private func publishUndo(_ notification: Notification) {
         // NSTextView's private undo operations do not always notify our persistence delegate.
         didChangeText()
