@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+struct LibraryWindowContent: View {
+    var body: some View {
+        ContentView()
+            .frame(minWidth: 720, minHeight: 520)
+    }
+}
+
 @main
 struct FolioApp: App {
     @StateObject private var store = NotesStore()
@@ -13,10 +20,8 @@ struct FolioApp: App {
 
     var body: some Scene {
         Window("Deltos", id: "library") {
-            ContentView()
-                .ignoresSafeArea(.container, edges: .top)
+            LibraryWindowContent()
                 .environmentObject(store)
-                .frame(minWidth: 720, minHeight: 520)
                 .onAppear {
                     delegate.store = store; delegate.markdown = markdown
                     store.backupManager?.start()

@@ -8,6 +8,56 @@ import WebKit
 @Suite(.serialized)
 @MainActor
 struct PresentationTests {
+    @Test(arguments: [FolioTheme.light, .dracula])
+    func libraryWorkspaceRespectsTheNativeTitlebar(theme: FolioTheme) async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "DeltosTitlebar-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(theme.rawValue, forKey: "folioTheme")
+        let notebook = Notebook(name: "Ideas")
+        let notes = ["First thought", "Second thought"].map {
+            Note(notebookID: notebook.id, title: $0, body: "Synthetic sample text.", format: .formatted)
+        }
+        let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
+        try storage.save(Library(notebooks: [notebook], notes: notes))
+        let store = NotesStore(storage: storage, preferences: defaults)
+        store.openNote(notes[0].id)
+        store.openNoteInNewTab(notes[1].id)
+        let host = NSHostingView(rootView: LibraryWindowContent()
+            .environmentObject(store).defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
+                              styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: false)
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.contentView = host
+        defer { window.contentView = nil }
+        try await Task.sleep(for: .milliseconds(200))
+        host.layoutSubtreeIfNeeded()
+        func descendants(_ view: NSView) -> [NSView] {
+            [view] + view.subviews.flatMap(descendants)
+        }
+        let probes = descendants(host).compactMap { $0 as? ThemeWindowStyle.Probe }
+        let workspace = try #require(probes.max { $0.bounds.height < $1.bounds.height })
+        let rect = workspace.convert(workspace.bounds, to: nil)
+        #expect(window.contentLayoutRect.maxY < host.bounds.maxY)
+        #expect(rect.maxY <= window.contentLayoutRect.maxY,
+                "The workspace headers and tabs must start below the native titlebar.")
+        #expect(rect.width >= 720 && rect.height >= 520)
+        #expect(store.workspace.tabs.count == 2)
+        #expect(store.library.notes == notes)
+        let frame = try #require(host.superview)
+        let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+        frame.cacheDisplay(in: frame.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        try png.write(to: package.appendingPathComponent("dist/Deltos-titlebar-\(theme.rawValue.lowercased())-preview.png"))
+    }
+
     @Test func nestedNotebookSidebarRendersAlongsideScopedNotesWithoutChangingLibrary() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -16,8 +16,6 @@ struct NoteEditor: View {
     @ViewState private var initialized = false
     @AppStorage("editorFontSize") private var fontSize = 15.0
     @AppStorage("showNoteDetails") private var showDetails = false
-    @AppStorage("showNotebookPane") private var showNotebooks = true
-    @AppStorage("showNoteListPane") private var showNotes = true
     @ViewState private var showingSearch = false
     @ThemeColors private var palette
     @AppStorage("readingFont") private var readingFont = ReadingFont.system.rawValue
@@ -259,7 +257,7 @@ struct NoteEditor: View {
                 }
             }
         .buttonStyle(.borderless)
-        .padding(.leading, showNotebooks || showNotes ? 20 : 84)
+        .padding(.leading, 20)
         .padding(.trailing, 16)
         .frame(height: 52)
         .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))

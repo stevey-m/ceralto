@@ -25,7 +25,7 @@ Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.22.0 is a development release, not a finished replacement for your library.**
+**0.22.1 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -39,7 +39,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.22.0-arm64.dmg`, drag **Deltos 0.22.0** to **Applications**, eject the
+Open `Deltos-0.22.1-arm64.dmg`, drag **Deltos 0.22.1** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -207,6 +207,7 @@ ellipsis menu or **Settings > Appearance**. Appearance also has a separate
 note-list text-size slider; editor/preview size uses Command-Plus/Minus.
 
 The main window now uses aligned compact pane headers and a quieter sidebar.
+Headers and document tabs stay below the native titlebar, including in Dracula.
 Search sits at the top right and **Command-F** focuses it, including when a
 search has no results. Additional actions remain in menus rather than permanent
 control bars. The document tab bar hides when only one tab is open; notebook,

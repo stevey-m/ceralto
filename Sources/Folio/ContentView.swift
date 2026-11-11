@@ -267,7 +267,7 @@ struct ContentView: View {
                     .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Sidebar options")
             }
             .buttonStyle(.borderless)
-            .padding(.leading, 80).padding(.trailing, 16).frame(height: 52)
+            .padding(.horizontal, 16).frame(height: 52)
 
             List(selection: $store.mainFolderScope) {
                 Section("On My Mac") {
@@ -536,7 +536,7 @@ struct ContentView: View {
             .accessibilityLabel("New note")
             .disabled(!store.isLoaded)
         }
-        .padding(.leading, showNotebooks ? 12 : 84).padding(.trailing, 12).frame(height: 52)
+        .padding(.horizontal, 12).frame(height: 52)
         .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
         .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440).folioAppearance() }
     }

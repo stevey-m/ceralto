@@ -174,7 +174,7 @@ enum FolioPalette {
     }
 }
 
-private struct ThemeWindowStyle: NSViewRepresentable {
+struct ThemeWindowStyle: NSViewRepresentable {
     let theme: FolioTheme
     let palette: ThemePack?
 
