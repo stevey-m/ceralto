@@ -3,6 +3,7 @@ import ImageIO
 import NotesCore
 import QuickLook
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AttachmentBrowser: View {
     @EnvironmentObject private var store: NotesStore
@@ -15,6 +16,8 @@ struct AttachmentBrowser: View {
     @ViewState private var kind: NoteAttachment.Kind?
     @ViewState private var previewURL: URL?
     @ViewState private var actionError: String?
+    @ViewState private var actionMessage: String?
+    @ViewState private var savingCopy = false
     @ThemeColors private var palette
 
     private var filtered: [NoteAttachment] {
@@ -37,6 +40,11 @@ struct AttachmentBrowser: View {
             }
             .pickerStyle(.segmented)
             if let actionError { Label(actionError, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
+            if let actionMessage {
+                Label(actionMessage, systemImage: "checkmark.circle")
+                    .font(.caption).textSelection(.enabled)
+            }
+            if savingCopy { ProgressView("Saving attachment copy...").controlSize(.small) }
             if !issues.isEmpty {
                 DisclosureGroup("Some notes could not be indexed (\(issues.count))") {
                     ScrollView {
@@ -66,14 +74,38 @@ struct AttachmentBrowser: View {
                         Text(attachment.name).font(.headline).lineLimit(2).help(attachment.name)
                         Text(attachment.noteTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         HStack {
-                            Button("Preview") { perform(attachment) { previewURL = $0 } }
+                            Button("Preview") {
+                                perform(attachment) { previewURL = try attachment.resolvedURL() }
+                            }
                             Spacer()
                             Button("Open Note") { store.openNote(attachment.noteID); dismiss() }
                                 .buttonStyle(.borderless).fixedSize()
                         }.font(.caption).controlSize(.small)
-                        Button("Show in Finder") {
-                            perform(attachment) { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
-                        }.font(.caption).buttonStyle(.borderless)
+                        HStack {
+                            Button("Open in App") {
+                                perform(attachment, message: "Sent \(attachment.name) to its default Mac app.") {
+                                    try AttachmentFileActions.open(attachment)
+                                }
+                            }
+                            .help("Opens the original file. Edits in the other app change this attachment; save a copy for independent editing.")
+                            .fixedSize()
+                            Spacer(minLength: 4)
+                            Menu("Actions") {
+                                Button("Save a Copy...") { saveCopy(attachment) }.disabled(savingCopy)
+                                Button("Copy File") {
+                                    perform(attachment, message: "File copied. Paste into Finder, Mail or another app.") {
+                                        try AttachmentFileActions.copy(attachment)
+                                    }
+                                }
+                                Divider()
+                                Button("Show in Finder") {
+                                    perform(attachment) {
+                                        NSWorkspace.shared.activateFileViewerSelecting([try attachment.resolvedURL()])
+                                    }
+                                }
+                            }
+                            .menuStyle(.borderlessButton).fixedSize()
+                        }.font(.caption).controlSize(.small)
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,9 +123,38 @@ struct AttachmentBrowser: View {
         }
     }
 
-    private func perform(_ attachment: NoteAttachment, action: (URL) -> Void) {
-        do { let url = try attachment.resolvedURL(); actionError = nil; action(url) }
-        catch { actionError = "\(attachment.name): \(error.localizedDescription)" }
+    private func perform(_ attachment: NoteAttachment, message: String? = nil, action: () throws -> Void) {
+        actionMessage = nil
+        do {
+            try action()
+            actionError = nil
+            actionMessage = message
+        } catch { actionError = "\(attachment.name): \(error.localizedDescription)" }
+    }
+
+    private func saveCopy(_ attachment: NoteAttachment) {
+        perform(attachment) {
+            let panel = try AttachmentFileActions.savePanel(for: attachment)
+            panel.begin { response in
+                guard response == .OK else { return }
+                guard let destination = panel.url else {
+                    actionError = "The save panel did not provide a destination. No file was copied."
+                    return
+                }
+                savingCopy = true
+                actionError = nil
+                actionMessage = nil
+                Task {
+                    defer { savingCopy = false }
+                    do {
+                        try await Task.detached(priority: .userInitiated) {
+                            try AttachmentFileActions.saveCopy(attachment, to: destination)
+                        }.value
+                        actionMessage = "Saved a copy as \(destination.lastPathComponent)."
+                    } catch { actionError = "\(attachment.name): \(error.localizedDescription)" }
+                }
+            }
+        }
     }
 
     private func load() async {
@@ -122,6 +183,50 @@ struct AttachmentBrowser: View {
             actionError = "Could not list attachments: \(error.localizedDescription)"
             loading = false
         }
+    }
+}
+
+enum AttachmentFileActions {
+    @MainActor
+    static func open(_ attachment: NoteAttachment,
+                     using opener: (URL) -> Bool = { NSWorkspace.shared.open($0) }) throws {
+        let url = try attachment.resolvedURL()
+        guard opener(url) else {
+            throw NoteWorkflowError("macOS could not open this file. Use Show in Finder to choose an application.")
+        }
+    }
+
+    @MainActor
+    static func copy(_ attachment: NoteAttachment, to pasteboard: NSPasteboard = .general) throws {
+        let url = try attachment.resolvedURL()
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects([url as NSURL]) else {
+            throw NoteWorkflowError("The file could not be copied to the clipboard.")
+        }
+    }
+
+    @MainActor
+    static func savePanel(for attachment: NoteAttachment) throws -> NSSavePanel {
+        let source = try attachment.resolvedURL()
+        let panel = NSSavePanel()
+        panel.title = "Save Attachment Copy"
+        panel.prompt = "Save Copy"
+        panel.message = "Save an independent copy of the original file, without converting it or changing the note."
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.nameFieldStringValue = source.lastPathComponent
+        if let type = UTType(filenameExtension: source.pathExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        return panel
+    }
+
+    nonisolated static func saveCopy(_ attachment: NoteAttachment, to destination: URL) throws {
+        let source = try attachment.resolvedURL()
+        guard destination.standardizedFileURL.resolvingSymlinksInPath() != source else {
+            throw NoteWorkflowError("Choose a different location. Save a Copy cannot replace the original attachment.")
+        }
+        try Data(contentsOf: source, options: .mappedIfSafe).write(to: destination, options: .atomic)
     }
 }
 

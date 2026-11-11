@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.1.
+their original names; the instructions below describe Ceralto 0.23.2.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -27,7 +27,7 @@ Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.23.1 is a development release, not a finished replacement for your library.**
+**0.23.2 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -46,7 +46,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/ceralto/releases).
-Open `Ceralto-0.23.1-arm64.dmg`, drag **Ceralto 0.23.1** to **Applications**, eject the
+Open `Ceralto-0.23.2-arm64.dmg`, drag **Ceralto 0.23.2** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -206,10 +206,21 @@ own first section. Gallery supports Command-click, Shift-click and arrow-key
 selection, plus the same context-menu and bulk actions as list mode.
 
 **View Attachments** browses local linked files in the current scope, with
-image/PDF/other-file filters, bounded image thumbnails, native Quick Look,
-Show in Finder and Open Note. It does not download remote images or index
-unlinked files. Missing files and blocked paths are reported rather than
-opened outside the note's resource folder. Original attachments are unchanged.
+image/PDF/other-file filters, bounded image thumbnails and native Quick Look.
+**Open in App** opens the original attachment in its default Mac application.
+Edits saved by that application change the original attachment; choose
+**Actions > Save a Copy...** first for independent editing. The native save
+panel creates an exact file copy, not a format conversion, and refuses to
+replace the original attachment. Replacing another existing destination
+requires the standard save-panel confirmation.
+
+**Actions > Copy File** places the actual file on the clipboard, ready to paste
+into Finder, Mail or another app, rather than copying its name or preview.
+**Actions > Show in Finder** and **Open Note** remain available. Copying, saving
+a copy and previewing do not change the original file or note. Success and
+failure messages appear inside the browser. It does not download remote images
+or index unlinked files. Missing files and blocked paths are reported rather
+than opened outside the note's resource folder.
 
 Choose **Compact**, **Comfortable** or **Spacious** note-list spacing in the
 ellipsis menu or **Settings > Appearance**. Appearance also has a separate

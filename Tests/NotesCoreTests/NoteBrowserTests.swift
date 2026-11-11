@@ -106,6 +106,108 @@ struct NoteBrowserTests {
 
 @MainActor
 struct NoteBrowserPresentationTests {
+    @Test func attachmentActionsOpenAndCopyTheActualFileAndReportLaunchFailure() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("reference.txt")
+        try Data("Synthetic attachment.".utf8).write(to: source)
+        let note = Note(notebookID: UUID(), title: "Reference",
+                        body: "[Reference](reference.txt)",
+                        importedSourceURL: root.appendingPathComponent("note.md"), importedRootURL: root)
+        let attachment = try #require(Attachments.references(in: note).first)
+        var opened: URL?
+        try AttachmentFileActions.open(attachment) { opened = $0; return true }
+        #expect(opened == source.standardizedFileURL.resolvingSymlinksInPath())
+        #expect(throws: NoteWorkflowError.self) {
+            try AttachmentFileActions.open(attachment, using: { _ in false })
+        }
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        try AttachmentFileActions.copy(attachment, to: board)
+        let copied = try #require(board.readObjects(forClasses: [NSURL.self],
+                                                    options: [.urlReadingFileURLsOnly: true]) as? [URL])
+        #expect(copied == [source.standardizedFileURL.resolvingSymlinksInPath()])
+        #expect(try Data(contentsOf: copied[0]) == Data("Synthetic attachment.".utf8))
+    }
+
+    @Test func savingAnAttachmentCopyPreservesItsBytesAndCannotReplaceItsOriginal() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("original.txt")
+        let original = Data([0, 10, 128, 255, 31, 72])
+        try original.write(to: source)
+        let note = Note(notebookID: UUID(), title: "Original",
+                        body: "[Original](original.txt)",
+                        importedSourceURL: root.appendingPathComponent("note.md"), importedRootURL: root)
+        let attachment = try #require(Attachments.references(in: note).first)
+        let panel = try AttachmentFileActions.savePanel(for: attachment)
+        #expect(panel.nameFieldStringValue == "original.txt")
+        let destination = root.appendingPathComponent("saved copy.txt")
+        try AttachmentFileActions.saveCopy(attachment, to: destination)
+        #expect(try Data(contentsOf: destination) == original)
+        try Data("Changed independently.".utf8).write(to: destination)
+        #expect(try Data(contentsOf: source) == original)
+        try AttachmentFileActions.saveCopy(attachment, to: destination)
+        #expect(try Data(contentsOf: destination) == original)
+        #expect(throws: NoteWorkflowError.self) {
+            try AttachmentFileActions.saveCopy(attachment, to: source)
+        }
+        let alias = root.appendingPathComponent("original-alias.txt")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: source)
+        #expect(throws: NoteWorkflowError.self) {
+            try AttachmentFileActions.saveCopy(attachment, to: alias)
+        }
+        #expect(throws: (any Error).self) {
+            try AttachmentFileActions.saveCopy(attachment, to: root)
+        }
+        #expect(try Data(contentsOf: source) == original)
+    }
+
+    @Test func attachmentActionsRecheckMissingAndEscapedFilesBeforeSideEffects() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let resources = root.appendingPathComponent("resources")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = resources.appendingPathComponent("original.txt")
+        let outside = root.appendingPathComponent("outside.txt")
+        try Data("Original.".utf8).write(to: source)
+        try Data("Outside.".utf8).write(to: outside)
+        let note = Note(notebookID: UUID(), title: "Containment",
+                        body: "[Original](original.txt)",
+                        importedSourceURL: resources.appendingPathComponent("note.md"), importedRootURL: resources)
+        let attachment = try #require(Attachments.references(in: note).first)
+        try FileManager.default.removeItem(at: source)
+        try FileManager.default.createSymbolicLink(at: source, withDestinationURL: outside)
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        board.setString("Untouched.", forType: .string)
+        var opened = false
+        #expect(throws: NoteWorkflowError.self) {
+            try AttachmentFileActions.open(attachment) { _ in opened = true; return true }
+        }
+        #expect(!opened)
+        #expect(throws: NoteWorkflowError.self) { try AttachmentFileActions.copy(attachment, to: board) }
+        #expect(board.string(forType: .string) == "Untouched.")
+        #expect(throws: NoteWorkflowError.self) { try AttachmentFileActions.savePanel(for: attachment) }
+        let destination = root.appendingPathComponent("copy.txt")
+        #expect(throws: NoteWorkflowError.self) {
+            try AttachmentFileActions.saveCopy(attachment, to: destination)
+        }
+        #expect(!FileManager.default.fileExists(atPath: destination.path))
+        try FileManager.default.removeItem(at: source)
+        #expect(throws: (any Error).self) {
+            try AttachmentFileActions.open(attachment) { _ in opened = true; return true }
+        }
+        #expect(throws: (any Error).self) { try AttachmentFileActions.copy(attachment, to: board) }
+        #expect(throws: (any Error).self) {
+            try AttachmentFileActions.saveCopy(attachment, to: destination)
+        }
+        #expect(!opened && board.string(forType: .string) == "Untouched.")
+        #expect(try Data(contentsOf: outside) == Data("Outside.".utf8))
+    }
+
     @Test func attachmentThumbnailsAreBoundedAndOriginalFilesRemainUnchanged() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

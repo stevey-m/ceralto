@@ -13,7 +13,7 @@ final class NoteExportPanel: NSObject {
         super.init()
         panel.title = "Export Note"
         panel.prompt = "Export"
-        panel.message = "Choose a file format. Attachments are linked, not copied. Use File > Export Open Markdown Folder to include attachments. For PDF, use File > Print > PDF > Save as PDF."
+        panel.message = "Attachments stay linked, not copied. To include them, use File > Export Open Markdown Folder. For PDF, choose File > Print > PDF."
         panel.canSelectHiddenExtension = true
         panel.isExtensionHidden = false
         panel.nameFieldStringValue = String(MarkdownFile.filename(for: note).dropLast(3)) + "." + format.fileExtension
@@ -23,10 +23,20 @@ final class NoteExportPanel: NSObject {
         formatPicker.action = #selector(changeFormat)
         formatPicker.setAccessibilityLabel("File format")
         let label = NSTextField(labelWithString: "File format:")
+        label.alignment = .right
+        label.font = .systemFont(ofSize: NSFont.systemFontSize)
+        label.widthAnchor.constraint(equalToConstant: 78).isActive = true
+        formatPicker.font = .systemFont(ofSize: NSFont.systemFontSize)
+        formatPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 170).isActive = true
+        formatPicker.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        formatPicker.setContentCompressionResistancePriority(.required, for: .horizontal)
         let accessory = NSStackView(views: [label, formatPicker])
         accessory.orientation = .horizontal
+        accessory.alignment = .firstBaseline
+        accessory.distribution = .fill
         accessory.spacing = 12
-        accessory.setFrameSize(NSSize(width: 350, height: 32))
+        accessory.edgeInsets = NSEdgeInsets(top: 12, left: 24, bottom: 12, right: 24)
+        accessory.setFrameSize(NSSize(width: 350, height: 52))
         panel.accessoryView = accessory
         applyFormat()
     }

@@ -57,6 +57,29 @@ struct NoteExportTests {
 @Suite(.serialized)
 @MainActor
 struct NoteExportPanelTests {
+    @Test(arguments: [350.0, 520.0])
+    func formatRowHasNativeInsetsAndFitsWithoutClipping(width: Double) throws {
+        let export = NoteExportPanel(note: Note(notebookID: UUID(), title: "Synthetic export"))
+        let accessory = try #require(export.panel.accessoryView)
+        accessory.setFrameSize(NSSize(width: width, height: 52))
+        accessory.layoutSubtreeIfNeeded()
+        let label = try #require(accessory.subviews.compactMap { $0 as? NSTextField }.first)
+        let labelRect = accessory.convert(label.alignmentRect(forFrame: label.frame), from: label.superview)
+        let pickerRect = export.formatPicker.convert(export.formatPicker.bounds, to: accessory)
+        #expect(labelRect.minX >= 24)
+        #expect(pickerRect.minX >= labelRect.maxX + 8)
+        #expect(pickerRect.maxX <= width - 24)
+        #expect(pickerRect.width >= 170 && pickerRect.height >= 22)
+        #expect(labelRect.minY >= 8 && labelRect.maxY <= accessory.bounds.height - 8)
+        #expect(pickerRect.minY >= 8 && pickerRect.maxY <= accessory.bounds.height - 8)
+        func baseline(_ view: NSView) -> Double {
+            let y = view.isFlipped ? view.firstBaselineOffsetFromTop
+                : view.bounds.height - view.firstBaselineOffsetFromTop
+            return view.convert(NSPoint(x: 0, y: y), to: accessory).y
+        }
+        #expect(abs(baseline(label) - baseline(export.formatPicker)) <= 1)
+    }
+
     @Test func theActualSavePanelOffersFormatsAndKeepsTheTypedNameWhileChangingExtensions() throws {
         let note = Note(notebookID: UUID(), title: "Meeting")
         let export = NoteExportPanel(note: note)
