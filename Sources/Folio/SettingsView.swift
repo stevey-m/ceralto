@@ -26,7 +26,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var keywords: String {
         switch self {
         case .general: "version releases updates help github source license contributors note list preview dates sort sorting title created updated ascending descending pinned"
-        case .appearance: "theme system light dark dracula accent gold blue purple green rose font text size images width panes layout"
+        case .appearance: "theme themes packs import export github nord solarized monokai one dark system light dark dracula accent gold blue purple green rose font text size images width panes layout"
         case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates brackets quotes pairing shortcuts tab spaces line numbers writing column width"
         case .files: "library storage location import export print pdf joplin markdown html attachments backup restore recovery schedule scheduled interval retention history privacy encryption trash"
         case .sync: "icloud dropbox onedrive google drive cloud folder connect disconnect sync offline ipad refresh snapshots conflicts backup"
@@ -54,7 +54,7 @@ struct SettingsView: View {
     @AppStorage("noteListShowDates") private var showDates = true
     @AppStorage("dailyNotebook") private var dailyNotebook = "Journal"
     @AppStorage("dailyTemplate") private var dailyTemplate = TemplateChoice.daily.id
-    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @ThemeColors private var palette
 
     private var matches: [SettingsSection] { SettingsSection.matching(query) }
 
@@ -74,32 +74,11 @@ struct SettingsView: View {
             settingsContent
         }
         .frame(minWidth: 720, idealWidth: 900, minHeight: 480, idealHeight: 680)
-        .background(SettingsWindowSizing())
         .onChange(of: query) { _, _ in
             if selection.map({ !matches.contains($0) }) ?? true { selection = matches.first }
         }
 
         .folioAppearance()
-    }
-
-    private struct SettingsWindowSizing: NSViewRepresentable {
-        func makeNSView(context: Context) -> Probe { Probe() }
-        func updateNSView(_ view: Probe, context: Context) { view.apply() }
-
-        @MainActor final class Probe: NSView {
-            override func viewDidMoveToWindow() {
-                super.viewDidMoveToWindow()
-                apply()
-            }
-
-            func apply() {
-                guard let window else { return }
-                window.styleMask.insert(.resizable)
-                window.contentMinSize = NSSize(width: 720, height: 480)
-                window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
-                                               height: CGFloat.greatestFiniteMagnitude)
-            }
-        }
     }
 
     private var settingsContent: some View {
@@ -114,7 +93,7 @@ struct SettingsView: View {
                         ForEach(matches) { section in
                             Button { selection = section } label: {
                                 Label(section.rawValue, systemImage: section.symbol)
-                                    .foregroundStyle(theme == FolioTheme.dracula.rawValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                                    .foregroundStyle(palette != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 10).padding(.vertical, 8)
                                     .contentShape(Rectangle())
@@ -123,7 +102,7 @@ struct SettingsView: View {
                             .background {
                                 if selection == section {
                                     RoundedRectangle(cornerRadius: 7)
-                                        .fill(theme == FolioTheme.dracula.rawValue ? FolioPalette.selection : Color.accentColor.opacity(0.15))
+                                        .fill(palette?.selectionColor ?? Color.accentColor.opacity(0.15))
                                 }
                             }
                             .accessibilityAddTraits(selection == section ? .isSelected : [])

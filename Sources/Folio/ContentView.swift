@@ -12,7 +12,7 @@ struct ContentView: View {
     @ViewState private var smartFolderToDelete: SmartFolder?
     @ViewState private var showingSearchHelp = false
     @ViewState private var selectedNoteIDs: Set<UUID> = []
-    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @ThemeColors private var palette
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
     @ViewState private var collapsedBranches: Set<String> = []
@@ -46,9 +46,9 @@ struct ContentView: View {
                 }
             }
         }
-        .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
+        .background(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
-        .foregroundStyle(theme == FolioTheme.dracula.rawValue ? FolioPalette.foreground : Color.primary)
+        .foregroundStyle(palette?.foregroundColor ?? Color.primary)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: store.navigateBack) { Image(systemName: "chevron.left") }
@@ -237,7 +237,7 @@ struct ContentView: View {
                             .accessibilityLabel("Close \(note.displayTitle)")
                         }
                         .padding(.horizontal, 10)
-                        .background(store.selectedNoteID == id ? (theme == FolioTheme.dracula.rawValue ? FolioPalette.selection : Color.accentColor.opacity(0.13)) : Color.clear,
+                        .background(store.selectedNoteID == id ? (palette?.selectionColor ?? Color.accentColor.opacity(0.13)) : Color.clear,
                                     in: RoundedRectangle(cornerRadius: 6))
                         .id(id)
                     }
@@ -376,8 +376,8 @@ struct ContentView: View {
             .foregroundStyle(store.hasUnsavedChanges ? .orange : .secondary)
             .padding(14)
         }
-        .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .windowBackgroundColor))
-        .foregroundStyle(theme == FolioTheme.dracula.rawValue ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+        .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
+        .foregroundStyle(palette != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
     }
 
     private func revealSelectedNotebook() {
@@ -649,10 +649,10 @@ struct ContentView: View {
                     Menu("Actions") { bulkActions(selectedNoteIDs) }.menuStyle(.borderlessButton)
                 }
                 .padding(12)
-                .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .controlBackgroundColor))
+                .background(palette?.sidebarColor ?? Color(nsColor: .controlBackgroundColor))
             }
         }
-        .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .controlBackgroundColor))
+        .background(palette?.backgroundColor ?? Color(nsColor: .controlBackgroundColor))
     }
 
     private var noteSelection: Binding<Set<UUID>> {

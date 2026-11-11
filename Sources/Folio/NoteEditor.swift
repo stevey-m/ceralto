@@ -14,7 +14,7 @@ struct NoteEditor: View {
     @ViewState private var mode = EditorMode.preview.rawValue
     @ViewState private var initialized = false
     @AppStorage("editorFontSize") private var fontSize = 15.0
-    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @ThemeColors private var palette
     @AppStorage("readingFont") private var readingFont = ReadingFont.system.rawValue
     @ViewState private var tagsText = ""
     @FocusState private var tagsFocused: Bool
@@ -113,7 +113,7 @@ struct NoteEditor: View {
             if note.contentFormat == .formatted && editorMode != .preview && !isTrashed {
                 FormattedEditor(note: note, fontSize: fontSize,
                                 family: ReadingFont(rawValue: readingFont) ?? .system,
-                                dracula: theme == FolioTheme.dracula.rawValue, actions: formatting) { body in
+                                dracula: palette != nil, actions: formatting) { body in
                     store.update(note.id) { $0.body = body }
                 } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
                   currentSource: { noteBinding(\.body).wrappedValue }
@@ -142,7 +142,7 @@ struct NoteEditor: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 12)
         }
-        .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .textBackgroundColor))
+        .background(palette?.backgroundColor ?? Color(nsColor: .textBackgroundColor))
         .onAppear {
             guard !initialized else { return }
             initialized = true
@@ -239,7 +239,7 @@ struct NoteEditor: View {
 
     private var sourceEditor: some View {
         SourceEditor(text: noteBinding(\.body), family: ReadingFont(rawValue: readingFont) ?? .system,
-                     size: fontSize, dracula: theme == FolioTheme.dracula.rawValue,
+                     size: fontSize, dracula: palette != nil,
                      currentSource: { noteBinding(\.body).wrappedValue })
             .accessibilityLabel(note.contentFormat == .html ? "HTML source editor" : "Markdown editor")
     }

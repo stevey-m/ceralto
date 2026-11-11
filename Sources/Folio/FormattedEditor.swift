@@ -1174,6 +1174,8 @@ private final class PageScrollView: NSScrollView {
 }
 
 struct NativePageView: NSViewRepresentable {
+    @ThemeColors private var palette
+    @AppStorage("folioTheme") private var selectedTheme = FolioTheme.system.rawValue
     @AppStorage("editorPairDelimiters") private var pairDelimiters = false
     @AppStorage("composeMarkdownShortcuts") private var markdownShortcuts = false
     @AppStorage("writingColumnWidth") private var columnWidth = 0
@@ -1250,26 +1252,29 @@ struct NativePageView: NSViewRepresentable {
         }
         editor.pageFont = family
         editor.pageFontSize = size
-        let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
-        let linkColor = FolioPalette.accent(dracula ? .dracula : .system, accent: accent,
+        let colors = palette ?? (dracula ? .dracula : nil)
+        let color = colors.map { NSColor($0.foregroundColor) } ?? .textColor
+        let linkColor = selectedTheme == FolioTheme.custom.rawValue ? colors?.accentColor ?? Color.accentColor :
+            FolioPalette.accent(dracula ? .dracula : .system, accent: accent,
                                            draculaAccent: draculaAccent, scheme: colorScheme)
         let paletteChanged = coordinator.loadedHTML == nil || coordinator.dracula != dracula ||
-            coordinator.linkColor != NSColor(linkColor)
+            coordinator.linkColor != NSColor(linkColor) || coordinator.palette != colors
         if paletteChanged {
             editor.insertionPointColor = color
-            FolioPalette.style(editor, dracula: dracula)
+            FolioPalette.style(editor, dracula: dracula, palette: colors)
             editor.linkTextAttributes = [
                 .foregroundColor: NSColor(linkColor),
                 .underlineStyle: NSUnderlineStyle.single.rawValue
             ]
             coordinator.linkColor = NSColor(linkColor)
+            coordinator.palette = colors
         }
         // Resource ownership can change during an insertion without replacing the native buffer or its undo history.
         if coordinator.loadedHTML == html && coordinator.size == size &&
             coordinator.family == family && coordinator.dracula == dracula && previousResources == resources {
             coordinator.resources = resources
             if paletteChanged || coordinator.needsRecolor {
-                FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
+                FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor, palette: colors)
                 coordinator.needsRecolor = false
             }
             return
@@ -1281,7 +1286,7 @@ struct NativePageView: NSViewRepresentable {
             coordinator.updating = true
             defer { coordinator.updating = false }
             editor.textStorage?.setAttributedString(decoded)
-            FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor)
+            FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor, palette: colors)
             coordinator.needsRecolor = false
             let location = min(selection.location, decoded.length)
             editor.setSelectedRange(NSRange(location: location, length: min(selection.length, decoded.length - location)))
@@ -1319,6 +1324,7 @@ struct NativePageView: NSViewRepresentable {
         var family = ReadingFont.system
         var dracula = false
         var linkColor: NSColor?
+        var palette: ThemePack?
         var needsRecolor = false
         var updating = false
 

@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.19.0 is a development release, not a finished replacement for your library.**
+**0.20.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.19.0-arm64.dmg`, drag **Deltos 0.19.0** to **Applications**, eject the
+Open `Deltos-0.20.0-arm64.dmg`, drag **Deltos 0.20.0** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -154,6 +154,20 @@ exported. This portable Markdown/HTML export is not a complete history backup;
 use Files & Backups for that.
 
 ### Choose an appearance
+
+Settings now opens in a dedicated native, resizable window with a 720 × 480 pt
+minimum. Drag its edges or corners; it keeps its size when reopened. Command-Comma,
+the visible Close Settings button, Escape and the native close control remain available.
+
+**Settings > Appearance** includes **Choose Native Theme Pack**, **Import Theme...**
+and **Export Theme Pack...**. Seven palette equivalents are included: GitHub
+Dark/Light, Nord, One Dark, Solarized Dark/Light and Monokai. Import a Deltos
+`.deltostheme` or JSON colour pack; an invalid import leaves the current theme
+unchanged. See the [format and example](EXTENSIONS.md#native-theme-packs-020).
+The active pack applies across the Mac workspace, editors and previews.
+These are native colour palettes, **not compatibility with Joplin `.jpl`
+plugins, CodeMirror syntax themes or arbitrary CSS**. They are local to this
+Mac and do not alter notes or sync to the iPad reader.
 
 **Settings > Appearance** keeps **System, Light, Dark and Dracula** selectable.
 Dracula is optional, not the application default. Its palette now covers

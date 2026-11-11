@@ -442,7 +442,7 @@ struct LiveMarkdownView: View {
     @ViewState private var forget = false
     @ViewState private var mode = "Split"
     @ViewState private var expanded: Set<String> = []
-    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @ThemeColors private var palette
 
     var body: some View {
         VStack(spacing: 0) {
@@ -509,7 +509,7 @@ struct LiveMarkdownView: View {
                         HSplitView {
                             if mode != "Preview" {
                                 SourceEditor(text: $model.text, family: .monospace, size: 15,
-                                             dracula: theme == FolioTheme.dracula.rawValue,
+                                             dracula: palette != nil,
                                              currentSource: { model.text }, accessibilityLabel: "Live Markdown source")
                                     .background(.background)
                                     .frame(minWidth: 220)

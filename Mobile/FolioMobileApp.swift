@@ -11,7 +11,7 @@ private extension FolioTheme {
         switch self {
         case .system: nil
         case .light: .light
-        case .dark, .dracula: .dark
+        case .dark, .dracula, .custom: .dark
         }
     }
 }
@@ -75,7 +75,7 @@ struct MobileReaderView: View {
                 Section {
                     Menu {
                         Picker("Appearance", selection: $theme) {
-                            ForEach(FolioTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
+                            ForEach(FolioTheme.allCases.filter { $0 != .custom }, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
                         }
                         Picker("Accent colour", selection: theme == FolioTheme.dracula.rawValue ? $draculaAccent : $accent) {
                             if theme == FolioTheme.dracula.rawValue { Text("Theme default (Dracula purple)").tag("Theme default") }

@@ -7,7 +7,7 @@ extension FolioTheme {
         switch self {
         case .system: nil
         case .light: NSAppearance(named: .aqua)
-        case .dark, .dracula: NSAppearance(named: .darkAqua)
+        case .dark, .dracula, .custom: NSAppearance(named: .darkAqua)
         }
     }
 
@@ -15,7 +15,7 @@ extension FolioTheme {
         switch self {
         case .system: nil
         case .light: .light
-        case .dark, .dracula: .dark
+        case .dark, .dracula, .custom: .dark
         }
     }
 }
@@ -25,6 +25,7 @@ final class ApplicationAppearance: NSObject {
     private let preferences: UserDefaults
     private var observing = false
     private var appliedTheme: FolioTheme?
+    private var appliedPalette: ThemePack?
 
     init(preferences: UserDefaults = .standard) {
         self.preferences = preferences
@@ -42,13 +43,16 @@ final class ApplicationAppearance: NSObject {
         NotificationCenter.default.removeObserver(self)
         observing = false
         appliedTheme = nil
+        appliedPalette = nil
     }
 
     func apply() {
         let theme = FolioTheme(rawValue: preferences.string(forKey: "folioTheme") ?? "") ?? .system
-        guard appliedTheme != theme else { return }
-        NSApplication.shared.appearance = theme.nativeAppearance
+        let palette = theme == .custom ? try? ThemePack.decode(preferences.data(forKey: "customThemePack") ?? Data()) : nil
+        guard appliedTheme != theme || appliedPalette != palette else { return }
+        NSApplication.shared.appearance = palette?.nativeAppearance ?? theme.nativeAppearance
         appliedTheme = theme
+        appliedPalette = palette
     }
 
     @objc nonisolated private func preferencesChanged(_ notification: Notification) {
@@ -69,6 +73,7 @@ extension FolioAccent {
 }
 
 private struct FolioAppearance: ViewModifier {
+    @ThemeColors private var palette
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
     @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
@@ -76,22 +81,22 @@ private struct FolioAppearance: ViewModifier {
 
     func body(content: Content) -> some View {
         let selected = FolioTheme(rawValue: theme) ?? .system
-        let dracula = selected == .dracula
-        let tint = FolioPalette.accent(selected, accent: accent, draculaAccent: draculaAccent,
+        let tint = selected == .custom ? palette?.accentColor ?? Color.accentColor :
+            FolioPalette.accent(selected, accent: accent, draculaAccent: draculaAccent,
                                        scheme: selected.colorScheme ?? systemScheme)
         content
-            .preferredColorScheme(selected.colorScheme)
+            .preferredColorScheme(palette?.colorScheme ?? selected.colorScheme)
             .tint(tint)
             .accentColor(tint)
-            .foregroundStyle(dracula ? FolioPalette.foreground : Color.primary,
-                             dracula ? FolioPalette.muted : Color.secondary,
-                             dracula ? FolioPalette.muted.opacity(0.8) : Color.secondary.opacity(0.7))
-            .backgroundStyle(dracula ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
-            .background(dracula ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
-            .scrollContentBackground(dracula ? .hidden : .automatic)
-            .toolbarBackground(dracula ? FolioPalette.background : Color.clear, for: .windowToolbar)
-            .toolbarBackground(dracula ? .visible : .automatic, for: .windowToolbar)
-            .background(ThemeWindowStyle(theme: selected))
+            .foregroundStyle(palette?.foregroundColor ?? Color.primary,
+                             palette?.mutedColor ?? Color.secondary,
+                             palette?.mutedColor.opacity(0.8) ?? Color.secondary.opacity(0.7))
+            .backgroundStyle(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
+            .background(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
+            .scrollContentBackground(palette != nil ? .hidden : .automatic)
+            .toolbarBackground(palette?.backgroundColor ?? Color.clear, for: .windowToolbar)
+            .toolbarBackground(palette != nil ? .visible : .automatic, for: .windowToolbar)
+            .background(ThemeWindowStyle(theme: selected, palette: palette))
     }
 }
 
@@ -102,22 +107,23 @@ extension View {
 }
 
 private struct FolioListRow: ViewModifier {
+    @ThemeColors private var palette
     let selected: Bool
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioDraculaAccent") private var accent = "Theme default"
     func body(content: Content) -> some View {
-        let dracula = theme == FolioTheme.dracula.rawValue
-        let tint = FolioAccent(rawValue: accent)?.color(for: .dark) ?? FolioPalette.purple
+        let tint = theme == FolioTheme.custom.rawValue ? palette?.accentColor ?? Color.accentColor :
+            FolioAccent(rawValue: accent)?.color(for: .dark) ?? FolioPalette.purple
         content
-            .listRowBackground(dracula && selected ? FolioPalette.selection : nil)
-            .listItemTint(dracula ? .fixed(tint) : nil)
+            .listRowBackground(selected ? palette?.selectionColor : nil)
+            .listItemTint(palette != nil ? .fixed(tint) : nil)
     }
 }
 
 private struct FolioSidebar: ViewModifier {
-    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @ThemeColors private var palette
     func body(content: Content) -> some View {
-        content.background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .windowBackgroundColor))
+        content.background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -137,60 +143,76 @@ enum FolioPalette {
         return (FolioAccent(rawValue: accent) ?? .gold).color(for: scheme)
     }
 
-    @MainActor static func style(_ editor: NSTextView, dracula: Bool) {
-        editor.selectedTextAttributes = dracula
-            ? [.backgroundColor: NSColor(selection), .foregroundColor: NSColor(foreground)]
-            : [.backgroundColor: NSColor.selectedTextBackgroundColor, .foregroundColor: NSColor.selectedTextColor]
-        editor.backgroundColor = dracula ? NSColor(background) : .textBackgroundColor
+    @MainActor static func style(_ editor: NSTextView, dracula: Bool, palette: ThemePack? = nil) {
+        let palette = palette ?? (dracula ? .dracula : nil)
+        editor.selectedTextAttributes = palette.map {
+            [.backgroundColor: NSColor($0.selectionColor), .foregroundColor: NSColor($0.foregroundColor)]
+        } ?? [.backgroundColor: NSColor.selectedTextBackgroundColor, .foregroundColor: NSColor.selectedTextColor]
+        editor.backgroundColor = palette.map { NSColor($0.backgroundColor) } ?? .textBackgroundColor
     }
 
-    @MainActor static func styleRichText(_ editor: NSTextView, dracula: Bool, accent: Color = purple) {
-        guard dracula, let storage = editor.textStorage else { return }
-        storage.enumerateAttributes(in: NSRange(location: 0, length: storage.length)) { attributes, range, _ in
+    @MainActor static func styleRichText(_ editor: NSTextView, dracula: Bool, accent: Color = purple, palette: ThemePack? = nil) {
+        guard let palette = palette ?? (dracula ? .dracula : nil), let storage = editor.textStorage else { return }
+        func colors(_ attributes: [NSAttributedString.Key: Any]) -> (NSColor, Bool) {
             let block = attributes[.folioBlock] as? String
             let code = attributes[.folioCode] as? Bool == true || block == FormattedBlock.Style.code.rawValue
-            let color = code ? green
+            let color = code ? palette.codeColor
                 : block == FormattedBlock.Style.heading1.rawValue || block == FormattedBlock.Style.heading2.rawValue ? accent
-                : block == FormattedBlock.Style.quote.rawValue ? muted : foreground
-            storage.addAttribute(.foregroundColor, value: NSColor(color), range: range)
-            if code { storage.addAttribute(.backgroundColor, value: NSColor(sidebar), range: range) }
+                : block == FormattedBlock.Style.quote.rawValue ? palette.mutedColor : palette.foregroundColor
+            return (NSColor(color), code)
         }
+        storage.enumerateAttributes(in: NSRange(location: 0, length: storage.length)) { attributes, range, _ in
+            let (color, code) = colors(attributes)
+            storage.addAttribute(.foregroundColor, value: color, range: range)
+            if code { storage.addAttribute(.backgroundColor, value: NSColor(palette.sidebarColor), range: range) }
+        }
+        var typing = editor.typingAttributes
+        let (color, code) = colors(typing)
+        typing[.foregroundColor] = color
+        if code { typing[.backgroundColor] = NSColor(palette.sidebarColor) }
+        editor.typingAttributes = typing
     }
 }
 
 private struct ThemeWindowStyle: NSViewRepresentable {
     let theme: FolioTheme
+    let palette: ThemePack?
 
     func makeNSView(context: Context) -> Probe {
         let view = Probe()
         view.theme = theme
+        view.palette = palette
         return view
     }
 
     func updateNSView(_ view: Probe, context: Context) {
         view.theme = theme
+        view.palette = palette
         view.apply()
     }
 
     @MainActor final class Probe: NSView {
         var theme = FolioTheme.system
+        var palette: ThemePack?
         private weak var styledWindow: NSWindow?
         private var originalBackground: NSColor?
         private var originalTransparent: Bool?
         private var appliedTheme: FolioTheme?
+        private var appliedPalette: ThemePack?
         override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); apply() }
         func apply() {
             guard let window else { return }
-            guard styledWindow !== window || appliedTheme != theme else { return }
+            guard styledWindow !== window || appliedTheme != theme || appliedPalette != palette else { return }
             if styledWindow !== window {
                 styledWindow = window
                 originalBackground = window.backgroundColor
                 originalTransparent = window.titlebarAppearsTransparent
             }
-            window.appearance = theme.nativeAppearance
-            window.backgroundColor = theme == .dracula ? NSColor(FolioPalette.background) : originalBackground ?? .windowBackgroundColor
-            window.titlebarAppearsTransparent = theme == .dracula || (originalTransparent ?? false)
+            window.appearance = palette?.nativeAppearance ?? theme.nativeAppearance
+            window.backgroundColor = palette.map { NSColor($0.backgroundColor) } ?? originalBackground ?? .windowBackgroundColor
+            window.titlebarAppearsTransparent = palette != nil || (originalTransparent ?? false)
             appliedTheme = theme
+            appliedPalette = palette
         }
     }
 }
@@ -222,12 +244,14 @@ struct AppearanceSettings: View {
     var body: some View {
         Form {
             Picker("Appearance", selection: $theme) {
-                ForEach(FolioTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
+                ForEach(FolioTheme.allCases.filter { $0 != .custom || theme == FolioTheme.custom.rawValue }, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
             }
+            ThemePackControls()
             Picker("Accent colour", selection: theme == FolioTheme.dracula.rawValue ? $draculaAccent : $accent) {
                 if theme == FolioTheme.dracula.rawValue { Text("Theme default (Dracula purple)").tag("Theme default") }
                 ForEach(FolioAccent.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
             }
+            .disabled(theme == FolioTheme.custom.rawValue)
             Picker("Editor and preview font", selection: $readingFont) {
                 ForEach(ReadingFont.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
             }

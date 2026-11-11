@@ -7,7 +7,7 @@ struct QuickCaptureView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @AppStorage("captureDraftTitle") private var title = ""
     @AppStorage("captureDraftBody") private var bodyText = ""
-    @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
+    @ThemeColors private var palette
     @ViewState private var failure: String?
 
     var body: some View {
@@ -26,7 +26,7 @@ struct QuickCaptureView: View {
                 .accessibilityLabel("Quick capture title")
             Divider()
             SourceEditor(text: $bodyText, family: .system, size: 16,
-                         dracula: theme == FolioTheme.dracula.rawValue, currentSource: { bodyText },
+                         dracula: palette != nil, currentSource: { bodyText },
                          accessibilityLabel: "Quick capture text", textInset: NSSize(width: 5, height: 1),
                          focusOnAttach: true, usesWritingPreferences: false)
                 .accessibilityLabel("Quick capture text")
@@ -55,7 +55,7 @@ struct QuickCaptureView: View {
         }
         .padding(24)
         .frame(minWidth: 420, minHeight: 350)
-        .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .windowBackgroundColor))
+        .background(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
         .background(CaptureWindowStyle())
     }

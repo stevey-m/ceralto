@@ -202,6 +202,10 @@ final class NotesStore: ObservableObject {
         self.preferences = preferences
         isReadOnly = readOnly
         load()
+        if preferences.string(forKey: "folioTheme") == FolioTheme.custom.rawValue {
+            do { _ = try ThemePack.decode(preferences.data(forKey: "customThemePack") ?? Data()) }
+            catch { errorMessage = "The saved theme pack could not be read. Using native colours without changing the saved pack. Choose a theme in Settings > Appearance. \(error.localizedDescription)" }
+        }
         if let stored = preferences.object(forKey: "noteOrdering") {
             do {
                 guard let data = stored as? Data else { throw LibraryError.invalidLibrary }
@@ -305,6 +309,16 @@ final class NotesStore: ObservableObject {
         let index = LibraryNavigationIndex(library: library, ordering: noteOrdering)
         cachedNavigation = index
         return index
+    }
+
+    func applyThemePack(_ pack: ThemePack) throws {
+        let data = try pack.encoded()
+        preferences.set(data, forKey: "customThemePack")
+        preferences.set(FolioTheme.custom.rawValue, forKey: "folioTheme")
+    }
+
+    func importThemePack(from url: URL) throws {
+        try applyThemePack(ThemePack.load(from: url))
     }
 
     func setNoteOrdering(_ ordering: NoteOrdering) {

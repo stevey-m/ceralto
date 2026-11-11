@@ -6,6 +6,38 @@ import Testing
 
 @MainActor
 struct SettingsTests {
+    @Test func invalidThemeImportLeavesCurrentPaletteAndNotesUnchanged() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "DeltosThemeImport-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let storage = LibraryStorage(url: root.appendingPathComponent("library.json"))
+        let store = NotesStore(storage: storage, preferences: defaults)
+        let file = root.appendingPathComponent("theme.deltostheme")
+        let pack = try #require(ThemePack.presets.first { $0.id == "nord" })
+        try pack.encoded().write(to: file)
+        try store.importThemePack(from: file)
+        #expect(defaults.string(forKey: "folioTheme") == FolioTheme.custom.rawValue)
+        let originalData = try #require(defaults.data(forKey: "customThemePack"))
+        let originalLibrary = store.library
+        let persisted = try Data(contentsOf: storage.url)
+        try Data("joplin.plugins.register({})".utf8).write(to: file)
+        #expect(throws: (any Error).self) { try store.importThemePack(from: file) }
+        #expect(defaults.data(forKey: "customThemePack") == originalData)
+        #expect(store.library == originalLibrary)
+        let restarted = NotesStore(storage: storage, preferences: defaults)
+        #expect(restarted.errorMessage == nil)
+        let restoredPack = try ThemePack.decode(try #require(defaults.data(forKey: "customThemePack")))
+        #expect(restoredPack == pack)
+        let after = try Data(contentsOf: storage.url)
+        #expect(after == persisted)
+        defaults.set(Data("corrupt theme".utf8), forKey: "customThemePack")
+        let corrupt = NotesStore(storage: storage, preferences: defaults)
+        #expect(corrupt.errorMessage != nil)
+        #expect(defaults.data(forKey: "customThemePack") == Data("corrupt theme".utf8))
+    }
+
     @Test func settingsSearchMatchesControlsAndDoesNotInventUnsupportedOptions() {
         #expect(SettingsSection.matching("spelling") == [.editor])
         #expect(SettingsSection.matching("line numbers") == [.editor])
@@ -179,26 +211,28 @@ struct SettingsTests {
         }
     }
 
-    @Test(arguments: ["System", "Light", "Dark", "Dracula"])
+    @Test(arguments: ["System", "Light", "Dark", "Dracula", "nord", "github-light"])
     func closeButtonStaysVisibleInCompactSettingsAndClosesOnlyItsOwnWindow(theme: String) async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let suite = "DeltosSettingsClose-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(theme, forKey: "folioTheme")
+        if let pack = ThemePack.presets.first(where: { $0.id == theme }) {
+            defaults.set(try pack.encoded(), forKey: "customThemePack")
+            defaults.set(FolioTheme.custom.rawValue, forKey: "folioTheme")
+        } else { defaults.set(theme, forKey: "folioTheme") }
         let store = NotesStore(storage: LibraryStorage(url: directory.appendingPathComponent("library.json")), preferences: defaults)
-        let host = NSHostingView(rootView: SettingsView(section: .files).environmentObject(store).defaultAppStorage(defaults))
-        let window = CloseTrackingWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-                                         styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        let other = CloseTrackingWindow(contentRect: .zero, styleMask: [.titled, .closable],
-                                        backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 900, height: 680)
-        window.contentMaxSize = NSSize(width: 900, height: 680)
-        window.contentView = host
-        host.frame = NSRect(x: 0, y: 0, width: 720, height: 480)
-        defer { window.contentView = nil }
+        let controller = SettingsWindowController()
+        controller.show(store: store, preferences: defaults, section: .files)
+        let window = try #require(controller.window)
+        let host = try #require(window.contentViewController?.view)
+        let other = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+                             styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        other.isReleasedWhenClosed = false
+        other.orderFront(nil)
+        window.setContentSize(NSSize(width: 720, height: 480))
+        defer { controller.close(); other.close() }
         for _ in 0..<100 {
             host.layoutSubtreeIfNeeded()
             if buttons(in: host).contains(where: { $0.accessibilityIdentifier() == "deltos-close-settings" }) { break }
@@ -216,27 +250,29 @@ struct SettingsTests {
         #expect(window.contentMaxSize.width > 1_200)
         #expect(window.contentMaxSize.height > 900)
         window.setContentSize(NSSize(width: 1_200, height: 900))
+        try await Task.sleep(for: .milliseconds(50))
         host.layoutSubtreeIfNeeded()
         #expect(window.contentLayoutRect.size == NSSize(width: 1_200, height: 900))
         #expect(host.bounds.contains(button.convert(button.bounds, to: host)))
         window.setContentSize(NSSize(width: 720, height: 480))
+        try await Task.sleep(for: .milliseconds(50))
         host.layoutSubtreeIfNeeded()
         #expect(window.contentLayoutRect.size == NSSize(width: 720, height: 480))
         #expect(host.bounds.contains(button.convert(button.bounds, to: host)))
         button.performClick(nil)
-        #expect(window.closeRequests == 1)
-        #expect(other.closeRequests == 0)
+        #expect(!window.isVisible)
+        #expect(other.isVisible)
+        controller.show(store: store, preferences: defaults)
+        #expect(controller.window === window)
+        #expect(window.isVisible)
+        window.setContentSize(NSSize(width: 1_100, height: 800))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(window.contentLayoutRect.size == NSSize(width: 1_100, height: 800))
+        #expect(window.styleMask.contains(.resizable))
     }
 
     private func buttons(in view: NSView) -> [NSButton] {
         (view as? NSButton).map { [$0] } ?? view.subviews.flatMap { buttons(in: $0) }
     }
 
-    @MainActor private final class CloseTrackingWindow: NSWindow {
-        var closeRequests = 0
-        override func performClose(_ sender: Any?) {
-            closeRequests += 1
-            super.performClose(sender)
-        }
-    }
 }

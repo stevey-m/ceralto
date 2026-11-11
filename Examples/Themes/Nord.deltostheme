@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "nord",
+  "name": "Nord",
+  "isDark": true,
+  "background": "#2e3440",
+  "sidebar": "#242933",
+  "selection": "#434c5e",
+  "foreground": "#eceff4",
+  "accent": "#88c0d0",
+  "muted": "#a6afbf",
+  "code": "#a3be8c"
+}

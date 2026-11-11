@@ -7,6 +7,64 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct GlobalAppearanceTests {
+    @Test func importedPacksUpdateTheRealWorkspaceNativeDialogsAndEditorsWithoutLosingEdits() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let application = NSApplication.shared
+        let original = application.appearance
+        let appearance = ApplicationAppearance(preferences: fixture.defaults)
+        appearance.start()
+        defer { appearance.stop(); application.appearance = original }
+        let id = try #require(fixture.store.library.notes.first?.id)
+        fixture.store.update(id) { $0.format = .formatted; $0.body = "Words and **bold**" }
+        fixture.store.openNote(id)
+        let host = NSHostingView(rootView: ContentView().environmentObject(fixture.store).defaultAppStorage(fixture.defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        host.frame = NSRect(x: 0, y: 0, width: 1240, height: 800)
+        defer { window.contentView = nil }
+        for _ in 0..<100 {
+            host.layoutSubtreeIfNeeded()
+            if descendants(host).contains(where: { $0 is PageTextView }) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let editor = try #require(descendants(host).compactMap { $0 as? PageTextView }.first)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.insertText(" edited", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(40))
+        let saved = fixture.store.library
+        let selection = editor.selectedRange()
+        let dialog = NSOpenPanel()
+        for pack in [ThemePack.presets[0], ThemePack.presets[1], ThemePack.presets[2]] {
+            try fixture.store.applyThemePack(pack)
+            try await waitFor {
+                close(window.backgroundColor, to: NSColor(pack.backgroundColor)) &&
+                    application.appearance?.name == pack.nativeAppearance?.name
+            }
+            host.layoutSubtreeIfNeeded()
+            #expect(matches(dialog, pack.isDark ? .darkAqua : .aqua))
+            #expect(editor.string.hasSuffix(" edited"))
+            #expect(editor.selectedRange() == selection)
+            #expect(editor.undoManager?.canUndo == true)
+            #expect(close(editor.backgroundColor, to: NSColor(pack.backgroundColor)))
+            #expect(close(try #require(editor.selectedTextAttributes[.backgroundColor] as? NSColor), to: NSColor(pack.selectionColor)))
+            #expect(close(try #require(editor.linkTextAttributes?[.foregroundColor] as? NSColor), to: NSColor(pack.accentColor)))
+            #expect(close(try #require(editor.typingAttributes[.foregroundColor] as? NSColor), to: NSColor(pack.foregroundColor)))
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            #expect(fraction(bitmap, matching: NSColor(pack.backgroundColor)) > 0.25)
+            #expect(fraction(bitmap, matching: NSColor(pack.sidebarColor)) > 0.05)
+            #expect(fixture.store.library == saved)
+        }
+        fixture.defaults.set("Light", forKey: "folioTheme")
+        try await waitFor { window.appearance?.name == .aqua }
+        #expect(close(editor.backgroundColor, to: .textBackgroundColor))
+        #expect(editor.selectedRange() == selection)
+        #expect(editor.undoManager?.canUndo == true)
+        #expect(fixture.store.library == saved)
+    }
+
     @Test func applicationSelectionUpdatesExistingAndNewNativeWindowsAndDialogs() async throws {
         let application = NSApplication.shared
         let original = application.appearance

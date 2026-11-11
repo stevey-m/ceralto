@@ -1,9 +1,37 @@
 # Deltos extensions: small powers, quiet interface
 
-Deltos's first extension API is **data-only template packs**. It is not an
+Deltos supports **data-only template packs and native colour theme packs**. It is not an
 Obsidian or Joplin `.jpl` plugin compatibility layer, a JavaScript runtime, or a marketplace.
 No extension code executes. Packs cannot access your library, filesystem,
 network, credentials or other installed extensions.
+
+## Native theme packs (0.20)
+
+Use **Settings > Appearance > Choose Native Theme Pack** for GitHub Dark,
+GitHub Light, Nord, One Dark, Solarized Dark, Solarized Light or Monokai.
+These are native colour-palette equivalents, not the CodeMirror syntax themes
+from Joplin's Editor Themes plugin. **Import Theme...** loads a `.deltostheme`
+or JSON file; **Export Theme Pack...** saves the active pack for sharing.
+Try [the Nord example](Examples/Themes/Nord.deltostheme).
+
+The version 1 format is the flat JSON object shown in that example. Every
+field is required and unknown fields are rejected. `id` contains 1–80 ASCII
+letters, digits, dots, underscores or hyphens; `name` is 1–80 characters with
+no control characters. `isDark` selects native light/dark controls. All seven
+colours must use `#RRGGBB`; text/background contrast must reach 4.5:1.
+Only regular files up to 32 KiB are accepted, not symbolic links.
+
+Packs affect app-owned windows, navigation, Compose, source editors, previews,
+Settings and supporting views. They do not add a new syntax-highlighting
+engine, custom fonts, CSS selectors, executable scripts, network content or
+Joplin host APIs. Native menus, dialogs and form controls use macOS's matching
+light/dark appearance rather than exact custom colours.
+
+Only the active imported pack is saved in Mac-local preferences; it does not
+change or travel with notes, backups or sync, and is not installed on iPad.
+An invalid import preserves the current appearance. Invalid saved data is
+preserved with a visible warning; choose a built-in appearance or import a
+valid pack to recover. Export before replacing a pack if you want to keep it.
 
 ## Extension manager (0.9)
 

@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import WebKit
 
 struct MarkdownPreview: View {
+    @ThemeColors private var palette
     @EnvironmentObject private var store: NotesStore
     let note: Note
     var onImage: ((URL) -> Void)?
@@ -32,6 +33,7 @@ struct MarkdownPreview: View {
         options.theme = selected == .system ? (colorScheme == .dark ? .dark : .light) : selected
         options.accent = FolioAccent(rawValue: accent) ?? .gold
         options.draculaAccent = FolioAccent(rawValue: draculaAccent)
+        options.palette = selected == .custom ? palette : nil
         options.font = ReadingFont(rawValue: font) ?? .system
         options.fontSize = fontSize
         options.thumbnailSize = thumbnailSize

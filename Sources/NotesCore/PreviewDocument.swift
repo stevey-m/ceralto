@@ -4,13 +4,13 @@ import cmark_gfm
 import cmark_gfm_extensions
 
 public enum FolioTheme: String, CaseIterable, Sendable {
-    case system = "System", light = "Light", dark = "Dark", dracula = "Dracula"
+    case system = "System", light = "Light", dark = "Dark", dracula = "Dracula", custom = "Theme pack"
 
     public var cssColorScheme: String {
         switch self {
         case .system: "light dark"
         case .light: "light"
-        case .dark, .dracula: "dark"
+        case .dark, .dracula, .custom: "dark"
         }
     }
 }
@@ -55,6 +55,7 @@ public struct PreviewOptions: Equatable, Sendable {
     public var theme: FolioTheme = .system
     public var accent: FolioAccent = .gold
     public var draculaAccent: FolioAccent?
+    public var palette: ThemePack?
     public var font: ReadingFont = .system
     public var fontSize: Double = 15
     public var thumbnailSize: Int = 0
@@ -137,6 +138,7 @@ public enum PreviewDocument {
 
     public static func html(source: String, format: NoteFormat, resources: ImportedResources?,
                             options: PreviewOptions = PreviewOptions(), noteLinks: [String: UUID] = [:]) throws -> String {
+        try options.palette?.validate()
         let input = format.usesHTML ? source : try markdownHTML(source, hardLineBreaks: format == .markdown)
         let linked = try NoteLinks.linkedBody(sanitizedBody(input, resources: resources), targets: noteLinks)
         let document = try SwiftSoup.parseBodyFragment(linked)
@@ -150,19 +152,21 @@ public enum PreviewDocument {
             : "width: auto !important; max-width: min(100%, \(thumbnail)px); max-height: \(thumbnail)px;"
         let fontSize = min(max(options.fontSize, 11), 32)
         let dracula = options.theme == .dracula
+        let palette = options.palette
+        let scheme = palette.map { $0.isDark ? "dark" : "light" } ?? options.theme.cssColorScheme
         return """
         <!doctype html>
         <html lang="en"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src folio-resource:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>
-        :root { color-scheme: \(options.theme.cssColorScheme);
-          --bg: \(dracula ? "#282a36" : "Canvas"); --fg: \(dracula ? "#f8f8f2" : "CanvasText");
-          --muted: \(dracula ? "#a5a9c5" : "GrayText");
-          --accent: \(dracula ? options.draculaAccent?.darkHex ?? "#bd93f9" : options.theme == .dark ? options.accent.darkHex : options.accent.lightHex);
-          --line: \(dracula ? "#44475a" : "color-mix(in srgb, CanvasText 18%, Canvas)");
-          --code: \(dracula ? "#21222c" : "color-mix(in srgb, CanvasText 5%, Canvas)");
-          --green: \(dracula ? "#50fa7b" : "#168143"); --pink: \(dracula ? "#ff79c6" : "#ae287b"); }
+        :root { color-scheme: \(scheme);
+          --bg: \(palette?.background ?? (dracula ? "#282a36" : "Canvas")); --fg: \(palette?.foreground ?? (dracula ? "#f8f8f2" : "CanvasText"));
+          --muted: \(palette?.muted ?? (dracula ? "#a5a9c5" : "GrayText"));
+          --accent: \(palette?.accent ?? (dracula ? options.draculaAccent?.darkHex ?? "#bd93f9" : options.theme == .dark ? options.accent.darkHex : options.accent.lightHex));
+          --line: \(palette?.selection ?? (dracula ? "#44475a" : "color-mix(in srgb, CanvasText 18%, Canvas)"));
+          --code: \(palette?.sidebar ?? (dracula ? "#21222c" : "color-mix(in srgb, CanvasText 5%, Canvas)"));
+          --green: \(palette?.code ?? (dracula ? "#50fa7b" : "#168143")); --pink: \(dracula ? "#ff79c6" : "#ae287b"); }
         \(options.theme == .system ? "@media (prefers-color-scheme: dark) { :root { --accent: \(options.accent.darkHex); } }" : "")
         * { box-sizing: border-box; }
         body { margin: 0; padding: 28px 32px 64px; background: var(--bg); color: var(--fg);

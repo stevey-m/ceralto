@@ -5,6 +5,7 @@ import SwiftUI
 struct FolioApp: App {
     @StateObject private var store = NotesStore()
     @StateObject private var markdown = LiveMarkdownStore()
+    @StateObject private var settings = SettingsWindowController()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.liveMarkdown) private var focusedMarkdown
@@ -22,6 +23,10 @@ struct FolioApp: App {
         }
         .defaultSize(width: 1240, height: 800)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings...") { settings.show(store: store) }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Note") { openWindow(id: "library"); store.perform(.newNote) }
                     .keyboardShortcut(store.shortcut(.newNote).keyboardShortcut)
@@ -177,8 +182,6 @@ struct FolioApp: App {
             Divider()
             Button("Quit Deltos") { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
-        Settings { SettingsView().environmentObject(store) }
-            .windowResizability(.contentMinSize)
     }
 
     private func capture() {

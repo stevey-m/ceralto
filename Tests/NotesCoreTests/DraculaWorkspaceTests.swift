@@ -125,7 +125,14 @@ struct DraculaWorkspaceTests {
         host.layoutSubtreeIfNeeded()
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
-        #expect(fraction(bitmap, matching: NSColor(FolioPalette.background)) > 0.3)
+        let closeButton = try #require(descendants(host).compactMap { $0 as? NSButton }
+            .first { $0.accessibilityIdentifier() == "deltos-close-settings" })
+        let buttonFrame = closeButton.convert(closeButton.bounds, to: host)
+        let header = NSRect(x: 0, y: buttonFrame.midY - 20, width: host.bounds.width, height: 40)
+        let headerBitmap = try #require(host.bitmapImageRepForCachingDisplay(in: header))
+        host.cacheDisplay(in: header, to: headerBitmap)
+        #expect(fraction(headerBitmap, matching: NSColor(FolioPalette.background)) > 0.65,
+                "The fixed header must use Dracula's surface, regardless of how many form controls fill the window.")
         #expect(fraction(bitmap, matching: NSColor(FolioPalette.sidebar)) > 0.15)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

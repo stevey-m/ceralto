@@ -94,6 +94,7 @@ final class SourceLineRuler: NSRulerView {
 }
 
 struct SourceEditor: NSViewRepresentable {
+    @ThemeColors private var palette
     @AppStorage("editorPairDelimiters") private var pairDelimiters = false
     @AppStorage("sourceTabStyle") private var tabStyle = SourceTabStyle.native.rawValue
     @AppStorage("sourceLineNumbers") private var lineNumbers = false
@@ -149,7 +150,8 @@ struct SourceEditor: NSViewRepresentable {
         }
         let font = NativePageCodec.font(family, size: size)
         if editor.font != font { editor.font = font }
-        let color = dracula ? NSColor(red: 248 / 255, green: 248 / 255, blue: 242 / 255, alpha: 1) : .textColor
+        let colors = palette ?? (dracula ? .dracula : nil)
+        let color = colors.map { NSColor($0.foregroundColor) } ?? .textColor
         if editor.textColor != color { editor.textColor = color }
         editor.insertionPointColor = editor.textColor ?? .textColor
         editor.pairDelimiters = usesWritingPreferences && pairDelimiters
@@ -162,7 +164,7 @@ struct SourceEditor: NSViewRepresentable {
         }
         scroll.rulersVisible = showNumbers
         (scroll.verticalRulerView as? SourceLineRuler)?.refresh()
-        FolioPalette.style(editor, dracula: dracula)
+        FolioPalette.style(editor, dracula: dracula, palette: colors)
         if editor.isEditable != isEnabled { editor.isEditable = isEnabled }
         if editor.isSelectable != isEnabled { editor.isSelectable = isEnabled }
         if !isEnabled, editor.window?.firstResponder === editor { editor.window?.makeFirstResponder(nil) }
