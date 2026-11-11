@@ -80,6 +80,11 @@ struct FolioApp: App {
                     .keyboardShortcut(store.shortcut(.addAttachments).keyboardShortcut)
                     .disabled(store.selectedNote == nil || store.selectedNote?.deletedAt != nil)
                 Button("Export Complete Backup...", action: store.exportBackup)
+                    .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing)
+                Button("Export Encrypted Complete Backup...") { store.encryptedBackup(exporting: true) }
+                    .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
+                Button("Import Encrypted Backup...") { store.encryptedBackup(exporting: false) }
+                    .disabled(store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
                     .disabled(!store.isLoaded)
                 Button("Export Open Markdown Folder...", action: store.exportVault)
                     .disabled(!store.isLoaded)

@@ -15,7 +15,7 @@ struct NoteHistoryView: View {
             HStack {
                 VStack(alignment: .leading) {
                     Text("Note history").font(.title2.weight(.semibold))
-                    Text("Up to 20 checkpoints, captured at most once every five minutes.")
+                    Text(store.historyPolicy.summary)
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

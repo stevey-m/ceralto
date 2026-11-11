@@ -21,6 +21,14 @@ public struct NoteRevision: Identifiable, Codable, Equatable, Sendable {
         body = note.body
         format = note.format
     }
+
+    init(copying revision: NoteRevision, body: String) {
+        id = revision.id
+        savedAt = revision.savedAt
+        title = revision.title
+        self.body = body
+        format = revision.format
+    }
 }
 
 public struct Notebook: Identifiable, Codable, Hashable, Sendable {
@@ -102,13 +110,15 @@ public struct Note: Identifiable, Codable, Equatable, Sendable {
         textContent.split(whereSeparator: \.isWhitespace).count
     }
 
-    public mutating func recordRevision(of previous: Note, now: Date = Date(), force: Bool = false) {
+    public mutating func recordRevision(of previous: Note, now: Date = Date(), force: Bool = false,
+                                       policy: HistoryPolicy = .standard) {
         guard title != previous.title || body != previous.body || format != previous.format else { return }
         var revisions = previous.history ?? []
-        if force || revisions.last.map({ now.timeIntervalSince($0.savedAt) >= 300 }) ?? true {
+        guard policy.enabled || force else { history = previous.history; return }
+        if force || revisions.last.map({ now.timeIntervalSince($0.savedAt) >= Double(policy.intervalSeconds) }) ?? true {
             revisions.append(NoteRevision(note: previous, savedAt: now))
         }
-        history = Array(revisions.suffix(20))
+        history = Array(revisions.suffix(policy.maximumCheckpoints))
     }
 
     public static func normalizedTags(_ tags: [String]) -> [String] {

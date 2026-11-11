@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.17.2 is a development release, not a finished replacement for your library.**
+**0.18.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,9 +29,12 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.17.2-arm64.dmg`, drag **Deltos** to **Applications**, eject the
-image and launch. If building locally, the DMG is in `dist/`.
-Quit the old Folio or Deltos before upgrading. Existing libraries
+Open `Deltos-0.18.0-arm64.dmg`, drag **Deltos 0.18.0** to **Applications**, eject the
+image and launch that versioned copy. An alternate ZIP contains the same app.
+The versioned filename avoids replacing an existing blocked installation;
+keep a known-working recovery app until you confirm the new app opens.
+If building locally, the installers are in `dist/`.
+Quit every running Deltos copy before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
 older releases cannot read the new native-composition format marker.
 
@@ -46,6 +49,8 @@ preference keys, extension IDs, backup formats and `Folio Sync` cloud directory
 remain unchanged for compatibility. The existing public source repository is
 still `stevey-m/folio`. Both versions use
 `~/Library/Application Support/Folio/`; no manual data move is needed.
+The packaged Mac executable is now named `Deltos`; the source module name
+does not determine the name shown for the installed process.
 Quit Folio before launching Deltos and remove the old Folio app from Applications
 only after confirming your notes in Deltos. Never run both against the same
 library at once.
@@ -246,9 +251,16 @@ Shortcuts below are defaults. Customize application commands in
   The iPad reader's sidebar also offers appearance and accent choices.
 
 Notes save atomically to the local library. Save failures are visible; changes
-stay in memory and Deltos warns before quitting. History retains up to 20
+stay in memory and Deltos warns before quitting. History defaults to 20
 title/body/format checkpoints, at most once per five minutes of editing.
-Restoring also preserves the current version.
+In **Settings > Files & Backups > Note history**, choose 5, 20, 50 or 100
+checkpoints and a 1, 5, 15 or 30 minute capture interval, or pause capture.
+Pausing preserves existing checkpoints. Applying a lower count requires
+confirmation before pruning older history, including history in Trash.
+Pruning is saved before the new policy takes effect; a save failure preserves
+the current library and policy. Imported history is not pruned on load.
+Restoring always checkpoints the current text, even when automatic capture
+is paused, within the configured count limit.
 
 ## Notebook management
 
@@ -409,6 +421,32 @@ in the same account. Manual exports are never automatically pruned.
 Settings, unsaved drafts, smart folders and plugin registrations are not part
 of these library backups. Use Time Machine for the entire local app folder.
 
+### Password-encrypted manual backups
+
+Choose **File > Export Encrypted Complete Backup** or the same action in
+**Settings > Files & Backups**. Each `.deltosbackup` archive includes notebooks,
+notes, Trash, checkpoints and original linked attachments. Filenames, metadata
+and contents are encrypted with AES-256-GCM and a fresh random nonce and salt;
+the password key uses PBKDF2-HMAC-SHA256 with 600,000 iterations. The version
+header is authenticated. Existing archives are never overwritten.
+
+Enter and confirm at least 12 characters. Deltos asks each time and never
+saves the password in settings or Keychain. There is **no password recovery**.
+Keep the password independently. Export builds the archive in memory without
+plaintext staging; encoded contents are limited to 256 MiB and 50,000 files.
+Symbolic links and special files are rejected.
+
+**Import Encrypted Backup** authenticates the archive before writing anything,
+then adds recovered copies without replacing current notes. Internal note
+links are redirected to the recovered copies. Restored files are unencrypted
+inside the local library; failed restores clean up their new import folder.
+Passwords, app settings, unsaved drafts and plugin registrations are not part
+of these archives.
+
+This encrypts **only the manual archive**, not the live library, local recovery
+copies, drafts, scheduled backups or folder sync. Use FileVault and independent
+backups for device protection. Cloud upload is not verified.
+
 ### Scheduled complete backups and safe recovery
 
 Open **Settings > Files & Backups**, choose a separate downloaded local/cloud
@@ -417,7 +455,8 @@ daily backups, retaining 1–100 verified managed copies (default: daily, 10).
 Scheduling is off until you opt in. Deltos checks once a minute while running,
 attempts overdue backups on launch/wake, and retries failures at most once
 every five minutes. It does not back up while quit or asleep and does not
-confirm cloud upload. Backups are unencrypted.
+confirm cloud upload. Scheduled backups are unencrypted and labelled as such;
+they never reuse or store the password from a manual encrypted backup.
 
 Each backup contains the library, note history, Trash and original attachment
 trees. A checksum receipt is written after the complete export, then the
@@ -734,7 +773,7 @@ then select a matching category:
 
 Settings are local to the device and are not included in library exports.
 Release checking is manual. Backups while the app is quit, automatic trash expiry, OCR,
-encryption and executable plugins are not implemented.
+live-library/sync encryption and executable plugins are not implemented.
 The iPad reader retains its lightweight appearance menu; the full Settings
 window is Mac-only.
 

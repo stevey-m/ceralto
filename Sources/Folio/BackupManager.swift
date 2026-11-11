@@ -127,6 +127,7 @@ final class BackupManager: ObservableObject {
 
     func backup(on date: Date = Date()) async {
         guard available, !busy, let store, store.isLoaded, !store.isReadOnly, !store.isSyncing,
+              !store.isImportingJoplin, !store.isProcessingEncryptedBackup,
               let folder else {
             message = "Connect a backup folder and open an editable library; wait for sync or the current backup to finish."
             return
@@ -215,7 +216,7 @@ struct BackupReliabilitySettings: View {
                 .help(manager.folderPath ?? "Choose a separate backup folder")
             LabeledContent("Last complete backup", value: manager.schedule.lastSuccess?.formatted() ?? "Not yet backed up")
             Button("Choose Backup Folder…", action: manager.chooseFolder).disabled(manager.busy)
-            Toggle("Back up while Deltos is open", isOn: Binding(
+            Toggle("Back up while Deltos is open (unencrypted)", isOn: Binding(
                 get: { manager.schedule.enabled }, set: { manager.configure(enabled: $0) }
             )).disabled(!manager.available || manager.folderName == nil || manager.busy)
             Picker("Interval", selection: Binding(get: { manager.schedule.hours },
@@ -235,7 +236,7 @@ struct BackupReliabilitySettings: View {
             if !manager.available {
                 Button("Reset Unreadable Backup Settings…") { resetting = true }
             }
-            Text("Runs only while the app is open. An overdue backup is attempted on launch or the next minute after waking. No background agent or upload confirmation. Complete library backups include notes, history and original attachments, not app settings or unsaved capture drafts.")
+            Text("Scheduled backups are unencrypted. Use Export Encrypted Complete Backup for manual password protection. Runs only while the app is open. An overdue backup is attempted on launch or the next minute after waking. No background agent or upload confirmation. Complete library backups include notes, history and original attachments, not app settings or unsaved capture drafts.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("Reset backup settings?", isPresented: $resetting, titleVisibility: .visible) {

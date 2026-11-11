@@ -8,25 +8,7 @@ public enum LibraryBackup {
         guard !manager.fileExists(atPath: destination.path) else {
             throw JoplinImportError.invalid("Choose a new backup folder. Existing folders are never overwritten.")
         }
-        var portable = library
-        portable.folderSync = nil
-        var roots: [URL: String] = [:]
-        for index in portable.notes.indices {
-            guard let root = portable.notes[index].importedRootURL,
-                  let source = portable.notes[index].importedSourceURL else { continue }
-            let resource = ImportedResources(source: source, root: root)
-            guard resource.isContained(source) else {
-                throw JoplinImportError.invalid("A note has an invalid attachment path.")
-            }
-            guard !destination.standardizedFileURL.path.hasPrefix(resource.root.path + "/") else {
-                throw JoplinImportError.invalid("The backup cannot be created inside its own attachments.")
-            }
-            let path = roots[resource.root] ?? "resources/\(UUID().uuidString)"
-            roots[resource.root] = path
-            let relative = String(resource.source.path.dropFirst(resource.root.path.count + 1))
-            portable.notes[index].importedRootURL = URL(string: path + "/")
-            portable.notes[index].importedSourceURL = URL(string: path + "/")?.appendingPathComponent(relative)
-        }
+        let (portable, roots) = try portableSnapshot(library, avoiding: destination)
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
         do {
             try manager.createDirectory(at: destination.appendingPathComponent("resources"), withIntermediateDirectories: true)
@@ -38,6 +20,30 @@ public enum LibraryBackup {
             try JoplinImport.discardSnapshot(destination, after: error)
             throw error
         }
+    }
+
+    static func portableSnapshot(_ library: Library, avoiding destination: URL? = nil) throws -> (Library, [URL: String]) {
+        try library.validate()
+        var portable = library
+        portable.folderSync = nil
+        var roots: [URL: String] = [:]
+        for index in portable.notes.indices {
+            guard let root = portable.notes[index].importedRootURL,
+                  let source = portable.notes[index].importedSourceURL else { continue }
+            let resource = ImportedResources(source: source, root: root)
+            guard resource.isContained(source) else {
+                throw JoplinImportError.invalid("A note has an invalid attachment path.")
+            }
+            if let destination, destination.standardizedFileURL.path.hasPrefix(resource.root.path + "/") {
+                throw JoplinImportError.invalid("The backup cannot be created inside its own attachments.")
+            }
+            let path = roots[resource.root] ?? "resources/\(UUID().uuidString)"
+            roots[resource.root] = path
+            let relative = String(resource.source.path.dropFirst(resource.root.path.count + 1))
+            portable.notes[index].importedRootURL = URL(string: path + "/")
+            portable.notes[index].importedSourceURL = URL(string: path + "/")?.appendingPathComponent(relative)
+        }
+        return (portable, roots)
     }
 
     public static func imported(from folder: URL, importsDirectory: URL) throws -> JoplinImportResult {
@@ -62,7 +68,7 @@ public enum LibraryBackup {
         }
     }
 
-    private static func importedSnapshot(at destination: URL) throws -> JoplinImportResult {
+    static func importedSnapshot(at destination: URL) throws -> JoplinImportResult {
         guard var library = try LibraryStorage(url: destination.appendingPathComponent("library.json")).load() else {
             throw JoplinImportError.invalid("This folder is not a Deltos or Folio backup.")
         }
@@ -74,8 +80,9 @@ public enum LibraryBackup {
             return copy
         }
         var remapped: [Note] = []
+        let noteIDs = Dictionary(uniqueKeysWithValues: library.notes.map { ($0.id, UUID()) })
         for note in library.notes {
-            guard let notebookID = ids[note.notebookID] else { throw LibraryError.invalidLibrary }
+            guard let notebookID = ids[note.notebookID], let noteID = noteIDs[note.id] else { throw LibraryError.invalidLibrary }
             func relocate(_ url: URL?) throws -> URL? {
                 guard let url else { return nil }
                 let path = url.relativeString
@@ -90,13 +97,32 @@ public enum LibraryBackup {
                 return destination.appendingPathComponent(String(candidate.path.dropFirst(root.path.count + 1)))
             }
             remapped.append(Note(
-                notebookID: notebookID, title: note.title, body: note.body, tags: note.tags,
+                id: noteID,
+                notebookID: notebookID, title: note.title,
+                body: try remappingLinks(note.body, format: note.contentFormat, ids: noteIDs), tags: note.tags,
                 isPinned: note.isPinned, deletedAt: note.deletedAt, createdAt: note.createdAt, updatedAt: note.updatedAt,
                 importedSourceURL: try relocate(note.importedSourceURL), importedRootURL: try relocate(note.importedRootURL),
-                format: note.format, history: note.history
+                format: note.format, history: try note.history?.map {
+                    NoteRevision(copying: $0, body: try remappingLinks($0.body, format: $0.format ?? .markdown, ids: noteIDs))
+                }
             ))
         }
         return JoplinImportResult(notebooks: library.notebooks, notes: remapped, snapshotURL: destination)
+    }
+
+    private static func remappingLinks(_ source: String, format: NoteFormat, ids: [UUID: UUID]) throws -> String {
+        let references = try NSRegularExpression(
+            pattern: #"(?im)(?:\]\([ \t]*<?|\b(?:href)[ \t]*=[ \t]*["']|^ {0,3}\[[^\]\n]+\]:[ \t]*<?)(folio-note://([a-fA-F0-9-]{36}))(?![a-fA-F0-9-])"#)
+        let code = format.usesHTML ? [] : try JexImport.codeRanges(in: source)
+        var result = source
+        for match in references.matches(in: source, range: NSRange(source.startIndex..., in: source)).reversed() {
+            guard !code.contains(where: { NSIntersectionRange($0, match.range(at: 1)).length > 0 }),
+                  let idRange = Range(match.range(at: 2), in: source),
+                  let id = UUID(uuidString: String(source[idRange])), let replacement = ids[id],
+                  let range = Range(match.range(at: 1), in: result) else { continue }
+            result.replaceSubrange(range, with: "folio-note://" + replacement.uuidString)
+        }
+        return result
     }
 
     private static func copyDirectory(_ source: URL, to destination: URL) throws {

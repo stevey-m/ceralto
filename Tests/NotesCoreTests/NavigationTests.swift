@@ -193,7 +193,7 @@ struct NavigationTests {
         let preferences = try #require(UserDefaults(suiteName: suite))
         defer { preferences.removePersistentDomain(forName: suite) }
         let store = NotesStore(storage: LibraryStorage(url: directory.appendingPathComponent("library.json")), preferences: preferences)
-        #expect(FolioCommand.matching("complete backup") == [.backup])
+        #expect(FolioCommand.matching("complete backup") == [.backup, .encryptedBackup])
         #expect(FolioCommand.matching("no such command").isEmpty)
         #expect(FolioCommand.sync.unavailableReason(in: store) != nil)
         #expect(FolioCommand.back.unavailableReason(in: store) != nil)

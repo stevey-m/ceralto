@@ -10,6 +10,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
     case newSmartFolder
     case today, templates, tasks, printNote
     case importJex
+    case encryptedBackup, importEncryptedBackup
 
     var id: String { rawValue }
 
@@ -33,6 +34,8 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .exportVault: "Export Open Markdown Folder..."
         case .backup: "Export Complete Backup..."
         case .importBackup: "Import Deltos Backup..."
+        case .encryptedBackup: "Export Encrypted Complete Backup..."
+        case .importEncryptedBackup: "Import Encrypted Backup..."
         case .sync: "Sync Now"
         case .revealLibrary: "Show Library in Finder"
         case .reloadTemplates: "Reload Template Packs"
@@ -91,7 +94,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
             if store.isSyncing { return "Sync already in progress" }
             if store.isImportingJoplin { return "Import in progress" }
             return store.syncFolderName == nil ? "Connect a cloud folder first" : nil
-        case .importJex:
+        case .importJex, .encryptedBackup, .importEncryptedBackup:
             if store.isReadOnly { return "This library is read-only" }
             if store.isSyncing { return "Sync in progress" }
             return store.isImportingJoplin ? "Import in progress" : nil
@@ -130,6 +133,8 @@ extension NotesStore {
         case .exportVault: exportVault()
         case .backup: exportBackup()
         case .importBackup: importBackup()
+        case .encryptedBackup: encryptedBackup(exporting: true)
+        case .importEncryptedBackup: encryptedBackup(exporting: false)
         case .sync: syncNow()
         case .revealLibrary: revealLibrary()
         case .reloadTemplates: reloadExtensions()

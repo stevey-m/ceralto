@@ -173,6 +173,9 @@ final class NotesStore: ObservableObject {
     @Published private(set) var importReportURL: URL?
     @Published private(set) var isLoaded = false
     @Published private(set) var hasUnsavedChanges = false
+    @Published private(set) var historyPolicy = HistoryPolicy.standard
+    @Published private(set) var historyPolicyAvailable = true
+    @Published private(set) var isProcessingEncryptedBackup = false
     #if os(macOS)
     @Published private(set) var shortcutBindings = ShortcutConfiguration.defaults
     @Published private(set) var shortcutsAvailable = true
@@ -199,6 +202,18 @@ final class NotesStore: ObservableObject {
         self.preferences = preferences
         isReadOnly = readOnly
         load()
+        if let stored = preferences.object(forKey: HistoryPolicy.preferenceKey) {
+            do {
+                guard let data = stored as? Data else { throw LibraryError.invalidLibrary }
+                let policy = try JSONDecoder().decode(HistoryPolicy.self, from: data)
+                try policy.validate()
+                historyPolicy = policy
+            } catch {
+                historyPolicyAvailable = false
+                historyPolicy.enabled = false
+                errorMessage = "Automatic note history is paused because its settings could not be read. Existing settings and checkpoints are preserved. \(error.localizedDescription)"
+            }
+        }
         restoreSyncFolder()
         if !readOnly { reloadExtensions() }
         #if os(macOS)
@@ -836,7 +851,7 @@ final class NotesStore: ObservableObject {
         let previous = library.notes[index]
         change(&library.notes[index])
         guard library.notes[index] != previous else { return }
-        library.notes[index].recordRevision(of: previous)
+        library.notes[index].recordRevision(of: previous, policy: historyPolicy)
         library.notes[index].updatedAt = Date()
         save()
     }
@@ -848,7 +863,7 @@ final class NotesStore: ObservableObject {
         library.notes[index].title = revision.title
         library.notes[index].body = revision.body
         library.notes[index].format = revision.format
-        library.notes[index].recordRevision(of: previous, force: true)
+        library.notes[index].recordRevision(of: previous, force: true, policy: historyPolicy)
         library.notes[index].updatedAt = Date()
         save()
     }
@@ -931,7 +946,7 @@ final class NotesStore: ObservableObject {
     }
 
     private func commitNotebookChange(_ candidate: Library) throws {
-        guard isLoaded, !isReadOnly, !isSyncing else {
+        guard isLoaded, !isReadOnly, !isSyncing, !isImportingJoplin else {
             throw NoteWorkflowError("Open an editable library and wait for sync before reorganising notebooks.")
         }
         try storage.save(candidate)
@@ -975,7 +990,7 @@ final class NotesStore: ObservableObject {
             files: files, to: library.notes[index],
             directory: storage.url.deletingLastPathComponent().appendingPathComponent("Attachments", isDirectory: true)
         )
-        updated.recordRevision(of: library.notes[index])
+        updated.recordRevision(of: library.notes[index], policy: historyPolicy)
         library.notes[index] = updated
         save()
     }
@@ -1271,7 +1286,9 @@ final class NotesStore: ObservableObject {
     }
 
     func importBackup(from folder: URL) throws {
-        guard isLoaded, !isReadOnly else { throw LibraryError.invalidLibrary }
+        guard isLoaded, !isReadOnly, !isSyncing, !isImportingJoplin else {
+            throw NoteWorkflowError("Finish the current operation before importing a backup.")
+        }
         let result = try LibraryBackup.imported(
             from: folder, importsDirectory: storage.url.deletingLastPathComponent().appendingPathComponent("Imports")
         )
@@ -1279,6 +1296,61 @@ final class NotesStore: ObservableObject {
     }
 
     #if os(macOS)
+    func encryptedBackup(exporting: Bool) {
+        guard isLoaded, !isReadOnly, !isSyncing, !isImportingJoplin,
+              !isProcessingEncryptedBackup, backupManager?.busy != true else {
+            errorMessage = "Finish sync, import or the current backup before starting an encrypted backup."
+            return
+        }
+        let url: URL
+        if exporting {
+            let panel = NSSavePanel()
+            panel.title = "Save Encrypted Complete Backup"
+            panel.nameFieldStringValue = "Deltos Backup " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-") + ".deltosbackup"
+            panel.message = "Manual password-encrypted archive of notes, history and original attachments. Existing files are never overwritten. Your live library and scheduled backups remain unencrypted."
+            guard panel.runModal() == .OK, let selected = panel.url else { return }
+            url = selected
+        } else {
+            let panel = NSOpenPanel()
+            panel.title = "Import Encrypted Deltos Backup"
+            panel.message = "Choose a .deltosbackup archive. Notes are added as copies, not replacements."
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            guard panel.runModal() == .OK, let selected = panel.url else { return }
+            url = selected
+        }
+        guard let password = BackupPasswordPrompt.request(exporting: exporting) else { return }
+        isProcessingEncryptedBackup = true
+        isImportingJoplin = true
+        let snapshot = library
+        let imports = storage.url.deletingLastPathComponent().appendingPathComponent("Imports", isDirectory: true)
+        Task {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessing { url.stopAccessingSecurityScopedResource() }
+                isProcessingEncryptedBackup = false
+                isImportingJoplin = false
+            }
+            do {
+                if exporting {
+                    try await Task.detached(priority: .userInitiated) {
+                        try EncryptedBackup.export(snapshot, to: url, password: password)
+                    }.value
+                    importSummary = "Encrypted complete backup saved. Deltos did not store your password. Cloud upload is not verified."
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                } else {
+                    let result = try await Task.detached(priority: .userInitiated) {
+                        try EncryptedBackup.imported(from: url, password: password, importsDirectory: imports)
+                    }.value
+                    try commitJoplinImport(result)
+                    importSummary = "Encrypted backup imported as copies. Existing notes were preserved. Restored library files are not encrypted."
+                }
+            } catch {
+                errorMessage = "Encrypted backup \(exporting ? "export" : "import") failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
     func revealRecoveryCopies() {
         do {
             try FileManager.default.createDirectory(at: storage.recoveryDirectory, withIntermediateDirectories: true)
@@ -1482,4 +1554,33 @@ final class NotesStore: ObservableObject {
         selectedNoteID = result.notes.first?.id
     }
 
+    func historyPruningCount(for policy: HistoryPolicy) -> Int {
+        library.notes.reduce(0) { $0 + max(0, ($1.history?.count ?? 0) - policy.maximumCheckpoints) }
+    }
+
+    func applyHistoryPolicy(_ policy: HistoryPolicy, confirmedPruning: Bool = false) throws {
+        guard isLoaded, !isReadOnly, !isSyncing, !isImportingJoplin, !isProcessingEncryptedBackup else {
+            throw NoteWorkflowError("Finish the current operation before changing note history.")
+        }
+        try policy.validate()
+        let encoded = try JSONEncoder().encode(policy)
+        let count = historyPruningCount(for: policy)
+        guard count == 0 || confirmedPruning else {
+            throw NoteWorkflowError("Confirm removing \(count) existing checkpoints before reducing history retention.")
+        }
+        if count > 0 {
+            var candidate = library
+            for index in candidate.notes.indices {
+                if let history = candidate.notes[index].history {
+                    candidate.notes[index].history = Array(history.suffix(policy.maximumCheckpoints))
+                }
+            }
+            try storage.save(candidate)
+            library = candidate
+            hasUnsavedChanges = false
+        }
+        preferences.set(encoded, forKey: HistoryPolicy.preferenceKey)
+        historyPolicy = policy
+        historyPolicyAvailable = true
+    }
 }

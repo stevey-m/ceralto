@@ -255,7 +255,7 @@ public enum JexImport {
         return source
     }
 
-    private static func codeRanges(in source: String) throws -> [NSRange] {
+    static func codeRanges(in source: String) throws -> [NSRange] {
         guard let parser = cmark_parser_new(0) else { throw invalid("Could not inspect Markdown links.") }
         defer { cmark_parser_free(parser) }
         source.withCString { cmark_parser_feed(parser, $0, source.utf8.count) }

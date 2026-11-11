@@ -268,17 +268,24 @@ struct SettingsView: View {
                 Button("Show Local Recovery Copies...", action: store.revealRecoveryCopies)
                 Text("Before opening an existing Mac library for editing, Deltos keeps its first validated copy of the day. The last seven opening days are retained. These JSON copies contain notes and history, but not attachment files or unsaved drafts. They are not complete backups.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("To recover a whole library copy, quit Folio, preserve the current library.json, then copy the chosen recovery file to that location as library.json. Attachments must still exist in their original locations. Never replace the file while Deltos is running.")
+                Text("To recover a whole library copy, quit Deltos, preserve the current library.json, then copy the chosen recovery file to that location as library.json. Attachments must still exist in their original locations. Never replace the file while Deltos is running.")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Export Complete Backup...", action: store.exportBackup)
                     .disabled(!store.isLoaded)
                 Button("Import Deltos Backup...", action: store.importBackup)
                     .disabled(!store.isLoaded)
+                Button("Export Encrypted Complete Backup...") { store.encryptedBackup(exporting: true) }
+                    .disabled(store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
+                Button("Import Encrypted Backup...") { store.encryptedBackup(exporting: false) }
+                    .disabled(store.isImportingJoplin || store.isSyncing || store.isProcessingEncryptedBackup)
+                Text("Encrypted archives ask for a password every time. No password is stored or recoverable. Only the archive is encrypted: live notes, drafts, recovery copies, scheduled backups and sync remain unencrypted.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Complete backups include notes, history and original attachments. Import adds notes without replacing current ones. Scheduled backups above run while Deltos is open; keep an independent copy or use Time Machine.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Note history retains up to 20 checkpoints, captured at most once every five minutes. Open Note actions > Note History to restore one. Trash is kept until you delete notes permanently; no automatic deletion is enabled.")
+                Text("Open Note actions > Note History to restore a checkpoint. Trash is kept until you delete notes permanently; no automatic deletion is enabled.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            HistoryPolicyControls()
         case .sync:
             Section("Cloud folder exchange (experimental)") {
                 Text("Choose a dedicated folder managed by Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Install and sign in to that app separately, and keep the entire folder downloaded or available offline.")
