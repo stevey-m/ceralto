@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.20.0 is a development release, not a finished replacement for your library.**
+**0.20.1 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.20.0-arm64.dmg`, drag **Deltos 0.20.0** to **Applications**, eject the
+Open `Deltos-0.20.1-arm64.dmg`, drag **Deltos 0.20.1** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.

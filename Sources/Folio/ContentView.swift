@@ -20,7 +20,7 @@ struct ContentView: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.openWindow) private var openWindow
 
-    var body: some View {
+    private var notebookLayout: some View {
         NotebookLayout(showNotebooks: showNotebooks, showNotes: showNotes) {
             sidebar
         } notes: {
@@ -29,28 +29,49 @@ struct ContentView: View {
             ReferenceLayout(showReference: store.referenceNote != nil) {
                 detail
             } reference: {
-                if let note = store.referenceNote {
-                    VStack(spacing: 0) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Reference · Read only").font(.caption).foregroundStyle(.secondary)
-                                Text(note.displayTitle).font(.headline).lineLimit(1)
-                            }
-                            Spacer()
-                            Button { store.showReference(nil) } label: { Image(systemName: "xmark") }
-                                .buttonStyle(.borderless).accessibilityLabel("Close reference pane")
-                        }.padding(14)
-                        Divider()
-                        MarkdownPreview(note: note).id(note.id)
-                    }
-                }
+                referencePane
             }
         }
+    }
+
+    @ViewBuilder private var referencePane: some View {
+        if let note = store.referenceNote {
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Reference · Read only").font(.caption).foregroundStyle(.secondary)
+                        Text(note.displayTitle).font(.headline).lineLimit(1)
+                    }
+                    Spacer()
+                    Button { store.showReference(nil) } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless).accessibilityLabel("Close reference pane")
+                }.padding(14)
+                Divider()
+                MarkdownPreview(note: note).id(note.id)
+            }
+        }
+    }
+
+    private var workspace: some View {
+        notebookLayout
         .background(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
         .foregroundStyle(palette?.foregroundColor ?? Color.primary)
-        .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
+        .toolbar { navigationToolbar }
+        .navigationTitle("Deltos")
+        .onChange(of: store.scope) { _, _ in
+            store.reconcileSelection()
+            revealSelectedNotebook()
+        }
+        .onAppear {
+            revealSelectedNotebook()
+            if let id = store.selectedNoteID { selectedNoteIDs = [id] }
+        }
+        .onChange(of: store.query) { _, _ in store.reconcileSelection() }
+    }
+
+    @ToolbarContentBuilder private var navigationToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
                 Button(action: store.navigateBack) { Image(systemName: "chevron.left") }
                     .help("Back (\(store.shortcut(.back).label))").accessibilityLabel("Back")
                     .disabled(!store.workspace.canGoBack)
@@ -83,18 +104,11 @@ struct ContentView: View {
                 Button { openWindow(id: "capture") } label: { Image(systemName: "tray.and.arrow.down") }
                     .help("Quick capture")
                     .accessibilityLabel("Quick capture")
-            }
         }
-        .navigationTitle("Deltos")
-        .onChange(of: store.scope) { _, _ in
-            store.reconcileSelection()
-            revealSelectedNotebook()
-        }
-        .onAppear {
-            revealSelectedNotebook()
-            if let id = store.selectedNoteID { selectedNoteIDs = [id] }
-        }
-        .onChange(of: store.query) { _, _ in store.reconcileSelection() }
+    }
+
+    private var presentedWorkspace: some View {
+        workspace
         .sheet(item: $store.notebookDraft) { draft in
             NotebookSheet(draft: draft)
         }
@@ -142,6 +156,10 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+    }
+
+    var body: some View {
+        presentedWorkspace
         .confirmationDialog("Permanently delete this note?", isPresented: Binding(
             get: { noteToDelete != nil },
             set: { if !$0 { noteToDelete = nil } }
