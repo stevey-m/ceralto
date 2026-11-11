@@ -324,8 +324,8 @@ struct SettingsView: View {
     }
 
     private func openProject(_ path: String) {
-        guard let url = URL(string: "https://github.com/stevey-m/folio/" + path), NSWorkspace.shared.open(url) else {
-            store.errorMessage = "Could not open the Deltos project page in your browser."
+        guard let url = URL(string: "https://github.com/stevey-m/ceralto/" + path), NSWorkspace.shared.open(url) else {
+            store.errorMessage = "Could not open the Ceralto project page in your browser."
             return
         }
     }

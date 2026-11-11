@@ -1,11 +1,13 @@
-# Deltos
+# Ceralto
 
 **A quiet place for everything worth keeping.**
 
 A native, local-first notes app for Mac with rich-text writing and portable
 Markdown. No account, subscription or runtime server.
 
-[Download for Mac](https://github.com/stevey-m/folio/releases) ·
+**Formerly Deltos.** Existing installers and app menus still use the Deltos name.
+
+[Download for Mac](https://github.com/stevey-m/ceralto/releases) ·
 [User guide](docs/USER_GUIDE.md) · [Developer guide](CONTRIBUTING.md)
 
 ![Deltos on Mac with synthetic sample notes](docs/mac-compose.png)
@@ -21,7 +23,7 @@ Markdown. No account, subscription or runtime server.
 
 ## Install
 
-Download an **Apple Silicon DMG** from [Releases](https://github.com/stevey-m/folio/releases),
+Download an **Apple Silicon DMG** from [Releases](https://github.com/stevey-m/ceralto/releases),
 open it and drag the versioned Deltos app to **Applications**. Requires **macOS 14+**.
 Quit other Deltos copies and back up your library before upgrading.
 

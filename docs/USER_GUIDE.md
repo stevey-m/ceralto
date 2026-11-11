@@ -1,9 +1,11 @@
-# Deltos user guide
+# Ceralto user guide
 
 [Back to the project](../README.md)
 
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
+The project is now **Ceralto**. Existing installers and app menus still use
+**Deltos**, so the instructions below retain those names where applicable.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -38,7 +40,7 @@ Keep an independent backup and start with a small test notebook.
 
 ## Install on Mac
 
-Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
+Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/ceralto/releases).
 Open `Deltos-0.22.1-arm64.dmg`, drag **Deltos 0.22.1** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
@@ -52,12 +54,12 @@ Requires macOS 14+. This DMG targets Apple Silicon; Intel requires a separate
 build. Development bundles are ad-hoc signed, not Apple-notarized. For a build
 you trust, macOS may require **System Settings > Privacy & Security > Open Anyway**.
 
-### Folio is now Deltos
+### Name changes and compatibility
 
 The name changes, not your library. The bundle identifier `dev.folio.notes`,
 preference keys, extension IDs, backup formats and `Folio Sync` cloud directory
-remain unchanged for compatibility. The existing public source repository is
-still `stevey-m/folio`. Both versions use
+remain unchanged for compatibility. The public source repository is now
+[`stevey-m/ceralto`](https://github.com/stevey-m/ceralto). Existing versions use
 `~/Library/Application Support/Folio/`; no manual data move is needed.
 The packaged Mac executable is now named `Deltos`; the source module name
 does not determine the name shown for the installed process.
