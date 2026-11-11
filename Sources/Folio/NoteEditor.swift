@@ -204,8 +204,7 @@ struct NoteEditor: View {
                 .help("Export note in its original format")
                 .accessibilityLabel("Export note")
                 Menu {
-                    Button("Larger Text") { fontSize = min(fontSize + 1, 28) }
-                    Button("Smaller Text") { fontSize = max(fontSize - 1, 11) }
+                    TextSizeButtons()
                     Button("Note History...") { showingHistory = true }
                         .disabled(isTrashed || (note.history ?? []).isEmpty)
                     Button("Linked Mentions...") { showingBacklinks = true }

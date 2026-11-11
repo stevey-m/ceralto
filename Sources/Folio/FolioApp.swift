@@ -127,6 +127,9 @@ struct FolioApp: App {
                 .keyboardShortcut(store.shortcut(.find).keyboardShortcut)
                 .disabled(!store.isLoaded)
             }
+            CommandGroup(after: .toolbar) {
+                TextSizeButtons()
+            }
             CommandMenu("Navigate") {
                 Button("Command Palette...") {
                     openWindow(id: "library")

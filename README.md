@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.20.1 is a development release, not a finished replacement for your library.**
+**0.21.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.20.1-arm64.dmg`, drag **Deltos 0.20.1** to **Applications**, eject the
+Open `Deltos-0.21.0-arm64.dmg`, drag **Deltos 0.21.0** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -153,6 +153,31 @@ existing folders are never overwritten. Links to unselected notes are not
 exported. This portable Markdown/HTML export is not a complete history backup;
 use Files & Backups for that.
 
+### Browse notes and attachments
+
+The **ellipsis menu beside the note-list title** offers **View as Gallery /
+View as List**, **Sort By**, **Group By Date**, **View Attachments** and
+**Note List Spacing**. Gallery and date grouping are opt-in local preferences;
+ordinary list mode keeps the existing notebook/subtopic tree. Gallery and
+grouped lists show all matching notes in the selected notebook branch,
+including subfolders. Search and smart-folder filters still apply.
+
+Date groups include Today, Yesterday, Previous 7 Days, Previous 30 Days and
+older months. They follow your Mac's calendar and time zone. Sorting by creation
+uses the creation date; other sorts group by last edit. Pinned notes have their
+own first section. Gallery supports Command-click, Shift-click and arrow-key
+selection, plus the same context-menu and bulk actions as list mode.
+
+**View Attachments** browses local linked files in the current scope, with
+image/PDF/other-file filters, bounded image thumbnails, native Quick Look,
+Show in Finder and Open Note. It does not download remote images or index
+unlinked files. Missing files and blocked paths are reported rather than
+opened outside the note's resource folder. Original attachments are unchanged.
+
+Choose **Compact**, **Comfortable** or **Spacious** note-list spacing in the
+ellipsis menu or **Settings > Appearance**. Appearance also has a separate
+note-list text-size slider; editor/preview size uses Command-Plus/Minus.
+
 ### Choose an appearance
 
 Settings now opens in a dedicated native, resizable window with a 720 × 480 pt
@@ -193,6 +218,10 @@ buffers; selections and undo histories stay with their tabs.
 
 Shortcuts below are defaults. Customize application commands in
 **Settings > Keyboard Shortcuts**; contextual editing shortcuts stay fixed.
+Use **Command-Plus (+)** for larger note text and **Command-Minus (-)** for
+smaller text, or choose **View > Larger Text / Smaller Text**. This adjusts the
+shared editor/preview text size (11–28 pt), remembers your choice, and does not
+change the note's content.
 
 - **Start with today.** Open **Today's Note** from the sidebar, Navigate menu,
   command palette or Command-Shift-D. Deltos reuses today's dated note without

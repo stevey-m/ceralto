@@ -1,7 +1,63 @@
 import Foundation
 import UniformTypeIdentifiers
+import SwiftSoup
+
+public struct NoteAttachment: Identifiable, Equatable, Sendable {
+    public enum Kind: String, CaseIterable, Sendable {
+        case image = "Images", pdf = "PDFs", file = "Other Files"
+    }
+
+    public let noteID: UUID
+    public let noteTitle: String
+    public let reference: String
+    public let name: String
+    public let kind: Kind
+    public let resources: ImportedResources
+    public var id: String { noteID.uuidString + ":" + reference }
+
+    public func resolvedURL() throws -> URL {
+        guard let url = resources.localURL(for: reference) else {
+            throw NoteWorkflowError("This attachment links outside its note's resource folder.")
+        }
+        let info = try url.resourceValues(forKeys: [.isRegularFileKey])
+        guard info.isRegularFile == true else {
+            throw NoteWorkflowError("The attachment is missing or is not a regular file.")
+        }
+        return url
+    }
+}
 
 public enum Attachments {
+    public static func references(in note: Note) throws -> [NoteAttachment] {
+        if note.importedRootURL == nil && note.importedSourceURL == nil { return [] }
+        guard let root = note.importedRootURL, let source = note.importedSourceURL else {
+            throw NoteWorkflowError("The note's attachment folder information is incomplete.")
+        }
+        let resources = ImportedResources(source: source, root: root)
+        let html = note.contentFormat.usesHTML ? note.body : try PreviewDocument.markdownHTML(note.body)
+        let document = try SwiftSoup.parse(html)
+        var seen: Set<String> = []
+        var attachments: [NoteAttachment] = []
+        for element in try document.select("img[src],a[href]") {
+            let image = element.tagName() == "img"
+            let reference = try element.attr(image ? "src" : "href")
+            guard !reference.isEmpty, !reference.hasPrefix("#") else { continue }
+            if let url = URL(string: reference), url.scheme != nil, !url.isFileURL { continue }
+            guard let url = resources.localURL(for: reference) else {
+                throw NoteWorkflowError("An attachment in \"\(note.displayTitle)\" links outside its resource folder.")
+            }
+            guard seen.insert(url.path).inserted else { continue }
+            let type = UTType(filenameExtension: url.pathExtension)
+            let kind: NoteAttachment.Kind = type?.conforms(to: .image) == true || image ? .image :
+                type?.conforms(to: .pdf) == true ? .pdf : .file
+            let label = try (image ? element.attr("alt") : element.text()).trimmingCharacters(in: .whitespacesAndNewlines)
+            attachments.append(NoteAttachment(noteID: note.id, noteTitle: note.displayTitle, reference: reference,
+                                              name: label.isEmpty ? url.lastPathComponent : String(label.prefix(200)),
+                                              kind: kind, resources: resources))
+        }
+        return attachments
+    }
+
     public struct Imported: Sendable {
         public let fragment: String
         public let resources: ImportedResources

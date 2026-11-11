@@ -6,6 +6,73 @@ import WebKit
 @testable import Folio
 
 struct AppearanceTests {
+    @MainActor
+    @Test func textSizeKeysUpdateTheLiveEditorAndPersistWithoutChangingTheNote() async throws {
+        _ = NSApplication.shared
+        let suite = "DeltosTextSize-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let actions = FormattingActions()
+        var source = "Words"
+        var writes = 0
+        let host = NSHostingView(rootView: TextSizeFixture(actions: actions, source: { source }) {
+            source = $0; writes += 1
+        }.defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        for _ in 0..<100 where actions.editor == nil {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let editor = try #require(actions.editor)
+        window.makeFirstResponder(editor)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.insertText(" typed", replacementRange: editor.selectedRange())
+        let savedSource = source
+        let savedWrites = writes
+        let selection = editor.selectedRange()
+        func key(_ character: String, flags: NSEvent.ModifierFlags, code: UInt16) throws -> NSEvent {
+            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                                         windowNumber: window.windowNumber, context: nil,
+                                         characters: character, charactersIgnoringModifiers: character,
+                                         isARepeat: false, keyCode: code))
+        }
+        func waitForSize(_ size: Double) async throws {
+            for _ in 0..<100 {
+                host.layoutSubtreeIfNeeded()
+                if editor.pageFontSize == size { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(editor.pageFontSize == size)
+            let font = try #require(editor.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+            #expect(abs(font.pointSize - size) < 0.01)
+        }
+        let plus = try key("+", flags: [.command, .shift], code: 24)
+        let minus = try key("-", flags: .command, code: 27)
+        host.layoutSubtreeIfNeeded()
+        try #require(window.performKeyEquivalent(with: plus))
+        try await waitForSize(16)
+        #expect(defaults.double(forKey: "editorFontSize") == 16)
+        try #require(window.performKeyEquivalent(with: minus))
+        try await waitForSize(15)
+        #expect(defaults.double(forKey: "editorFontSize") == 15)
+        defaults.set(28.0, forKey: "editorFontSize")
+        try await waitForSize(28)
+        #expect(!window.performKeyEquivalent(with: plus))
+        #expect(defaults.double(forKey: "editorFontSize") == 28)
+        defaults.set(11.0, forKey: "editorFontSize")
+        try await waitForSize(11)
+        #expect(!window.performKeyEquivalent(with: minus))
+        #expect(defaults.double(forKey: "editorFontSize") == 11)
+        #expect(editor.string == "Words typed")
+        #expect(editor.selectedRange() == selection)
+        #expect(editor.undoManager?.canUndo == true)
+        #expect(source == savedSource)
+        #expect(writes == savedWrites)
+    }
+
     @Test(arguments: FolioAccent.allCases)
     func draculaAccentIsAnOptionalChoiceRatherThanALock(accent: FolioAccent) throws {
         var options = PreviewOptions()
@@ -15,6 +82,22 @@ struct AppearanceTests {
                                             resources: nil, options: options)
         #expect(html.contains("--accent: \(accent.darkHex);"))
         #expect(html.contains("--bg: #282a36;"))
+    }
+
+    private struct TextSizeFixture: View {
+        @AppStorage("editorFontSize") private var fontSize = 15.0
+        let actions: FormattingActions
+        let source: () -> String
+        let onChange: (String) -> Void
+
+        var body: some View {
+            VStack {
+                TextSizeButtons()
+                NativePageView(html: source(), resources: nil, size: fontSize, family: .system, dracula: false,
+                               actions: actions, onChange: onChange, onError: { Issue.record("\($0)") },
+                               currentSource: source)
+            }
+        }
     }
 
     @Test func defaultAppearanceIsNativeAndLegacyDraculaStillLoads() {

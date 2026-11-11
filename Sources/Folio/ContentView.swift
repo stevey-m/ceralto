@@ -11,6 +11,11 @@ struct ContentView: View {
     @ViewState private var pendingCommand: FolioCommand?
     @ViewState private var smartFolderToDelete: SmartFolder?
     @ViewState private var showingSearchHelp = false
+    @ViewState private var showingAttachments = false
+    @ViewState private var groupingDate = Date()
+    @AppStorage("noteListGallery") private var gallery = false
+    @AppStorage("noteListGroupDates") private var groupDates = false
+    @AppStorage("noteListSpacing") private var noteSpacing = NoteListSpacing.comfortable.rawValue
     @ViewState private var selectedNoteIDs: Set<UUID> = []
     @ThemeColors private var palette
     @AppStorage("showNotebookPane") private var showNotebooks = true
@@ -68,6 +73,8 @@ struct ContentView: View {
             if let id = store.selectedNoteID { selectedNoteIDs = [id] }
         }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in groupingDate = Date() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in groupingDate = Date() }
     }
 
     @ToolbarContentBuilder private var navigationToolbar: some ToolbarContent {
@@ -109,6 +116,10 @@ struct ContentView: View {
 
     private var presentedWorkspace: some View {
         workspace
+        .sheet(isPresented: $showingAttachments) {
+            AttachmentBrowser(notes: store.outlineNotes, scopeTitle: store.navigationFolder?.name ?? store.scopeTitle)
+                .environmentObject(store)
+        }
         .sheet(item: $store.notebookDraft) { draft in
             NotebookSheet(draft: draft)
         }
@@ -490,8 +501,8 @@ struct ContentView: View {
         })
     }
 
-    private func noteRow(_ note: Note) -> some View {
-        NoteRow(note: note)
+    private func noteRow(_ note: Note, gallery: Bool = false) -> some View {
+        NoteRow(note: note, gallery: gallery)
             .tag(note.id)
             .folioListRow(selected: selectedNoteIDs.contains(note.id))
             .draggable("deltos-note:" + note.id.uuidString)
@@ -535,24 +546,47 @@ struct ContentView: View {
         .padding(.vertical, 3)
     }
 
+    private var noteListHeader: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.navigationFolder?.name ?? store.scopeTitle).font(.title2.weight(.semibold)).lineLimit(1)
+                Text("\(store.outlineNotes.count) \(store.outlineNotes.count == 1 ? "note" : "notes")")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Menu {
+                Button(gallery ? "View as List" : "View as Gallery") { gallery.toggle() }
+                Menu("Sort By") { noteOrderingControls }
+                Toggle("Group By Date", isOn: $groupDates)
+                Divider()
+                Button("View Attachments...") { showingAttachments = true }
+                Divider()
+                Menu("Note List Spacing") {
+                    Picker("Spacing", selection: $noteSpacing) {
+                        ForEach(NoteListSpacing.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Note list options")
+            .accessibilityLabel("Note list options")
+            Button(action: store.createNote) {
+                Image(systemName: "square.and.pencil").font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .help("New Note (Command-N)")
+            .accessibilityLabel("New note")
+            .disabled(!store.isLoaded)
+        }
+        .padding(18)
+    }
+
     private var noteList: some View {
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(store.navigationFolder?.name ?? store.scopeTitle).font(.title2.weight(.semibold)).lineLimit(1)
-                    Text("\(store.outlineNotes.count) \(store.outlineNotes.count == 1 ? "note" : "notes")")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button(action: store.createNote) {
-                    Image(systemName: "square.and.pencil").font(.title3)
-                }
-                .buttonStyle(.borderless)
-                .help("New Note (Command-N)")
-                .accessibilityLabel("New note")
-                .disabled(!store.isLoaded)
-            }
-            .padding(18)
+            noteListHeader
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Search notes", text: $store.query).textFieldStyle(.plain)
@@ -593,18 +627,7 @@ struct ContentView: View {
                     .padding(.horizontal, 12).padding(.bottom, 10)
             }
             Divider()
-            List(selection: noteSelection) {
-                if let folder = store.navigationFolder {
-                    ForEach(store.outlineNotes.filter { note in folder.notebooks.contains { $0.id == note.notebookID } }) { note in
-                        noteRow(note)
-                    }
-                    ForEach(folder.children) { branch in topicView(branch) }
-                } else {
-                    ForEach(store.visibleNotes) { note in
-                        noteRow(note)
-                    }
-                }
-            }
+            noteCollection
             .onChange(of: store.selectedNoteID) { _, id in
                 if let id {
                     if !selectedNoteIDs.contains(id) { selectedNoteIDs = [id] }
@@ -673,6 +696,36 @@ struct ContentView: View {
         .background(palette?.backgroundColor ?? Color(nsColor: .controlBackgroundColor))
     }
 
+    private var dateSections: [NoteDateSection] {
+        NoteDateSection.grouping(store.outlineNotes, ordering: store.noteOrdering, now: groupingDate)
+    }
+
+    @ViewBuilder private var noteCollection: some View {
+        if gallery {
+            NoteGallery(notes: store.outlineNotes, sections: groupDates ? dateSections : [],
+                        selection: noteSelection, onActivate: { store.selectedNoteID = $0 }) { note in
+                noteRow(note, gallery: true)
+            }
+        } else {
+            List(selection: noteSelection) {
+                if groupDates {
+                    ForEach(dateSections) { section in
+                        Section(section.title) {
+                            ForEach(section.notes) { note in noteRow(note) }
+                        }
+                    }
+                } else if let folder = store.navigationFolder {
+                    ForEach(store.outlineNotes.filter { note in folder.notebooks.contains { $0.id == note.notebookID } }) { note in
+                        noteRow(note)
+                    }
+                    ForEach(folder.children) { branch in topicView(branch) }
+                } else {
+                    ForEach(store.visibleNotes) { note in noteRow(note) }
+                }
+            }
+        }
+    }
+
     private var noteSelection: Binding<Set<UUID>> {
         Binding(get: { selectedNoteIDs }, set: { ids in
             let added = ids.subtracting(selectedNoteIDs)
@@ -721,13 +774,17 @@ struct ContentView: View {
 private struct NoteRow: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
+    var gallery = false
+    @AppStorage("noteListFontSize") private var fontSize = 13.0
+    @AppStorage("noteListSpacing") private var spacing = NoteListSpacing.comfortable.rawValue
     @AppStorage("noteListPreviewLines") private var previewLines = 2
     @AppStorage("noteListShowDates") private var showDates = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
+            if gallery { NoteGalleryPreview(note: note).frame(height: 100) }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(note.displayTitle).font(.headline).lineLimit(1)
+                Text(note.displayTitle).font(.system(size: fontSize, weight: .semibold)).lineLimit(gallery ? 2 : 1)
                 Spacer(minLength: 0)
                 if note.isPinned {
                     Image(systemName: "pin.fill").font(.caption2).foregroundStyle(.tint)
@@ -736,7 +793,7 @@ private struct NoteRow: View {
             }
             if previewLines > 0 {
                 Text(note.body.isEmpty ? "No additional text" : store.textSummary(for: note).excerpt)
-                    .font(.callout).foregroundStyle(.secondary).lineLimit(min(previewLines, 3))
+                    .font(.system(size: fontSize)).foregroundStyle(.secondary).lineLimit(min(previewLines, 3))
             }
             if showDates || !note.tags.isEmpty {
                 HStack {
@@ -744,10 +801,10 @@ private struct NoteRow: View {
                     Spacer()
                     if let tag = note.tags.first { Text("#\(tag)").lineLimit(1) }
                 }
-                .font(.caption2).foregroundStyle(.tertiary)
+                .font(.system(size: max(9, fontSize - 3))).foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, (NoteListSpacing(rawValue: spacing) ?? .comfortable).padding)
         .accessibilityElement(children: .combine)
     }
 }

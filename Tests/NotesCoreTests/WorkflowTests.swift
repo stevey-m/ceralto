@@ -314,7 +314,8 @@ struct KeyboardShortcutTests {
         let defaults = ShortcutConfiguration.defaults
         try ShortcutConfiguration.validate(defaults)
         for invalid in [ShortcutBinding(key: "q"), ShortcutBinding(key: "f"), ShortcutBinding(key: "ab"),
-                        ShortcutBinding(key: "n", modifiers: 8), ShortcutBinding(key: "k")] {
+                        ShortcutBinding(key: "n", modifiers: 8), ShortcutBinding(key: "k"),
+                        ShortcutBinding(key: "-"), ShortcutBinding(key: "=", modifiers: 1)] {
             var bindings = defaults
             bindings[ShortcutAction.today.rawValue] = invalid
             #expect(throws: (any Error).self) { try ShortcutConfiguration.validate(bindings) }

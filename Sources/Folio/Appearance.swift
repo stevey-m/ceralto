@@ -227,7 +227,22 @@ extension ReadingFont {
     }
 }
 
+struct TextSizeButtons: View {
+    @AppStorage("editorFontSize") private var fontSize = 15.0
+
+    var body: some View {
+        Button("Larger Text") { fontSize = min(fontSize + 1, 28) }
+            .keyboardShortcut("+", modifiers: .command)
+            .disabled(fontSize >= 28)
+        Button("Smaller Text") { fontSize = max(fontSize - 1, 11) }
+            .keyboardShortcut("-", modifiers: .command)
+            .disabled(fontSize <= 11)
+    }
+}
+
 struct AppearanceSettings: View {
+    @AppStorage("noteListFontSize") private var noteListFontSize = 13.0
+    @AppStorage("noteListSpacing") private var noteListSpacing = NoteListSpacing.comfortable.rawValue
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
     @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
@@ -259,6 +274,14 @@ struct AppearanceSettings: View {
                 Text("Text size")
                 Slider(value: $fontSize, in: 11...28, step: 1)
                 Text("\(Int(fontSize)) pt").monospacedDigit().frame(width: 45)
+            }
+            HStack {
+                Text("Note list text size")
+                Slider(value: $noteListFontSize, in: 11...20, step: 1)
+                Text("\(Int(noteListFontSize)) pt").monospacedDigit().frame(width: 45)
+            }
+            Picker("Note list spacing", selection: $noteListSpacing) {
+                ForEach(NoteListSpacing.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
             }
             Picker("Images in notes", selection: $thumbnailSize) {
                 Text("Fit note width (Recommended)").tag(0)

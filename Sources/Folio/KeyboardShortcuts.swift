@@ -109,13 +109,13 @@ enum ShortcutConfiguration {
 
     static func validate(_ bindings: [String: ShortcutBinding]) throws {
         guard Set(bindings.keys) == Set(defaults.keys) else { throw ShortcutError("The shortcut configuration contains missing or unknown actions.") }
-        let reserved = Set(["a", "b", "c", "f", "h", "i", "m", "p", "q", "u", "v", "w", "x", "z", ","].map {
+        let reserved = Set(["a", "b", "c", "f", "h", "i", "m", "p", "q", "u", "v", "w", "x", "z", ",", "-"].map {
             ShortcutBinding(key: $0)
         } + [ShortcutBinding(key: "z", modifiers: 1), ShortcutBinding(key: "h", modifiers: 2),
              ShortcutBinding(key: "m", modifiers: 2), ShortcutBinding(key: "f", modifiers: 4),
              ShortcutBinding(key: " "), ShortcutBinding(key: " ", modifiers: 4),
              ShortcutBinding(key: "q", modifiers: 1), ShortcutBinding(key: "q", modifiers: 4),
-             ShortcutBinding(key: "/", modifiers: 1)] +
+             ShortcutBinding(key: "/", modifiers: 1), ShortcutBinding(key: "=", modifiers: 1)] +
             ["3", "4", "5"].map { ShortcutBinding(key: $0, modifiers: 1) })
         var used: [ShortcutBinding: ShortcutAction] = [:]
         for action in ShortcutAction.allCases {
