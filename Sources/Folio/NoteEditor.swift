@@ -1,10 +1,6 @@
 import NotesCore
 import SwiftUI
 
-private enum EditorMode: String, CaseIterable {
-    case write = "Write", split = "Split", preview = "Preview"
-}
-
 struct NoteEditor: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
@@ -12,8 +8,7 @@ struct NoteEditor: View {
     var isActive = true
     var searchFocus: FocusState<Bool>.Binding
     var toolbarWidth: Double
-    @AppStorage("readingEditorMode") private var preferredMode = EditorMode.preview.rawValue
-    @ViewState private var mode = EditorMode.preview.rawValue
+    @ViewState private var isPreviewing = false
     @ViewState private var initialized = false
     @AppStorage("editorFontSize") private var fontSize = 15.0
     @AppStorage("showNoteDetails") private var showDetails = false
@@ -25,14 +20,13 @@ struct NoteEditor: View {
     @ViewState private var showingHistory = false
     @ViewState private var showingTags = false
     @ViewState private var confirmingSource = false
-    @ViewState private var composingImportedNote = false
+    @ViewState private var usesCompose = false
+    @ViewState private var sourceEditingReason: String?
     @ViewState private var showingBacklinks = false
     @ViewState private var imageURL: URL?
     @StateObject private var formatting = FormattingActions()
 
     private var isTrashed: Bool { note.deletedAt != nil }
-    private var editorMode: EditorMode { EditorMode(rawValue: mode) ?? .preview }
-    private var usesCompose: Bool { note.contentFormat == .formatted || composingImportedNote }
 
     var body: some View {
         ZStack {
@@ -122,24 +116,39 @@ struct NoteEditor: View {
                 }
             }
             .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 4)
-            if usesCompose && editorMode != .preview && !isTrashed {
-                FormattedEditor(note: note, fontSize: fontSize,
-                                family: ReadingFont(rawValue: readingFont) ?? .system,
-                                dracula: palette != nil, actions: formatting,
-                                focusOnAttach: composingImportedNote) { body in
-                    store.update(note.id) { $0.body = body }
-                } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
-                  currentSource: { noteBinding(\.body).wrappedValue }
-                  onImportFiles: { try store.importComposeAttachments($0, to: note.id) }
-            } else if editorMode == .split && !isTrashed {
-                HSplitView {
-                    sourceEditor.frame(minWidth: 130)
-                    preview.frame(minWidth: 130)
-                }
-            } else if editorMode == .preview || isTrashed {
+            if isTrashed {
                 preview
+            } else if initialized {
+                ZStack {
+                    VStack(spacing: 0) {
+                        if let sourceEditingReason {
+                            Label("Source editing preserves this note's unsupported formatting. \(sourceEditingReason)",
+                                  systemImage: "info.circle")
+                                .font(.callout)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(.secondary.opacity(0.08))
+                        }
+                        if usesCompose {
+                            FormattedEditor(note: note, fontSize: fontSize,
+                                            family: ReadingFont(rawValue: readingFont) ?? .system,
+                                            dracula: palette != nil, actions: formatting) { body in
+                                store.update(note.id) { $0.body = body }
+                            } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
+                              currentSource: { noteBinding(\.body).wrappedValue }
+                              onImportFiles: { try store.importComposeAttachments($0, to: note.id) }
+                        } else {
+                            sourceEditor
+                        }
+                    }
+                    .disabled(isPreviewing)
+                    .opacity(isPreviewing ? 0 : 1)
+                    .allowsHitTesting(!isPreviewing)
+                    .accessibilityHidden(isPreviewing)
+                    if isPreviewing { preview }
+                }
             } else {
-                sourceEditor
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if showDetails || store.hasUnsavedChanges {
             Divider()
@@ -165,14 +174,13 @@ struct NoteEditor: View {
         }
         .onAppear {
             guard !initialized else { return }
-            initialized = true
             tagsText = note.tags.joined(separator: ", ")
-            mode = preferredMode
-            if note.contentFormat == .formatted || (note.body.isEmpty && note.title.isEmpty) {
-                mode = EditorMode.write.rawValue
-            }
+            if !isTrashed { beginEditing() }
+            initialized = true
         }
-        .onChange(of: mode) { _, value in preferredMode = value }
+        .onChange(of: isTrashed) { _, trashed in
+            if !trashed { beginEditing() }
+        }
         .onChange(of: tagsFocused) { _, focused in
             if !focused { tagsText = note.tags.joined(separator: ", ") }
         }
@@ -187,9 +195,9 @@ struct NoteEditor: View {
         }
         .confirmationDialog("Switch to source editing?", isPresented: $confirmingSource, titleVisibility: .visible) {
             Button("Use Source Editor") {
-                if note.contentFormat == .formatted { store.update(note.id) { $0.format = .markdown } }
-                composingImportedNote = false
-                mode = EditorMode.write.rawValue
+                usesCompose = false
+                sourceEditingReason = nil
+                isPreviewing = false
             }
         } message: {
             Text("Source editing preserves the note's original Markdown or HTML. Its text and attachments will not be converted.")
@@ -198,18 +206,13 @@ struct NoteEditor: View {
 
     @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
         ToolbarItem(id: "note-formatting", placement: .automatic) {
-            if usesCompose && editorMode != .preview {
-                NoteFormattingControls(actions: formatting).disabled(isTrashed)
-            } else {
-                NoteToolbarButton(title: "Edit Note", action: beginEditing)
-                    .help("Edit this existing note with formatting tools")
-                    .accessibilityIdentifier("note-edit")
-                    .disabled(isTrashed)
-            }
+            NoteFormattingControls(actions: formatting)
+                .disabled(isTrashed || !usesCompose || isPreviewing)
+                .help(usesCompose ? "Format selected text" : "Visual formatting is unavailable in source editing")
         }
         ToolbarItem(id: "note-attachments", placement: .automatic) {
                 Button {
-                    if usesCompose && editorMode != .preview {
+                    if usesCompose && !isPreviewing {
                         formatting.chooseAttachments()
                     } else {
                         store.addAttachments()
@@ -239,13 +242,7 @@ struct NoteEditor: View {
         }
         ToolbarItem(id: "note-actions", placement: .primaryAction) {
                 Menu {
-                    Picker("Editor Mode", selection: $mode) {
-                        ForEach(EditorMode.allCases, id: \.rawValue) { mode in
-                            if !usesCompose || mode != .split {
-                                Text(usesCompose && mode == .write ? "Compose" : mode.rawValue).tag(mode.rawValue)
-                            }
-                        }
-                    }.disabled(isTrashed)
+                    Toggle("Preview", isOn: $isPreviewing).disabled(isTrashed)
                     Button("Edit Tags") { showingTags.toggle() }
                     Menu("Move to Notebook") {
                         ForEach(store.library.notebooks) { notebook in
@@ -263,6 +260,8 @@ struct NoteEditor: View {
                         Button(note.contentFormat.usesHTML ? "Use HTML Source Editor..." : "Use Markdown Source Editor...") {
                             confirmingSource = true
                         }
+                    } else {
+                        Button("Use Visual Editor", action: beginEditing).disabled(isTrashed)
                     }
                     Divider()
                     if isTrashed {
@@ -301,12 +300,13 @@ struct NoteEditor: View {
         do {
             if note.contentFormat.usesHTML { _ = try FormattedPage(html: note.body) }
             else { _ = try FormattedPage(markdown: note.body) }
-            composingImportedNote = true
-            mode = EditorMode.write.rawValue
+            usesCompose = true
+            sourceEditingReason = nil
+            isPreviewing = false
         } catch {
-            composingImportedNote = false
-            mode = EditorMode.write.rawValue
-            store.errorMessage = "This note needs source editing to preserve its structure. Its content has not been changed. \(error.localizedDescription)"
+            usesCompose = false
+            isPreviewing = false
+            sourceEditingReason = error.localizedDescription
         }
     }
 

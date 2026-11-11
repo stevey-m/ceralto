@@ -50,7 +50,7 @@ struct DocumentWorkspaceTests {
 @MainActor
 struct NavigationTests {
     @Test(arguments: [NoteFormat.markdown, .html], [false, true])
-    func existingNoteEditingAndVisibleNewNoteActionsWork(format: NoteFormat, unsupported: Bool) async throws {
+    func existingNotesOpenEditableWithoutAModeGate(format: NoteFormat, unsupported: Bool) async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -89,23 +89,24 @@ struct NavigationTests {
         }
         try await Task.sleep(for: .milliseconds(200))
         host.layoutSubtreeIfNeeded()
-        #expect(!descendants(host).contains { $0 is PageTextView })
-        try press("Edit Note", in: "note-formatting")
-        try await Task.sleep(for: .milliseconds(160))
-        host.layoutSubtreeIfNeeded()
         if unsupported {
-            #expect(store.errorMessage?.contains("source editing") == true)
+            #expect(store.errorMessage == nil)
             #expect(store.library.notes.first == note)
             #expect(try storage.load()?.notes.first == note)
-            #expect(descendants(host).contains { $0 is SourceTextView })
+            let source = try #require(descendants(host).compactMap { $0 as? SourceTextView }.first)
+            #expect(source.isEditable)
             #expect(!descendants(host).contains { $0 is PageTextView })
-            store.errorMessage = nil
-            try await Task.sleep(for: .milliseconds(100))
+            window.makeFirstResponder(source)
+            source.setSelectedRange(NSRange(location: source.string.utf16.count, length: 0))
+            source.insertText(" updated", replacementRange: source.selectedRange())
+            try await Task.sleep(for: .milliseconds(80))
+            #expect(try storage.load()?.notes.first?.body == original + " updated")
+            #expect(store.selectedNote?.contentFormat == format)
             return
         }
         let editor = try #require(descendants(host).compactMap { $0 as? PageTextView }.first)
         #expect(editor.isEditable && editor.string == "Hello world")
-        #expect(window.firstResponder === editor)
+        window.makeFirstResponder(editor)
         #expect(store.library.notes.first?.body == original)
         #expect(store.library.notes.first?.contentFormat == format)
         editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
@@ -117,13 +118,27 @@ struct NavigationTests {
         #expect(changed.contentFormat == format)
         #expect(try storage.load()?.notes.first?.body == changed.body)
         editor.setSelectedRange(NSRange(location: 0, length: 5))
+        try press("Aa", in: "note-formatting")
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 5))
+        #expect(store.selectedNote?.body == changed.body)
+        let boldButton = try #require(NSApp.windows.filter(\.isVisible).flatMap {
+            $0.contentView.map(descendants) ?? []
+        }.compactMap { $0 as? NSButton }.first { $0.title == "Bold" })
+        #expect(NSApp.sendAction(try #require(boldButton.action), to: boldButton.target, from: boldButton))
+        try await Task.sleep(for: .milliseconds(80))
+        let boldNote = try #require(store.selectedNote)
+        let boldPage = try format.usesHTML ? FormattedPage(html: boldNote.body) : FormattedPage(markdown: boldNote.body)
+        #expect(boldPage.blocks.first?.runs.first?.bold == true)
+        #expect(boldPage.blocks.first?.runs.last?.bold == false)
+        try press("Aa", in: "note-formatting")
+        try await Task.sleep(for: .milliseconds(100))
         let menu = editor.selectionFormattingMenu()
         let sizes = try #require(menu.item(withTitle: "Text Size")?.submenu)
         func invoke(_ item: NSMenuItem) throws {
             #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
         }
         try invoke(try #require(sizes.item(withTitle: "24 pt")))
-        try invoke(try #require(menu.item(withTitle: "Bold")))
         try invoke(try #require(menu.item(withTitle: "Underline")))
         let italic = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
             timestamp: 0, windowNumber: window.windowNumber, context: nil,

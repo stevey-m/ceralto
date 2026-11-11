@@ -256,7 +256,6 @@ struct AppearanceSettings: View {
     @AppStorage("noteListPaneWidth") private var noteListWidth = 250.0
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
-    @AppStorage("readingEditorMode") private var editorMode = "Preview"
 
     var body: some View {
         Form {
@@ -303,7 +302,6 @@ struct AppearanceSettings: View {
                 noteListWidth = 250
                 showNotebooks = true
                 showNotes = true
-                editorMode = "Preview"
                 thumbnailSize = 0
             }
             Text("Your selection applies throughout Ceralto, including windows, sheets, popovers and native dialogs. System follows your Mac; Light and Dark stay fixed. Dracula is optional and has its own accent choice. Native macOS menus and controls use the matching light or dark appearance.")

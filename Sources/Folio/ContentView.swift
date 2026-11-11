@@ -723,6 +723,8 @@ struct ContentView: View {
 
 struct NoteToolbarButton: NSViewRepresentable {
     let title: String
+    var selected: Bool? = nil
+    var symbol: String? = nil
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
 
@@ -731,6 +733,11 @@ struct NoteToolbarButton: NSViewRepresentable {
     func makeNSView(context: Context) -> NSButton {
         let button = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.press))
         button.bezelStyle = .texturedRounded
+        button.setButtonType(selected == nil ? .momentaryPushIn : .pushOnPushOff)
+        if let symbol {
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
+            button.imagePosition = .imageOnly
+        }
         button.setAccessibilityLabel(title)
         button.sizeToFit()
         return button
@@ -739,6 +746,7 @@ struct NoteToolbarButton: NSViewRepresentable {
     func updateNSView(_ button: NSButton, context: Context) {
         context.coordinator.action = action
         button.isEnabled = isEnabled
+        if let selected { button.state = selected ? .on : .off }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSButton, context: Context) -> CGSize? {

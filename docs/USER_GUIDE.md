@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.4.
+their original names; the instructions below describe Ceralto 0.23.5.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -107,12 +107,15 @@ Click the labelled **New Note** button above the note list, or press **Command-N
 The new note is selected and its title is focused, ready to type. With the default
 Compose format, press Return after its title to move into the note body.
 
-For an existing Markdown or HTML note, click **Edit Note** in the toolbar.
-Supported notes open in Compose with working formatting controls and the caret
-in the body. Merely opening the editor does not rewrite the saved source or
+Existing notes open ready to edit: click in the body and type, or select words
+and click **Aa**. Its popover puts Bold, Italic, Underline and Strikethrough
+above the paragraph styles. There is no **Edit Note** step or remembered
+read-only mode. **Note actions > Preview** is an explicit, per-tab choice;
+returning to editing retains the editor's undo history.
+Merely opening the editor does not rewrite the saved source or
 change its format: Markdown stays Markdown, and HTML stays HTML when edited.
-If Compose cannot represent the note's structure, Ceralto explains why and opens
-the source editor without changing its content. Advanced headings (H3-H6),
+If Compose cannot represent the note's structure, a visible notice explains why
+the editable source is shown instead, without changing its content. Advanced headings (H3-H6),
 horizontal rules and complex HTML still require source editing.
 Use **Note actions > Use Markdown Source Editor...** or **Use HTML Source Editor...**
 to choose literal source editing explicitly. Live Markdown folders remain a
@@ -140,7 +143,7 @@ without dropping links, inline styling or the selection. Heading weight is
 kept separate from explicit bold, so returning a heading to Body does not
 leave its words permanently bold.
 
-Use the compact **Aa / Text formatting** menu for paragraph styles, Bold,
+Use the compact **Aa / Text formatting** popover for paragraph styles, Bold,
 Italic, Underline (Command-U), Strikethrough, Inline Code and Remove Link.
 For highlighted words, choose **Aa > Selected Text Size**, then a point size
 or **Custom Size...** (1-512 points). This resizes only that selection, not the

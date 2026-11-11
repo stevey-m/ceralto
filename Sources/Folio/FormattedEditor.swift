@@ -1251,41 +1251,73 @@ struct FormattedEditor: View {
 
 struct NoteFormattingControls: View {
     @ObservedObject var actions: FormattingActions
+    @ViewState private var showingFormatting = false
     @ViewState private var addingLink = false
     @ViewState private var link = ""
 
     var body: some View {
         HStack(spacing: 14) {
-            Menu {
-                Menu("Selected Text Size") {
-                    ForEach(FormattingActions.fontSizes, id: \.self) { size in
-                        Button("\(size) pt") { actions.setFontSize(Double(size)) }
-                    }
-                    Divider()
-                    Button("Custom Size...") { actions.chooseFontSize() }
-                    Button("Use Note's Default Size") { actions.setFontSize(nil) }
-                }
-                Divider()
-                ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
-                    Button(style.title) { actions.setStyle(style) }
-                }
-                Divider()
-                Toggle("Bold", isOn: Binding(get: { actions.bold }, set: { _ in actions.toggle(.boldFontMask) }))
-                    .keyboardShortcut("b")
-                Toggle("Italic", isOn: Binding(get: { actions.italic }, set: { _ in actions.toggle(.italicFontMask) }))
-                    .keyboardShortcut("i")
-                Toggle("Underline", isOn: Binding(get: { actions.underline }, set: { _ in actions.toggleInline(.underlineStyle) }))
-                    .keyboardShortcut("u")
-                Button(actions.struck ? "Remove Strikethrough" : "Strikethrough") { actions.toggleInline(.strikethroughStyle) }
-                Button(actions.code ? "Remove Inline Code" : "Inline Code") { actions.toggleInline(.folioCode) }
-                Divider()
-                Button("Decrease List Indent") { actions.indentList(by: -1) }
-                Button("Increase List Indent") { actions.indentList(by: 1) }
-                Button("Add Link...") { addingLink = true }
-                Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
-            } label: { Image(systemName: "textformat") }
-            .menuIndicator(.hidden).fixedSize()
+            NoteToolbarButton(title: "Aa") { showingFormatting.toggle() }
             .help("Text formatting").accessibilityLabel("Text formatting")
+            .popover(isPresented: $showingFormatting) {
+                if addingLink {
+                    FormattedEditor.LinkEditorPopover(link: $link) {
+                        guard actions.addLink(link.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+                        showingFormatting = false
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 6) {
+                            NoteToolbarButton(title: "Bold", selected: actions.bold, symbol: "bold") {
+                                actions.toggle(.boldFontMask)
+                            }
+                            NoteToolbarButton(title: "Italic", selected: actions.italic, symbol: "italic") {
+                                actions.toggle(.italicFontMask)
+                            }
+                            NoteToolbarButton(title: "Underline", selected: actions.underline, symbol: "underline") {
+                                actions.toggleInline(.underlineStyle)
+                            }
+                            NoteToolbarButton(title: "Strikethrough", selected: actions.struck, symbol: "strikethrough") {
+                                actions.toggleInline(.strikethroughStyle)
+                            }
+                        }
+                        Divider()
+                        ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
+                            Button { actions.setStyle(style) } label: {
+                                HStack {
+                                    Image(systemName: actions.style == style ? "checkmark" : "circle")
+                                        .opacity(actions.style == style ? 1 : 0)
+                                    Text(style.title)
+                                        .font(.system(size: style == .heading1 ? 21 : style == .heading2 ? 17 : 13,
+                                                      weight: style == .heading1 || style == .heading2 ? .bold : .regular))
+                                    Spacer()
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Divider()
+                        Menu("Selected Text Size") {
+                            ForEach(FormattingActions.fontSizes, id: \.self) { size in
+                                Button("\(size) pt") { actions.setFontSize(Double(size)) }
+                            }
+                            Divider()
+                            Button("Custom Size...") { actions.chooseFontSize() }
+                            Button("Use Note's Default Size") { actions.setFontSize(nil) }
+                        }
+                        Menu("More") {
+                            Button(actions.code ? "Remove Inline Code" : "Inline Code") { actions.toggleInline(.folioCode) }
+                            Button("Decrease List Indent") { actions.indentList(by: -1) }
+                            Button("Increase List Indent") { actions.indentList(by: 1) }
+                            Button("Add Link...") { addingLink = true }
+                            Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
+                        }
+                    }
+                    .padding(12)
+                    .frame(width: 210)
+                    .folioAppearance()
+                }
+            }
             Button { actions.setStyle(actions.style == .checklist ? .paragraph : .checklist) } label: {
                 Image(systemName: "checklist")
             }.help("Checklist").accessibilityLabel("Checklist")
@@ -1293,9 +1325,8 @@ struct NoteFormattingControls: View {
                 .help("Insert editable table").accessibilityLabel("Insert editable table")
         }
         .buttonStyle(.borderless)
-        .popover(isPresented: $addingLink) {
-            FormattedEditor.LinkEditorPopover(link: $link) {
-                guard actions.addLink(link.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+        .onChange(of: showingFormatting) { _, visible in
+            if !visible {
                 addingLink = false
                 link = ""
             }

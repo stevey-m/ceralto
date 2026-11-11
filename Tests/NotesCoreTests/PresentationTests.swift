@@ -273,7 +273,7 @@ struct PresentationTests {
         try await Task.sleep(for: .milliseconds(250))
         host.layoutSubtreeIfNeeded()
         func editor(in view: NSView) -> PageTextView? {
-            if let text = view as? PageTextView { return text }
+            if let text = view as? PageTextView, text.isEditable { return text }
             return view.subviews.compactMap { editor(in: $0) }.first
         }
         let page = try #require(editor(in: host))
