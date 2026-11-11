@@ -13,6 +13,11 @@ enum RichClipboard {
         var images: [(name: String, data: Data)]
     }
 
+    private static func blockStyle(_ value: NSAttributedString, at index: Int) -> FormattedBlock.Style {
+        FormattedBlock.Style(rawValue:
+            value.attribute(.folioBlock, at: index, effectiveRange: nil) as? String ?? "") ?? .paragraph
+    }
+
     static func read(_ board: NSPasteboard) throws -> Content? {
         if let html = board.string(forType: deltosHTML) {
             guard html.utf8.count <= maximumBytes else { throw NoteWorkflowError("The formatted clipboard is too large.") }
@@ -39,8 +44,8 @@ enum RichClipboard {
         let document = try SwiftSoup.parseBodyFragment(html)
         document.outputSettings().prettyPrint(pretty: false)
         try document.select("script,style,iframe,object,embed,svg,math,meta,link").remove()
-        guard try document.select("table,ol,input,video,audio,canvas,details,h3,h4,h5,h6,li li").isEmpty() else {
-            throw NoteWorkflowError("This clipboard contains tables, numbered/nested lists or other unsupported structures. Paste and Match Style for text only, or use a Markdown/HTML import to retain the original.")
+        guard try document.select("input:not([type=checkbox]),video,audio,canvas,details,h3,h4,h5,h6").isEmpty() else {
+            throw NoteWorkflowError("This clipboard contains unsupported structures. Paste and Match Style for text only, or use a Markdown/HTML import to retain the original.")
         }
         var images: [(name: String, data: Data)] = []
         for image in try document.select("img") {
@@ -74,7 +79,7 @@ enum RichClipboard {
             if element.tagName() == "div" {
                 let hasBlocks = element.getChildNodes().contains {
                     guard let child = $0 as? Element else { return false }
-                    return ["p", "div", "h1", "h2", "ul", "blockquote", "pre"].contains(child.tagName())
+                    return ["p", "div", "h1", "h2", "ul", "ol", "table", "blockquote", "pre"].contains(child.tagName())
                 }
                 if !hasBlocks { try element.tagName("p") }
             }
@@ -90,7 +95,7 @@ enum RichClipboard {
         }
         for node in body.getChildNodes() {
             if let element = node as? Element,
-               ["p", "h1", "h2", "ul", "div", "blockquote", "pre"].contains(element.tagName()) {
+               ["p", "h1", "h2", "ul", "ol", "table", "div", "blockquote", "pre"].contains(element.tagName()) {
                 flushInline()
                 normalized += try node.outerHtml()
             } else {
@@ -116,11 +121,16 @@ enum RichClipboard {
                 throw NoteWorkflowError("Clipboard tables are not supported in Compose. Use Paste and Match Style for text only.")
             }
             let lists = paragraph?.textLists ?? []
-            guard lists.count <= 1, lists.allSatisfy({ [.disc, .circle, .square].contains($0.markerFormat) }) else {
-                throw NoteWorkflowError("Numbered or nested clipboard lists are not supported in Compose. Use Paste and Match Style for text only.")
+            let bulletFormats: [NSTextList.MarkerFormat] = [.disc, .circle, .square]
+            let orderedFormats: [NSTextList.MarkerFormat] = [.decimal, .lowercaseAlpha, .uppercaseAlpha,
+                                                              .lowercaseRoman, .uppercaseRoman]
+            guard lists.allSatisfy({ bulletFormats.contains($0.markerFormat) || orderedFormats.contains($0.markerFormat) }),
+                  Set(lists.map { bulletFormats.contains($0.markerFormat) }).count <= 1 else {
+                throw NoteWorkflowError("This clipboard list format cannot be represented without loss. Paste and Match Style for text only.")
             }
             let face = attrs[.font] as? NSFont
-            let style: FormattedBlock.Style = !lists.isEmpty ? .bullet
+            let style: FormattedBlock.Style = !lists.isEmpty
+                ? (lists.last.map { orderedFormats.contains($0.markerFormat) } == true ? .ordered : .bullet)
                 : (face?.pointSize ?? 0) >= 25 ? .heading1
                 : (face?.pointSize ?? 0) >= 20 ? .heading2 : .paragraph
             var contentRange = range
@@ -184,7 +194,7 @@ enum RichClipboard {
                 } catch { failure = error; stop.pointee = true }
             }
             if let failure { throw failure }
-            blocks.append(FormattedBlock(style: style, runs: runs))
+            blocks.append(FormattedBlock(style: style, runs: runs, listDepth: max(0, lists.count - 1)))
             start = range.upperBound
         }
         return Content(page: FormattedPage(blocks: blocks), images: images)
@@ -213,10 +223,13 @@ enum RichClipboard {
         var paragraphStart = 0
         while paragraphStart < attributed.length {
             let range = nativeString.paragraphRange(for: NSRange(location: paragraphStart, length: 0))
-            if attributed.attribute(.folioBlock, at: paragraphStart, effectiveRange: nil) as? String == FormattedBlock.Style.bullet.rawValue {
-                let style = (attributed.attribute(.paragraphStyle, at: paragraphStart, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-                style.textLists = [NSTextList(markerFormat: .disc, options: 0)]
-                attributed.addAttribute(.paragraphStyle, value: style, range: range)
+            let blockStyle = self.blockStyle(attributed, at: paragraphStart)
+            if NativePageCodec.isList(blockStyle) {
+                let paragraphStyle = (attributed.attribute(.paragraphStyle, at: paragraphStart, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+                let depth = attributed.attribute(.folioListDepth, at: paragraphStart, effectiveRange: nil) as? Int ?? 0
+                let marker: NSTextList.MarkerFormat = blockStyle == .ordered ? .decimal : .disc
+                paragraphStyle.textLists = (0...depth).map { _ in NSTextList(markerFormat: marker, options: 0) }
+                attributed.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
             }
             paragraphStart = range.upperBound
         }
@@ -224,8 +237,16 @@ enum RichClipboard {
         attributed.enumerateAttribute(.folioMarker, in: NSRange(location: 0, length: attributed.length)) { marker, range, _ in
             if marker as? Bool == true { markerRanges.append(range) }
         }
-        for range in markerRanges.reversed() { attributed.replaceCharacters(in: range, with: "\t\u{2022}\t") }
-        for key in [NSAttributedString.Key.folioBlock, .folioMarker, .folioImage, .folioAlt, .folioCode, .folioBold] {
+        for range in markerRanges.reversed() {
+            let style = blockStyle(attributed, at: range.location)
+            let number = attributed.attribute(.folioOrderedNumber, at: range.location, effectiveRange: nil) as? Int ?? 1
+            let checked = attributed.attribute(.folioChecked, at: range.location, effectiveRange: nil) as? Bool ?? false
+            let replacement = style == .ordered ? "\t\(number).\t"
+                : style == .checklist ? (checked ? "☑ " : "☐ ") : "\t•\t"
+            attributed.replaceCharacters(in: range, with: replacement)
+        }
+        for key in [NSAttributedString.Key.folioBlock, .folioMarker, .folioImage, .folioAlt, .folioCode,
+                    .folioBold, .folioListDepth, .folioChecked, .folioOrderedNumber, .folioTableRow] {
             attributed.removeAttribute(key, range: NSRange(location: 0, length: attributed.length))
         }
         for block in portable.blocks.indices {

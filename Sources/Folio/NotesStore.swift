@@ -167,7 +167,10 @@ final class NotesStore: ObservableObject {
     @Published private(set) var syncMessage = "Offline. No shared folder connected."
     @Published private(set) var extensions: [NoteExtension] = []
     @Published private(set) var isImportingJoplin = false
-    @Published var importSummary: String?
+    @Published var importSummary: String? {
+        didSet { if importSummary == nil { importReportURL = nil } }
+    }
+    @Published private(set) var importReportURL: URL?
     @Published private(set) var isLoaded = false
     @Published private(set) var hasUnsavedChanges = false
     #if os(macOS)
@@ -1014,8 +1017,85 @@ final class NotesStore: ObservableObject {
         try MarkdownVault.export(library, to: folder)
     }
 
+    #if os(macOS)
+    lazy var syncManager = SyncManager(defaults: preferences) { [weak self] in
+        guard let self else { throw CancellationError() }
+        try await self.performFolderExchange()
+    }
+
+    var syncTransport: @Sendable (Library, URL, URL, Bool) async throws -> FolderSyncResult = { snapshot, folder, assets, readOnly in
+        try await Task.detached(priority: .utility) {
+            if readOnly { return try FolderSync.pull(snapshot, folder: folder, assets: assets) }
+            return try FolderSync.synchronize(snapshot, folder: folder, assets: assets)
+        }.value
+    }
+
+    var syncConflictNotes: [Note] {
+        library.notes.filter { $0.tags.contains("sync-conflict") }.sorted {
+            $0.displayTitle == $1.displayTitle ? $0.id.uuidString < $1.id.uuidString : $0.displayTitle < $1.displayTitle
+        }
+    }
+
+    var syncConflictSummaries: [SyncConflictSummary] {
+        let unresolved = Set(syncConflictNotes.map(\.id))
+        var covered: Set<UUID> = []
+        var summaries = (library.folderSync?.conflictSummaries ?? []).compactMap { summary -> SyncConflictSummary? in
+            let ids = summary.variantIDs.filter { unresolved.contains($0) }
+            guard !ids.isEmpty else { return nil }
+            covered.formUnion(ids)
+            return SyncConflictSummary(id: summary.id, variantIDs: ids, includesDeletion: summary.includesDeletion)
+        }
+        // Older snapshots only recorded tags. Keep these notes actionable too.
+        summaries += syncConflictNotes.filter { !covered.contains($0.id) }.map {
+            SyncConflictSummary(id: $0.id, variantIDs: [$0.id])
+        }
+        return summaries
+    }
+
+    func reviewSyncConflict(_ id: UUID) {
+        guard let note = library.notes.first(where: { $0.id == id }) else { return }
+        query = ""
+        scope = note.deletedAt == nil ? .all : .trash
+        openNote(id)
+    }
+
+    /// Resolution is intentionally nondestructive: reviewed variants remain separate,
+    /// editable notes, with their original attachments and histories.
+    func keepSyncConflictVariants(_ ids: Set<UUID>) throws {
+        guard isLoaded, !isReadOnly, !isSyncing, !syncManager.isRunning else {
+            throw NoteWorkflowError("Wait for folder exchange to finish and open an editable library before resolving conflicts.")
+        }
+        var candidate = library
+        for index in candidate.notes.indices where ids.contains(candidate.notes[index].id) &&
+            candidate.notes[index].tags.contains("sync-conflict") {
+            candidate.notes[index].tags.removeAll { $0 == "sync-conflict" }
+            candidate.notes[index].updatedAt = Date()
+        }
+        let unresolved = Set(candidate.notes.filter { $0.tags.contains("sync-conflict") }.map(\.id))
+        let summaries = candidate.folderSync?.conflictSummaries?.compactMap { summary -> SyncConflictSummary? in
+            let remaining = summary.variantIDs.filter { unresolved.contains($0) }
+            return remaining.isEmpty ? nil : SyncConflictSummary(id: summary.id, variantIDs: remaining,
+                                                                 includesDeletion: summary.includesDeletion)
+        }
+        candidate.folderSync?.conflictSummaries = summaries
+        try storage.save(candidate)
+        library = candidate
+        hasUnsavedChanges = false
+    }
+    #endif
+
+    private var syncDiskChangedExternally = false
+
+    private var folderExchangeBusy: Bool {
+        #if os(macOS)
+        isSyncing || syncManager.isRunning
+        #else
+        isSyncing
+        #endif
+    }
+
     func connectSyncFolder(_ folder: URL) throws {
-        guard isLoaded, !isSyncing else {
+        guard isLoaded, !folderExchangeBusy else {
             throw JoplinImportError.invalid("Open your library and wait for the current folder exchange to finish before connecting.")
         }
         let accessing = folder.startAccessingSecurityScopedResource()
@@ -1027,20 +1107,25 @@ final class NotesStore: ObservableObject {
         let bookmark = try folder.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
         #endif
         try bookmark.write(to: bookmarkURL, options: .atomic)
+        #if os(macOS)
+        let changedFolder = syncFolder != folder
+        #endif
         syncFolder = folder
         syncFolderName = folder.lastPathComponent
+        #if os(macOS)
+        syncManager.setConnected(true, newFolder: changedFolder)
+        #endif
         syncMessage = "Folder connected. Choose Sync Now for local snapshot exchange. Cloud upload and delivery are managed by your provider and are not verified by Deltos."
     }
 
     func disconnectSyncFolder() {
-        guard !isSyncing else {
-            errorMessage = "Wait for the current folder exchange to finish before disconnecting."
-            return
-        }
         do {
             if FileManager.default.fileExists(atPath: bookmarkURL.path) { try FileManager.default.removeItem(at: bookmarkURL) }
             syncFolder = nil
             syncFolderName = nil
+            #if os(macOS)
+            syncManager.setConnected(false)
+            #endif
             syncMessage = "Disconnected. All local notes and attachments are still here."
         } catch { errorMessage = "Could not disconnect the folder: \(error.localizedDescription)" }
     }
@@ -1060,6 +1145,9 @@ final class NotesStore: ObservableObject {
             guard !stale else { throw JoplinImportError.invalid("Folder permission expired. Connect the shared folder again.") }
             syncFolder = url
             syncFolderName = url.lastPathComponent
+            #if os(macOS)
+            syncManager.setConnected(true)
+            #endif
             syncMessage = "Folder connection restored. Local notes are available offline; cloud upload and delivery are not verified by Deltos."
         } catch {
             syncMessage = "Shared folder needs reconnection: \(error.localizedDescription)"
@@ -1067,46 +1155,77 @@ final class NotesStore: ObservableObject {
     }
 
     func syncNow() {
-        guard isLoaded, !isSyncing else { return }
-        guard !isImportingJoplin else {
-            syncMessage = "Finish importing before syncing."
-            return
-        }
-        guard let folder = syncFolder else {
+        guard isLoaded else { return }
+        guard syncFolder != nil else {
             syncMessage = "Connect the same dedicated cloud folder on both devices first. Keep its contents downloaded locally."
             return
         }
+        #if os(macOS)
+        syncManager.request()
+        #else
+        guard !isSyncing else { return }
+        Task {
+            guard !isSyncing else { return }
+            do { try await performFolderExchange() }
+            catch { /* performFolderExchange presents the failure without replacing the cache. */ }
+        }
+        #endif
+    }
+
+    private func performFolderExchange() async throws {
+        guard isLoaded, !isImportingJoplin else {
+            throw SyncFailure.deferred("Finish importing and open the library before syncing.")
+        }
+        guard !syncDiskChangedExternally else {
+            throw SyncFailure.deferred("The library file changed outside Deltos during the last exchange. Preserve both versions, then restart Deltos before syncing again.")
+        }
+        guard let folder = syncFolder else { throw CancellationError() }
         let snapshot = library
-        let readOnly = isReadOnly
         let assets = storage.url.deletingLastPathComponent().appendingPathComponent("SyncAssets", isDirectory: true)
         isSyncing = true
         syncMessage = "Exchanging a verified snapshot..."
-        Task {
-            let accessing = folder.startAccessingSecurityScopedResource()
-            defer {
-                if accessing { folder.stopAccessingSecurityScopedResource() }
-                isSyncing = false
+        let accessing = folder.startAccessingSecurityScopedResource()
+        defer {
+            if accessing { folder.stopAccessingSecurityScopedResource() }
+            isSyncing = false
+        }
+        do {
+            let diskSnapshot: Data
+            do { diskSnapshot = try Data(contentsOf: storage.url) }
+            catch {
+                throw SyncFailure.deferred("The local library file could not be checked. Save your notes and retry. \(error.localizedDescription)")
             }
-            do {
-                try validateCloudFolder(folder)
-                let result = try await Task.detached(priority: .userInitiated) {
-                    if readOnly {
-                        return try FolderSync.pull(snapshot, folder: folder, assets: assets)
-                    }
-                    return try FolderSync.synchronize(snapshot, folder: folder, assets: assets)
-                }.value
-                guard library == snapshot, syncFolder == folder else {
-                    throw JoplinImportError.invalid("Notes changed while syncing. Your edits are safe; sync again to include them.")
-                }
-                try storage.save(result.library)
-                library = result.library
-                hasUnsavedChanges = false
-                reconcileSelection()
-                let when = Date().formatted(date: .omitted, time: .shortened)
-                syncMessage = folderExchangeMessage(at: when, conflicts: result.conflicts)
-            } catch {
-                syncMessage = "Sync not completed. Local notes are safe. \(error.localizedDescription)"
+            do { try validateCloudFolder(folder) }
+            catch {
+                throw SyncFailure.unavailable("The connected folder is not available locally. Reconnect it or keep it downloaded, then retry. \(error.localizedDescription)")
             }
+            #if os(macOS)
+            let result = try await syncTransport(snapshot, folder, assets, isReadOnly)
+            #else
+            let readOnly = isReadOnly
+            let result = try await Task.detached(priority: .userInitiated) {
+                if readOnly { return try FolderSync.pull(snapshot, folder: folder, assets: assets) }
+                return try FolderSync.synchronize(snapshot, folder: folder, assets: assets)
+            }.value
+            #endif
+            try Task.checkCancellation()
+            guard syncFolder == folder else { throw CancellationError() }
+            guard library == snapshot else {
+                throw SyncFailure.deferred("Notes changed while syncing. Your edits are safe; sync again to include them. Scheduling, when enabled, will retry.")
+            }
+            guard let diskCurrent = try? Data(contentsOf: storage.url), diskCurrent == diskSnapshot else {
+                syncDiskChangedExternally = true
+                throw SyncFailure.deferred("The local library file changed or became unavailable during sync. No notes were replaced. Preserve both versions and restart Deltos before syncing again.")
+            }
+            try storage.save(result.library)
+            library = result.library
+            hasUnsavedChanges = false
+            reconcileSelection()
+            let when = Date().formatted(date: .omitted, time: .shortened)
+            syncMessage = folderExchangeMessage(at: when, conflicts: result.conflicts)
+        } catch {
+            syncMessage = "Sync not completed. Local notes are safe. \(error.localizedDescription)"
+            throw error
         }
     }
 
@@ -1285,6 +1404,35 @@ final class NotesStore: ObservableObject {
         importJoplinFolder(includeHTML: false)
     }
 
+    func importJoplinArchive() {
+        guard isLoaded, !isReadOnly, !isImportingJoplin, !isSyncing else { return }
+        isImportingJoplin = true
+        let panel = NSOpenPanel()
+        panel.title = "Import Joplin JEX Archive"
+        panel.message = "Export JEX from Joplin after downloading attachments and decrypting/unlocking notes. Existing Deltos notes are preserved."
+        panel.allowedContentTypes = [UTType(filenameExtension: "jex") ?? .data]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let archive = panel.url else {
+            isImportingJoplin = false
+            return
+        }
+        let imports = storage.url.deletingLastPathComponent().appendingPathComponent("Imports", isDirectory: true)
+        Task {
+            defer { isImportingJoplin = false }
+            do {
+                let result = try await Task.detached(priority: .userInitiated) {
+                    try JexImport.prepare(archive: archive, importsDirectory: imports)
+                }.value
+                try commitJoplinImport(result.imported)
+                importReportURL = result.imported.snapshotURL.appendingPathComponent("import-report.json")
+                importSummary = result.report.summary
+            } catch {
+                errorMessage = "JEX import failed; no notes were imported: \(error.localizedDescription)"
+            }
+        }
+    }
+
     func importJoplinFolder(includeHTML: Bool) {
         guard isLoaded, !isImportingJoplin else { return }
         let panel = NSOpenPanel()
@@ -1317,17 +1465,17 @@ final class NotesStore: ObservableObject {
     #endif
 
     func commitJoplinImport(_ result: JoplinImportResult) throws {
-        guard !isReadOnly else { throw LibraryError.invalidLibrary }
-        var candidate = library
-        candidate.notebooks.append(contentsOf: result.notebooks)
-        candidate.notes.append(contentsOf: result.notes)
         do {
+            guard isLoaded, !isReadOnly else { throw LibraryError.invalidLibrary }
+            var candidate = library
+            candidate.notebooks.append(contentsOf: result.notebooks)
+            candidate.notes.append(contentsOf: result.notes)
             try storage.save(candidate)
+            library = candidate
         } catch {
             try JoplinImport.discardSnapshot(result.snapshotURL, after: error)
             throw error
         }
-        library = candidate
         hasUnsavedChanges = false
         scope = .all
         query = ""

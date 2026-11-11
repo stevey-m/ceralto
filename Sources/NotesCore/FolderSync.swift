@@ -25,6 +25,7 @@ public struct FolderSyncState: Codable, Equatable, Sendable {
     public var notebooks: [UUID: SyncClock] = [:]
     public var noteFingerprints: [UUID: String] = [:]
     public var notebookNames: [UUID: String] = [:]
+    public var conflictSummaries: [SyncConflictSummary]?
 
     public init(folderID: UUID, deviceID: UUID = UUID()) {
         self.folderID = folderID
@@ -32,9 +33,26 @@ public struct FolderSyncState: Codable, Equatable, Sendable {
     }
 }
 
+public struct SyncConflictSummary: Identifiable, Codable, Equatable, Sendable {
+    public let id: UUID
+    public var variantIDs: [UUID]
+    public var includesDeletion: Bool
+
+    public init(id: UUID, variantIDs: [UUID], includesDeletion: Bool = false) {
+        self.id = id
+        self.variantIDs = variantIDs
+        self.includesDeletion = includesDeletion
+    }
+}
+
 public struct FolderSyncResult: Sendable {
     public let library: Library
     public let conflicts: Int
+
+    public init(library: Library, conflicts: Int) {
+        self.library = library
+        self.conflicts = conflicts
+    }
 }
 
 /// Immutable, checksummed snapshots. Device-local library.json is never shared.
@@ -85,7 +103,7 @@ public enum FolderSync {
                 guard !incoming.isEmpty else {
                     throw JoplinImportError.invalid("Sync this folder from your Mac first, then let your cloud provider download it.")
                 }
-                return try merge(incoming, localState: state, assets: assets)
+                    return try merge(incoming, localState: state, assets: assets)
             }
         }
         if let coordinationError { throw coordinationError }
@@ -100,7 +118,7 @@ public enum FolderSync {
         let identityURL = root.appendingPathComponent("folder.json")
         if manager.fileExists(atPath: root.appendingPathComponent(".folder.json.icloud").path) {
             try manager.startDownloadingUbiquitousItem(at: identityURL)
-            throw JoplinImportError.invalid("iCloud is downloading the folder identity. Retry once it is available offline.")
+            throw SyncFailure.unavailable("iCloud is downloading the folder identity. Retry once it is available offline.")
         }
         let identity: Identity
         if manager.fileExists(atPath: identityURL.path) {
@@ -157,7 +175,7 @@ public enum FolderSync {
             let marker = directory.appendingPathComponent("ready.json")
             if manager.fileExists(atPath: directory.appendingPathComponent(".ready.json.icloud").path) {
                 try manager.startDownloadingUbiquitousItem(at: marker)
-                throw JoplinImportError.invalid("iCloud is still downloading a snapshot. Keep the folder downloaded and retry.")
+                throw SyncFailure.unavailable("iCloud is still downloading a snapshot. Keep the folder downloaded and retry.")
             }
             guard manager.fileExists(atPath: marker.path) else { continue }
             let commit = try JSONDecoder().decode(Commit.self, from: availableData(at: marker))
@@ -179,6 +197,17 @@ public enum FolderSync {
 
     private static func merge(_ snapshots: [Snapshot], localState: FolderSyncState, assets: URL) throws -> FolderSyncResult {
         var state = localState
+        var summaries: [UUID: SyncConflictSummary] = [:]
+        func remember(_ summary: SyncConflictSummary) {
+            let previous = summaries[summary.id]
+            summaries[summary.id] = SyncConflictSummary(id: summary.id,
+                variantIDs: Set((previous?.variantIDs ?? []) + summary.variantIDs).sorted { $0.uuidString < $1.uuidString },
+                includesDeletion: summary.includesDeletion || previous?.includesDeletion == true)
+        }
+        for summary in localState.conflictSummaries ?? [] { remember(summary) }
+        for snapshot in snapshots {
+            for summary in snapshot.commit.state.conflictSummaries ?? [] { remember(summary) }
+        }
         var notebooks: [UUID: Notebook] = [:]
         var notebookVersions: [UUID: [(SyncClock, Notebook?)]] = [:]
         var rememberedNotebooks: [UUID: Notebook] = [:]
@@ -230,19 +259,25 @@ public enum FolderSync {
                 conflicts += 1
             }
             notes.append(winner)
+            var variantIDs = [id]
             for version in survivors.dropFirst() {
                 guard let original = version.note else { continue }
-                let restored = try materialize(original, snapshot: version.snapshot, assets: assets)
                 let conflictID = stableID(id.uuidString + version.fingerprint)
+                let restored = try materialize(original, snapshot: version.snapshot, assets: assets)
+                variantIDs.append(conflictID)
                 let copy = Note(id: conflictID, notebookID: restored.notebookID,
                     title: restored.displayTitle + " (conflict copy)", body: restored.body,
                     tags: restored.tags + ["sync-conflict"], isPinned: restored.isPinned,
+                    deletedAt: restored.deletedAt,
                     createdAt: restored.createdAt, updatedAt: restored.updatedAt,
                     importedSourceURL: restored.importedSourceURL, importedRootURL: restored.importedRootURL,
                     format: restored.format, history: restored.history)
                 // A conflict copy already published by another device is the same logical copy.
                 if !candidates.keys.contains(conflictID) { notes.append(copy) }
                 state.notes[conflictID] = clock
+            }
+            if unique.count > 1 {
+                remember(SyncConflictSummary(id: id, variantIDs: variantIDs, includesDeletion: unique["deleted"] != nil))
             }
         }
         for id in Set(notes.map(\.notebookID)) where notebooks[id] == nil {
@@ -254,6 +289,12 @@ public enum FolderSync {
         var library = Library(notebooks: sortedNotebooks, notes: notes.sorted { $0.id.uuidString < $1.id.uuidString })
         state.noteFingerprints = try Dictionary(uniqueKeysWithValues: library.notes.map { ($0.id, try noteFingerprint($0)) })
         state.notebookNames = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
+        let unresolved = Set(library.notes.filter { $0.tags.contains("sync-conflict") }.map(\.id))
+        state.conflictSummaries = summaries.values.compactMap { summary in
+            let variants = summary.variantIDs.filter { unresolved.contains($0) }
+            return variants.isEmpty ? nil : SyncConflictSummary(id: summary.id, variantIDs: variants,
+                                                                includesDeletion: summary.includesDeletion)
+        }.sorted { $0.id.uuidString < $1.id.uuidString }
         library.folderSync = state
         try library.validate()
         return FolderSyncResult(library: library, conflicts: conflicts)
@@ -297,7 +338,7 @@ public enum FolderSync {
         guard values.isSymbolicLink != true else { throw JoplinImportError.invalid("Sync snapshots cannot contain symbolic links.") }
         if values.isUbiquitousItem == true && values.ubiquitousItemDownloadingStatus == .notDownloaded {
             try FileManager.default.startDownloadingUbiquitousItem(at: url)
-            throw JoplinImportError.invalid("iCloud is downloading the shared library. Keep the folder downloaded and sync again.")
+            throw SyncFailure.unavailable("iCloud is downloading the shared library. Keep the folder downloaded and sync again.")
         }
         return try Data(contentsOf: url)
     }

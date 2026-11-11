@@ -118,6 +118,9 @@ struct ContentView: View {
             get: { store.importSummary != nil },
             set: { if !$0 { store.importSummary = nil } }
         )) {
+            if let report = store.importReportURL {
+                Button("Show Import Report") { NSWorkspace.shared.activateFileViewerSelecting([report]) }
+            }
             Button("OK", role: .cancel) {}
         } message: {
             Text(store.importSummary ?? "")
@@ -600,6 +603,8 @@ struct ContentView: View {
                     Button("Markdown or HTML Files...", action: store.importMarkdown)
                     Button("Joplin Export Folder...", action: store.importJoplinFolder)
                         .disabled(store.isImportingJoplin)
+                    Button("Joplin JEX Archive...", action: store.importJoplinArchive)
+                        .disabled(store.isImportingJoplin || store.isSyncing)
                     Button("Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }
                         .disabled(store.isImportingJoplin)
                 } label: {

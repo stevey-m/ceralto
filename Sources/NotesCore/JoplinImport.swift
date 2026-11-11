@@ -81,7 +81,7 @@ public enum JoplinImport {
             }
         }
         guard !notes.isEmpty else {
-            throw JoplinImportError.invalid("No Markdown notes were found. Export from Joplin using Markdown + Front Matter, then select that folder. RAW directories and JEX archives are not supported.")
+            throw JoplinImportError.invalid("No Markdown notes were found. Export from Joplin using Markdown + Front Matter, then select that folder. For a JEX file, use Import Joplin JEX Archive instead. RAW directories are not supported.")
         }
         try manager.createDirectory(at: importsDirectory, withIntermediateDirectories: true)
         try manager.createDirectory(at: destination, withIntermediateDirectories: false)

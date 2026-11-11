@@ -122,6 +122,9 @@ struct SettingsView: View {
                     HStack {
                         Text(summary).textSelection(.enabled)
                         Spacer()
+                        if let report = store.importReportURL {
+                            Button("Show Import Report") { NSWorkspace.shared.activateFileViewerSelecting([report]) }
+                        }
                         Button("OK") { store.importSummary = nil }
                     }.padding()
                 }
@@ -201,6 +204,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Button("Import Markdown or HTML Files...", action: store.importMarkdown)
                 Button("Import Joplin Export Folder...", action: store.importJoplinFolder)
+                Button("Import Joplin JEX Archive...", action: store.importJoplinArchive)
+                    .disabled(store.isImportingJoplin || store.isSyncing)
                 Button("Export Open Markdown Folder...", action: store.exportVault)
                 Text("Open-folder export is a portable snapshot with original attachments, not a live Markdown vault.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -224,14 +229,7 @@ struct SettingsView: View {
             Section("Cloud folder exchange (experimental)") {
                 Text("Choose a dedicated folder managed by Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Install and sign in to that app separately, and keep the entire folder downloaded or available offline.")
                     .foregroundStyle(.secondary)
-                LabeledContent("Connected folder", value: store.syncFolderName ?? "Not connected")
-                Text(store.syncMessage).textSelection(.enabled)
-                Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
-                    .disabled(!store.isLoaded || store.isSyncing)
-                Button(store.isSyncing ? "Syncing..." : "Sync Now", action: store.syncNow)
-                    .disabled(store.syncFolderName == nil || store.isSyncing)
-                Button("Disconnect", action: store.disconnectSyncFolder)
-                    .disabled(store.syncFolderName == nil || store.isSyncing)
+                CloudSyncControls(manager: store.syncManager)
             }
             Section("Backups are separate from sync") {
                 Button("Export Dated Complete Backup...", action: store.exportBackup)
@@ -244,7 +242,7 @@ struct SettingsView: View {
             }
             Section("Offline reader & limitations") {
                 Text("The iPad reader's existing iCloud path remains experimental. Third-party Files-provider access on iPad is not validated; selecting a Mac cloud folder does not enable direct iPad account access. Xcode signing and installation are required.")
-                Text("Manual snapshot exchange, not continuous sync. Dropbox, OneDrive, Google Drive and physical-device iCloud delivery are unverified. Full snapshots are retained indefinitely, including earlier deleted notes. Do not move the live library.json into a cloud folder.")
+                Text("Manual or opt-in scheduled snapshot exchange while Deltos is open, not continuous provider sync. Dropbox, OneDrive, Google Drive and physical-device iCloud delivery are unverified. Full snapshots are retained indefinitely, including earlier deleted notes. Do not move the live library.json into a cloud folder.")
                     .foregroundStyle(.secondary)
             }
         case .extensions:

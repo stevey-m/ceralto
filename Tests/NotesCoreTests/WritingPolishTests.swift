@@ -130,6 +130,46 @@ struct WritingPolishTests {
         #expect(!markdown(editor).contains("**Hello"))
     }
 
+    @Test func nativeOrderedChecklistAndTableActionsRoundTripAndUndo() async throws {
+        let (editor, actions) = try editor("First\n\nSecond")
+        editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
+        actions.setStyle(.ordered)
+        #expect(markdown(editor).contains("1. First\n2. Second"))
+        actions.indentList(by: 1)
+        let nested = try FormattedPage(markdown: markdown(editor))
+        #expect(nested.blocks.map(\.listDepth) == [0, 1])
+        try await Task.sleep(for: .milliseconds(20))
+        try #require(editor.undoManager).undo()
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks.map(\.listDepth) == [0, 0])
+
+        editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
+        actions.setStyle(.checklist)
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks.allSatisfy { $0.style == .checklist && !$0.checked })
+        try await Task.sleep(for: .milliseconds(20))
+        editor.toggleChecklistItem(at: 0)
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks.first?.checked == true)
+        try await Task.sleep(for: .milliseconds(20))
+        try #require(editor.undoManager).undo()
+        let unchecked = try FormattedPage(markdown: markdown(editor)).blocks
+        #expect(unchecked.map(\.style) == [.checklist, .checklist])
+        #expect(unchecked.first?.checked == false)
+
+        try await Task.sleep(for: .milliseconds(20))
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        actions.insertTable()
+        let table = try FormattedPage(markdown: markdown(editor)).blocks.last
+        #expect(table?.style == .table)
+        #expect(table?.tableRows.first?.count == 2)
+        try await Task.sleep(for: .milliseconds(20))
+        let headerLocation = (editor.string as NSString).range(of: "Column 1").location
+        editor.setSelectedRange(NSRange(location: headerLocation, length: "Column 1".utf16.count))
+        editor.insertText("Name", replacementRange: editor.selectedRange())
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks.last?.tableRows.first?.first?.runs.map(\.text).joined() == "Name")
+        try await Task.sleep(for: .milliseconds(20))
+        try #require(editor.undoManager).undo()
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks.last?.tableRows.first?.first?.runs.map(\.text).joined() == "Column 1")
+    }
+
     @Test func clipboardPNGIsCopiedAtTheCaretAndUndoKeepsTheOriginalFile() throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }

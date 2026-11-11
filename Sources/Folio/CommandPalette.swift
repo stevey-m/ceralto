@@ -9,6 +9,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
     case revealRecovery
     case newSmartFolder
     case today, templates, tasks, printNote
+    case importJex
 
     var id: String { rawValue }
 
@@ -27,6 +28,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .focus: "Toggle Focused Writing"
         case .importFiles: "Import Markdown or HTML Files..."
         case .importJoplin: "Import Joplin Folder..."
+        case .importJex: "Import Joplin JEX Archive..."
         case .exportNote: "Export Current Note..."
         case .exportVault: "Export Open Markdown Folder..."
         case .backup: "Export Complete Backup..."
@@ -89,6 +91,10 @@ enum FolioCommand: String, CaseIterable, Identifiable {
             if store.isSyncing { return "Sync already in progress" }
             if store.isImportingJoplin { return "Import in progress" }
             return store.syncFolderName == nil ? "Connect a cloud folder first" : nil
+        case .importJex:
+            if store.isReadOnly { return "This library is read-only" }
+            if store.isSyncing { return "Sync in progress" }
+            return store.isImportingJoplin ? "Import in progress" : nil
         case .importJoplin, .importFiles, .importBackup:
             return store.isImportingJoplin ? "Import in progress" : nil
         default: return nil
@@ -119,6 +125,7 @@ extension NotesStore {
             setPaneVisibility(folders: !folders && !notes, notes: !folders && !notes)
         case .importFiles: importMarkdown()
         case .importJoplin: importJoplinFolder()
+        case .importJex: importJoplinArchive()
         case .exportNote: if let selectedNote { exportMarkdown(selectedNote) }
         case .exportVault: exportVault()
         case .backup: exportBackup()

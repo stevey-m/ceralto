@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.16.1 is a development release, not a finished replacement for your library.**
+**0.17.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.16.1-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.17.0-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -84,8 +84,9 @@ insertion but keeps the file available for redo, history and backups.
 
 Compose copy, cut and paste exchange **RTF, RTFD and HTML** with rich-text apps
 such as Apple Notes. Supported content includes bold, italic, underline,
-strikethrough, inline code, links, basic headings, bullet lists and embedded
-images. RTFD and HTML copies contain the image bytes, not links back to a
+strikethrough, inline code, safe links (including Deltos note links), basic
+headings, bullet and numbered lists, nested lists, checklists, GFM tables and
+embedded images. RTFD and HTML copies contain the image bytes, not links back to a
 Deltos attachment directory. Pasted images are copied into managed attachments
 before the text is inserted, and the complete insertion supports undo/redo.
 Formatting is normalized to Deltos's font and theme for readable results;
@@ -94,9 +95,11 @@ retained. RTF heading sizes are interpreted as basic headings, not an exact
 Apple Notes document model.
 
 **Paste and Match Style** explicitly pastes the clipboard's text representation
-only. Ordinary paste does not silently flatten tables, numbered/nested lists,
-checklists or non-image attachments. Unsupported content produces an error
-without replacing selected text. HTML clipboard images must be embedded;
+only. Ordinary paste does not silently flatten unsupported structures or
+non-image attachments. Unsupported content produces an error without replacing
+selected text. Compose includes toolbar actions for ordered and nested lists,
+checklists (click the checkbox marker to toggle), and editable tables. Table
+cells are separated with Tab; Tab moves between cells. HTML clipboard images must be embedded;
 Deltos neither downloads remote images nor follows local image paths supplied
 by clipboard HTML. Copy the image itself or attach its original file instead.
 Formatted clipboard payloads and individual images are limited to 32 MiB.
@@ -185,17 +188,18 @@ Shortcuts below are defaults. Customize application commands in
   up to 100 document visits, including links and finder results. Navigating
   after going Back starts a new history branch.
 - **Compose directly into the page.** New Mac notes use a native AppKit editor
-  for headings, bold, italic, bullets, quotes, code, links and inline images.
-  The saved body is ordinary Markdown, not RTF, base64 or an opaque editor model.
+  for headings, bold, italic, bullet and numbered lists, nested lists,
+  checklists, editable tables, quotes, code, links and inline images. The saved
+  body is ordinary Markdown, not RTF, base64 or an opaque editor model.
   Native undo/redo and spelling are available. Formatting shortcuts include
   Command-B and Command-I.
 - **Keep advanced source intact.** Imported Markdown and HTML remain in their
-  original source format with Write, Split and Preview modes. The bounded
-  formatted editor is not a full Markdown round-trip editor. For tables,
-  nested lists and other advanced structures, choose **Note actions > Use
-  Markdown Source Editor** or **File > New Markdown Source Note**. Switching
-  changes only the editing mode, not the body. Unsupported structures are
-  rejected by the formatted editor rather than silently flattened.
+  original source format with Write, Split and Preview modes. The formatted
+  editor supports common ordered/nested lists, checklists and GFM tables;
+  unsupported or malformed structures are rejected rather than silently
+  flattened. For advanced Markdown, choose **Note actions > Use Markdown
+  Source Editor** or **File > New Markdown Source Note**. Switching changes
+  only the editing mode, not the body.
 - **Capture without organising.** Quick Capture is a separate floating window,
   available from the menu bar, toolbar or Command-Shift-Space while Deltos is
   active. Save to Inbox with Command-Return. Unsubmitted drafts remain locally
@@ -357,9 +361,14 @@ On Mac, choose **Settings > Cloud Folders > Connect Cloud Folder** and select
 a dedicated folder managed by your provider's installed desktop app.
 Sign in using that app, not Deltos, and mark the entire folder as downloaded or
 available offline. Select the same folder on another Mac only after the
-provider has delivered the initial snapshot. Use **Sync Now** manually after
-editing, then check the provider's status before refreshing the other Mac.
-Existing iCloud folder bookmarks and the snapshot format are unchanged.
+provider has delivered the initial snapshot. **Sync Now** remains available
+manually. Scheduling is **off by default**: opt in under **Cloud Folders** and
+choose a 5, 15, 30 or 60 minute interval. The preference, last successful local
+exchange and next attempt survive restarting Deltos. Scheduled attempts run
+only while the app is open; an overdue attempt runs after reopening, without
+replaying every missed interval. Failed/offline attempts retry after five
+minutes. No accounts or folders are connected automatically. Check the
+provider's status before refreshing the other Mac.
 
 Deltos keeps its working library local and exchanges immutable, checksummed
 snapshots with original attachments. Connection rejects folders overlapping
@@ -367,8 +376,29 @@ Deltos's local storage. Status reports **local exchange**, never verified
 upload or delivery. Offline placeholders, partially delivered snapshots and
 provider failures may require keeping the folder downloaded and retrying.
 This generic folder path is experimental, not a certified integration with
-any provider. No OAuth, direct cloud API, background scheduling, automatic
-provider detection or cross-provider copying is implemented.
+any provider. No OAuth, direct cloud API, closed-app/background service,
+automatic provider detection or cross-provider copying is implemented.
+
+Cloud Folders shows offline/unavailable and error details, last success and
+the next attempt separately. Manual and scheduled exchanges share one serial
+run; overlapping attempts are skipped. Cancel or disconnect invalidates the
+in-flight result, but synchronous file access must finish before another run
+can start. Already-written snapshots may remain remotely. Notes edited during
+an exchange are never replaced with its older result; a scheduled retry (or
+**Sync Now**) includes those edits. A change to the on-disk library during an
+exchange also prevents replacement and blocks further exchange until restart:
+preserve both versions before restarting. An external write between the final
+check and save cannot be ruled out; do not edit the live library file while
+Deltos is running. Disconnecting does not delete local notes, attachments or
+shared snapshots.
+
+**Review preserved conflicts** lists every `sync-conflict` variant, including
+notes in Trash, with a text preview and an action to open it. Concurrent edits
+retain both versions; an edit versus permanent deletion keeps the edited
+version and flags it for review. **Keep all variants, mark reviewed** removes
+only those markers after confirmation; it never deletes or combines notes,
+attachments or history. Review is saved locally and exchanged on the next
+run. You may manually edit or consolidate retained notes afterward.
 
 **Export Dated Complete Backup** lets you choose a separate local/cloud
 location. Each manual backup creates a unique dated directory containing
@@ -560,7 +590,8 @@ Mac edits are retained as deterministic conflict copies tagged `sync-conflict`.
 Permanent deletions have tombstones so a stale device does not resurrect them.
 The read-only iPad pulls snapshots without publishing changes.
 
-This is snapshot exchange, **not continuous background sync**. iCloud may
+This is manual or opt-in scheduled snapshot exchange while Deltos is open,
+**not continuous provider sync**. iCloud may
 deliver files at different times; incomplete or damaged snapshots fail
 verification and need a later retry. Initialise the folder on one Mac and let
 it download before connecting another device.
@@ -603,7 +634,25 @@ on your iPad.
 Import Joplin Folder**. Titles, tags, dates and notebook paths are preserved.
 The export and its original resources are copied into Deltos; the source export
 can then be removed. Other YAML fields remain in the copied originals.
-JEX, RAW exports and unexported `:/resource-id` links are not supported.
+For a JEX export, choose **File > Import Joplin JEX Archive**. Deltos validates
+the entire archive and imports notes, nested notebooks, tags and original
+attachments without replacing existing notes. Joplin resource and note links
+are translated to managed relative attachments and internal note links.
+Created/updated dates and Trash status are retained; Markdown to-do status
+becomes a checklist. Due dates and other Joplin-only metadata remain in the
+retained original records rather than silently being discarded.
+
+Each import keeps an `original-joplin` snapshot and an `import-report.json`
+inside its managed Imports folder. The completion report flags unresolved
+links and item types not converted, including revision records. Joplin note
+history, alarms, application settings and encryption keys are not activated
+or reconstructed. Decrypt/unlock notes and download all attachments in Joplin
+before exporting; encrypted/locked items, missing attachments, invalid
+relationships and unsafe archives fail the whole import without adding notes.
+JEX imports currently accept uncompressed TAR archives up to 512 MiB, individual
+attachments up to 128 MiB and note records up to 32 MiB. RAW directory imports
+remain unsupported. Keep the original export and review the report before
+retiring Joplin.
 
 **Markdown/HTML:** import individual UTF-8 files or a whole export folder.
 Directly linked images and files are copied. Links outside an individual

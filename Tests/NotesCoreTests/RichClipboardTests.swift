@@ -39,6 +39,60 @@ struct RichClipboardTests {
         #expect(word.bold && word.italic && word.text == "Selected word")
     }
 
+    @Test func richHTMLClipboardRetainsNestedListsChecklistsTablesAndInternalLinks() throws {
+        let link = "folio-note://123e4567-e89b-12d3-a456-426614174000"
+        let content = try RichClipboard.fromHTML("""
+        <ol start="3"><li>Parent<ul><li><input type="checkbox" checked disabled> Done</li></ul></li></ol>
+        <table><thead><tr><th>Name</th><th>Link</th></tr></thead>
+        <tbody><tr><td><strong>One</strong></td><td><a href="\(link)">Related</a></td></tr></tbody></table>
+        """)
+        #expect(content.page.blocks.map(\.style) == [.ordered, .checklist, .table])
+        #expect(content.page.blocks[0].orderedNumber == 3)
+        #expect(content.page.blocks[1].listDepth == 1)
+        #expect(content.page.blocks[1].checked)
+        #expect(content.page.blocks[2].tableRows[1][0].runs.contains { $0.bold && $0.text == "One" })
+        #expect(content.page.blocks[2].tableRows[1][1].runs.contains { $0.link == link })
+        let roundTrip = try RichClipboard.fromHTML(content.page.html())
+        #expect(roundTrip.page == content.page)
+    }
+
+    @Test func malformedTablesAndUnsupportedListBlocksFailWithoutFlattening() throws {
+        for html in ["<table><tr><td>missing header</td></tr></table>",
+                     "<table><thead><tr><th>A</th></tr></thead><tbody><tr><td colspan='2'>merged</td></tr></tbody></table>",
+                     "<ul><li>First<p>Second paragraph</p></li></ul>",
+                     "<ul><li><p>One</p><p>Two</p></li></ul>",
+                     "<ol><li>Item<pre>code</pre></li></ol>"] {
+            #expect(throws: (any Error).self) { try RichClipboard.fromHTML(html) }
+        }
+    }
+
+    @Test func nativeCopyPasteRoundTripsStructuredMarkdownAndUndo() async throws {
+        let sourceText = """
+        2. First
+           - [x] Nested task
+
+        | Header | Related |
+        | --- | --- |
+        | **Cell** | [Note](folio-note://123e4567-e89b-12d3-a456-426614174000) |
+        """
+        let source = try makeEditor(sourceText)
+        source.setSelectedRange(NSRange(location: 0, length: source.string.utf16.count))
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        #expect(source.copy(to: board))
+        let maybeRich = try RichClipboard.read(board)
+        let rich = try #require(maybeRich)
+        #expect(rich.page == (try FormattedPage(markdown: sourceText)))
+
+        let destination = try makeEditor("Keep")
+        destination.setSelectedRange(NSRange(location: 0, length: 4))
+        destination.paste(from: board)
+        #expect(try FormattedPage(markdown: NativePageCodec.encode(destination.attributedString(), markdown: true)) == rich.page)
+        try await Task.sleep(for: .milliseconds(20))
+        try #require(destination.undoManager).undo()
+        #expect(destination.string == "Keep")
+    }
+
     @Test func consecutiveCopiesOfTheSameEmbeddedImageAreNotCollapsed() throws {
         let bytes = try image()
         let wrapper = FileWrapper(regularFileWithContents: bytes)
@@ -151,7 +205,7 @@ struct RichClipboardTests {
         for html in ["<table><tr><td>Lost</td></tr></table>",
                      "<p><img src='https://example.com/image.png'></p>",
                      "<p><img src='file:///not-authorized.png'></p>",
-                     "<ol><li>Numbered</li></ol>"] {
+                     "<ol><li>Numbered<blockquote>Quoted block</blockquote></li></ol>"] {
             board.clearContents()
             board.setString(html, forType: .html)
             board.setString("Silent fallback", forType: .string)

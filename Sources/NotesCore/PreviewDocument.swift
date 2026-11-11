@@ -237,7 +237,12 @@ public enum PreviewDocument {
         for link in try body.select("a[href]") {
             let reference = try link.attr("href")
             if reference.hasPrefix("#") { continue }
-            if let local = resources?.previewURL(for: reference) {
+            if let url = URL(string: reference), url.scheme == "folio-note",
+               let host = url.host, UUID(uuidString: host) != nil,
+               url.user == nil, url.password == nil, url.port == nil,
+               url.path.isEmpty, url.query == nil {
+                continue
+            } else if let local = resources?.previewURL(for: reference) {
                 try link.attr("href", local.absoluteString)
             } else if let url = URL(string: reference),
                       ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") {

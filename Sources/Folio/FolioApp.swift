@@ -14,7 +14,11 @@ struct FolioApp: App {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 720, minHeight: 520)
-                .onAppear { delegate.store = store; delegate.markdown = markdown; store.backupManager?.start() }
+                .onAppear {
+                    delegate.store = store; delegate.markdown = markdown
+                    store.backupManager?.start()
+                    store.syncManager.start()
+                }
         }
         .defaultSize(width: 1240, height: 800)
         .commands {
@@ -62,6 +66,8 @@ struct FolioApp: App {
                 }.disabled(!markdown.hasRememberedFolder)
                 Button("Import Joplin Folder...", action: store.importJoplinFolder)
                     .disabled(!store.isLoaded || store.isImportingJoplin)
+                Button("Import Joplin JEX Archive...", action: store.importJoplinArchive)
+                    .disabled(!store.isLoaded || store.isImportingJoplin || store.isSyncing)
                 Button("Import Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }
                     .disabled(!store.isLoaded || store.isImportingJoplin)
                 Button("Export Note...") {
@@ -96,7 +102,7 @@ struct FolioApp: App {
                     .keyboardShortcut(store.shortcut(.sync).keyboardShortcut)
                     .disabled(store.syncFolderName == nil || store.isSyncing)
                 Button("Disconnect Shared Folder", action: store.disconnectSyncFolder)
-                    .disabled(store.syncFolderName == nil || store.isSyncing)
+                    .disabled(store.syncFolderName == nil)
             }
             CommandGroup(replacing: .printItem) {
                 Button(store.isPreparingPrint ? "Preparing Print..." : "Print...") { store.perform(.printNote) }
@@ -186,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        store?.syncManager.stop()
         appearance.stop()
     }
 

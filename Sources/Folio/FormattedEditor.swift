@@ -9,10 +9,27 @@ extension NSAttributedString.Key {
     static let folioAlt = Self("FolioAlt")
     static let folioCode = Self("FolioCode")
     static let folioBold = Self("FolioBold")
+    static let folioListDepth = Self("FolioListDepth")
+    static let folioChecked = Self("FolioChecked")
+    static let folioOrderedNumber = Self("FolioOrderedNumber")
+    static let folioTableRow = Self("FolioTableRow")
 }
 
 @MainActor
 enum NativePageCodec {
+    static func isList(_ style: FormattedBlock.Style) -> Bool {
+        [.bullet, .ordered, .checklist].contains(style)
+    }
+
+    static func listMarker(_ style: FormattedBlock.Style, number: Int = 1, checked: Bool = false) -> String {
+        switch style {
+        case .bullet: "• "
+        case .ordered: "\(number). "
+        case .checklist: checked ? "☑ " : "☐ "
+        default: ""
+        }
+    }
+
     static func font(_ family: ReadingFont, size: Double) -> NSFont {
         switch family {
         case .system: .systemFont(ofSize: size)
@@ -22,18 +39,24 @@ enum NativePageCodec {
     }
 
     static func attributes(style: FormattedBlock.Style, size: Double, family: ReadingFont,
-                           color: NSColor) -> [NSAttributedString.Key: Any] {
+                           color: NSColor, listDepth: Int = 0) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 5
         paragraph.paragraphSpacing = 12
-        if style == .bullet || style == .quote { paragraph.headIndent = 22 }
+        if isList(style) {
+            paragraph.firstLineHeadIndent = CGFloat(max(0, listDepth)) * 22
+            paragraph.headIndent = CGFloat(max(0, listDepth) + 1) * 22
+        } else if style == .quote {
+            paragraph.headIndent = 22
+        }
         let scale = style == .heading1 ? 1.8 : style == .heading2 ? 1.35 : 1
         var face = font(style == .code ? .monospace : family, size: size * scale)
         if style == .heading1 || style == .heading2 {
             face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask)
         }
         return [.font: face, .foregroundColor: color, .paragraphStyle: paragraph,
-                .folioBlock: style.rawValue, .folioBold: false]
+                .folioBlock: style.rawValue, .folioBold: false, .folioListDepth: 0,
+                .folioChecked: false, .folioOrderedNumber: 1, .folioTableRow: false]
     }
 
     static func decode(_ html: String, resources: ImportedResources?, size: Double = 16,
@@ -41,12 +64,44 @@ enum NativePageCodec {
         let page = try FormattedPage(html: html)
         let result = NSMutableAttributedString(string: "")
         for (index, block) in page.blocks.enumerated() {
-            let base = attributes(style: block.style, size: size, family: family, color: color)
-            if block.style == .bullet {
+            var base = attributes(style: block.style, size: size, family: family, color: color,
+                                  listDepth: block.listDepth)
+            base[.folioListDepth] = block.listDepth
+            base[.folioChecked] = block.checked
+            base[.folioOrderedNumber] = block.orderedNumber
+            if isList(block.style) {
                 var marker = base
                 marker[.folioMarker] = true
-                result.append(NSAttributedString(string: "\u{2022} ", attributes: marker))
+                marker[.folioChecked] = block.checked
+                marker[.folioOrderedNumber] = block.orderedNumber
+                marker[.folioListDepth] = block.listDepth
+                let markerText = listMarker(block.style, number: block.orderedNumber, checked: block.checked)
+                result.append(NSAttributedString(string: markerText, attributes: marker))
             }
+            if block.style == .table {
+                for (rowIndex, row) in block.tableRows.enumerated() {
+                    if rowIndex > 0 { result.append(NSAttributedString(string: "\n", attributes: base)) }
+                    var rowAttributes = base
+                    rowAttributes[.folioTableRow] = true
+                    for (column, cell) in row.enumerated() {
+                        if column > 0 { result.append(NSAttributedString(string: "\t", attributes: rowAttributes)) }
+                        for run in cell.runs {
+                            var attrs = rowAttributes
+                            var face = attrs[.font] as? NSFont ?? font(family, size: size)
+                            if run.code { face = font(.monospace, size: face.pointSize) }
+                            if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
+                            if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
+                            attrs[.font] = face
+                            attrs[.folioBold] = run.bold
+                            if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+                            if run.struck { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+                            if run.code { attrs[.folioCode] = true }
+                            if let link = run.link { attrs[.link] = link }
+                            result.append(NSAttributedString(string: run.text, attributes: attrs))
+                        }
+                    }
+                }
+            } else {
             for run in block.runs {
                 var attrs = base
                 if let image = run.image {
@@ -83,6 +138,7 @@ enum NativePageCodec {
                 if let link = run.link { attrs[.link] = link }
                 result.append(NSAttributedString(string: run.text, attributes: attrs))
             }
+            }
             if index < page.blocks.count - 1 {
                 result.append(NSAttributedString(string: "\n", attributes: base))
             }
@@ -93,19 +149,12 @@ enum NativePageCodec {
     static func encode(_ text: NSAttributedString, markdown: Bool = false) -> String {
         let string = text.string as NSString
         var blocks: [FormattedBlock] = []
-        var start = 0
-        while start < text.length {
-            let paragraph = string.paragraphRange(for: NSRange(location: start, length: 0))
-            var length = paragraph.length
-            while length > 0 && ["\n", "\r"].contains(string.substring(with: NSRange(location: start + length - 1, length: 1))) {
-                length -= 1
-            }
-            let kind = text.attribute(.folioBlock, at: start, effectiveRange: nil) as? String
-            let style = FormattedBlock.Style(rawValue: kind ?? "") ?? .paragraph
+        var tableRows: [[FormattedTableCell]] = []
+        func appendRuns(_ range: NSRange) -> [FormattedRun] {
             var runs: [FormattedRun] = []
-            text.enumerateAttributes(in: NSRange(location: start, length: length)) { attrs, range, _ in
+            text.enumerateAttributes(in: range) { attrs, subrange, _ in
                 if attrs[.folioMarker] as? Bool == true { return }
-                var run = FormattedRun(text: string.substring(with: range))
+                var run = FormattedRun(text: string.substring(with: subrange))
                 if let image = attrs[.folioImage] as? String {
                     run.image = image
                     run.text = attrs[.folioAlt] as? String ?? ""
@@ -123,9 +172,46 @@ enum NativePageCodec {
                 }
                 runs.append(run)
             }
-            blocks.append(FormattedBlock(style: style, runs: runs))
+            return runs
+        }
+        var start = 0
+        while start < text.length {
+            let paragraph = string.paragraphRange(for: NSRange(location: start, length: 0))
+            var length = paragraph.length
+            while length > 0 && ["\n", "\r"].contains(string.substring(with: NSRange(location: start + length - 1, length: 1))) {
+                length -= 1
+            }
+            let kind = text.attribute(.folioBlock, at: start, effectiveRange: nil) as? String
+            let style = FormattedBlock.Style(rawValue: kind ?? "") ?? .paragraph
+            let paragraphRange = NSRange(location: start, length: length)
+            if text.attribute(.folioTableRow, at: start, effectiveRange: nil) as? Bool == true {
+                var cells: [FormattedTableCell] = []
+                var cellStart = paragraphRange.location
+                for offset in 0..<paragraphRange.length {
+                    let location = paragraphRange.location + offset
+                    if string.substring(with: NSRange(location: location, length: 1)) == "\t" {
+                        cells.append(FormattedTableCell(runs: appendRuns(NSRange(location: cellStart, length: location - cellStart))))
+                        cellStart = location + 1
+                    }
+                }
+                cells.append(FormattedTableCell(runs: appendRuns(NSRange(location: cellStart,
+                    length: paragraphRange.upperBound - cellStart))))
+                tableRows.append(cells)
+            } else {
+                if !tableRows.isEmpty {
+                    blocks.append(FormattedBlock(style: .table, runs: [], tableRows: tableRows))
+                    tableRows = []
+                }
+                let runs = appendRuns(paragraphRange)
+                let checked = text.attribute(.folioChecked, at: start, effectiveRange: nil) as? Bool ?? false
+                let depth = text.attribute(.folioListDepth, at: start, effectiveRange: nil) as? Int ?? 0
+                let number = text.attribute(.folioOrderedNumber, at: start, effectiveRange: nil) as? Int ?? 1
+                blocks.append(FormattedBlock(style: style, runs: runs, listDepth: depth,
+                    checked: checked, orderedNumber: number))
+            }
             start = paragraph.location + paragraph.length
         }
+        if !tableRows.isEmpty { blocks.append(FormattedBlock(style: .table, runs: [], tableRows: tableRows)) }
         if text.length > 0 && text.string.hasSuffix("\n") { blocks.append(FormattedBlock(runs: [])) }
         let page = FormattedPage(blocks: blocks)
         return markdown ? page.markdown() : page.html()
@@ -203,10 +289,11 @@ final class FormattingActions: ObservableObject {
                                                family: editor.pageFont, color: editor.textColor ?? .textColor)
         if range.length == 0 {
             editor.typingAttributes = attrs
-            if style == .bullet {
+            if NativePageCodec.isList(style) {
                 var marker = attrs
                 marker[.folioMarker] = true
-                editor.insertText(NSAttributedString(string: "\u{2022} ", attributes: marker), replacementRange: selection)
+                editor.insertText(NSAttributedString(string: NativePageCodec.listMarker(style), attributes: marker),
+                                  replacementRange: selection)
                 editor.typingAttributes = attrs
             }
         } else {
@@ -217,6 +304,8 @@ final class FormattingActions: ObservableObject {
                 paragraphs.append(paragraph)
                 start = paragraph.upperBound
             }
+            let orderedNumbers = Dictionary(uniqueKeysWithValues:
+                paragraphs.enumerated().map { ($1.location, $0 + 1) })
             var anchor = selection.location
             var end = selection.upperBound
             editor.editAttributes(name: "Paragraph Style") { text in
@@ -227,20 +316,39 @@ final class FormattingActions: ObservableObject {
                     }
                     markerRange = NSIntersectionRange(markerRange, paragraph)
                     let removed = markerRange.length
+                    let oldStyle = FormattedBlock.Style(rawValue:
+                        text.attribute(.folioBlock, at: paragraph.location, effectiveRange: nil) as? String ?? "") ?? .paragraph
+                    let oldDepth = text.attribute(.folioListDepth, at: paragraph.location, effectiveRange: nil) as? Int ?? 0
                     if removed > 0 { text.deleteCharacters(in: markerRange) }
                     let body = NSRange(location: paragraph.location, length: paragraph.length - removed)
                     text.enumerateAttributes(in: body) { original, subrange, _ in
                         var updated = original
                         updated[.folioBlock] = attrs[.folioBlock]
-                        updated[.paragraphStyle] = attrs[.paragraphStyle]
+                        let depth = NativePageCodec.isList(style)
+                            ? (NativePageCodec.isList(oldStyle) ? oldDepth : 0) : 0
+                        updated[.paragraphStyle] = NativePageCodec.attributes(style: style,
+                            size: editor.pageFontSize, family: editor.pageFont,
+                            color: editor.textColor ?? .textColor, listDepth: depth)[.paragraphStyle]
+                        updated[.folioListDepth] = depth
+                        updated[.folioChecked] = style == .checklist
+                            ? (oldStyle == .checklist ? (original[.folioChecked] as? Bool ?? false) : false) : false
+                        let number = style == .ordered ? orderedNumbers[paragraph.location] ?? 1
+                            : (original[.folioOrderedNumber] as? Int ?? 1)
+                        updated[.folioOrderedNumber] = number
                         updated[.font] = Self.face(for: updated, editor: editor)
                         text.setAttributes(updated, range: subrange)
                     }
-                    let inserted = style == .bullet ? 2 : 0
+                    let inserted = NativePageCodec.isList(style) ? NativePageCodec.listMarker(style).utf16.count : 0
                     if inserted > 0 {
                         var marker = attrs
                         marker[.folioMarker] = true
-                        text.insert(NSAttributedString(string: "\u{2022} ", attributes: marker), at: paragraph.location)
+                        marker[.folioListDepth] = NativePageCodec.isList(oldStyle) ? oldDepth : 0
+                        marker[.folioChecked] = style == .checklist && oldStyle == .checklist
+                            ? (text.attribute(.folioChecked, at: paragraph.location, effectiveRange: nil) as? Bool ?? false) : false
+                        marker[.folioOrderedNumber] = orderedNumbers[paragraph.location] ?? 1
+                        text.insert(NSAttributedString(string: NativePageCodec.listMarker(style,
+                            number: marker[.folioOrderedNumber] as? Int ?? 1,
+                            checked: marker[.folioChecked] as? Bool ?? false), attributes: marker), at: paragraph.location)
                     }
                     func shifted(_ offset: Int) -> Int {
                         guard offset >= paragraph.location else { return offset }
@@ -255,6 +363,9 @@ final class FormattingActions: ObservableObject {
             var typing = editor.typingAttributes
             typing[.folioBlock] = style.rawValue
             typing[.paragraphStyle] = attrs[.paragraphStyle]
+            typing[.folioListDepth] = 0
+            typing[.folioChecked] = false
+            typing[.folioOrderedNumber] = 1
             typing[.font] = Self.face(for: typing, editor: editor)
             typing.removeValue(forKey: .folioMarker)
             editor.typingAttributes = typing
@@ -356,6 +467,78 @@ final class FormattingActions: ObservableObject {
         editor.window?.makeFirstResponder(editor)
         return true
     }
+
+    func indentList(by amount: Int) {
+        guard let editor, editor.isEditable, let storage = editor.textStorage else { return }
+        let selection = editor.selectedRange()
+        let range = (storage.string as NSString).paragraphRange(for: selection)
+        var paragraphs: [NSRange] = []
+        var start = range.location
+        while start < range.upperBound {
+            let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: start, length: 0))
+            paragraphs.append(paragraph)
+            start = paragraph.upperBound
+        }
+        editor.editAttributes(name: amount > 0 ? "Indent List" : "Outdent List") { text in
+            var previousDepth: Int?
+            if let first = paragraphs.first, first.location > 0 {
+                let prior = (text.string as NSString).paragraphRange(for: NSRange(location: first.location - 1, length: 0))
+                if prior.location < text.length,
+                   let kind = text.attribute(.folioBlock, at: prior.location, effectiveRange: nil) as? String,
+                   NativePageCodec.isList(FormattedBlock.Style(rawValue: kind) ?? .paragraph) {
+                    previousDepth = text.attribute(.folioListDepth, at: prior.location, effectiveRange: nil) as? Int ?? 0
+                }
+            }
+            for paragraph in paragraphs {
+                guard paragraph.location < text.length,
+                      let kind = text.attribute(.folioBlock, at: paragraph.location, effectiveRange: nil) as? String,
+                      NativePageCodec.isList(FormattedBlock.Style(rawValue: kind) ?? .paragraph) else { continue }
+                let old = text.attribute(.folioListDepth, at: paragraph.location, effectiveRange: nil) as? Int ?? 0
+                let depth = amount > 0
+                    ? (previousDepth.map { min(old + amount, $0 + 1) } ?? old)
+                    : max(0, old + amount)
+                text.addAttribute(.folioListDepth, value: depth, range: paragraph)
+                let style = FormattedBlock.Style(rawValue: kind) ?? .bullet
+                let paragraphStyle = NativePageCodec.attributes(style: style, size: editor.pageFontSize,
+                    family: editor.pageFont, color: editor.textColor ?? .textColor,
+                    listDepth: depth)[.paragraphStyle]
+                if let paragraphStyle {
+                    text.addAttribute(.paragraphStyle, value: paragraphStyle, range: paragraph)
+                }
+                previousDepth = depth
+            }
+        }
+        refresh()
+    }
+
+    func insertTable() {
+        guard let editor, editor.isEditable else { return }
+        let cell = { FormattedTableCell(runs: []) }
+        let table = FormattedBlock(style: .table, runs: [], tableRows: [
+            [FormattedTableCell(runs: [FormattedRun(text: "Column 1")]),
+             FormattedTableCell(runs: [FormattedRun(text: "Column 2")])],
+            [cell(), cell()]
+        ])
+        do {
+            let value = try NativePageCodec.decode(FormattedPage(blocks: [table]).html(),
+                resources: editor.resources, size: editor.pageFontSize, family: editor.pageFont,
+                color: editor.textColor ?? .textColor)
+            let selection = editor.selectedRange()
+            let source = editor.string as NSString
+            let paragraph = NativePageCodec.attributes(style: .paragraph, size: editor.pageFontSize,
+                family: editor.pageFont, color: editor.textColor ?? .textColor)
+            let addition = NSMutableAttributedString(attributedString: value)
+            if selection.location > 0, source.substring(with: NSRange(location: selection.location - 1, length: 1)) != "\n" {
+                addition.insert(NSAttributedString(string: "\n", attributes: paragraph), at: 0)
+            }
+            if selection.upperBound < source.length, source.substring(with: NSRange(location: selection.upperBound, length: 1)) != "\n" {
+                addition.append(NSAttributedString(string: "\n", attributes: paragraph))
+            }
+            editor.editAttributes(name: "Insert Table") { $0.replaceCharacters(in: selection, with: addition) }
+            editor.setSelectedRange(NSRange(location: selection.location + addition.length, length: 0))
+            refresh()
+        } catch { editor.onError?("Could not insert table: \(error.localizedDescription)") }
+    }
 }
 
 @MainActor
@@ -386,8 +569,65 @@ final class PageTextView: DocumentTextView {
     var pageFont = ReadingFont.system
 
     override func mouseDown(with event: NSEvent) {
-        if openImage(at: convert(event.locationInWindow, from: nil)) { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if openImage(at: point) { return }
+        let index = characterIndexForInsertion(at: point)
+        if let storage = textStorage, index < storage.length,
+           let kind = storage.attribute(.folioBlock, at: index, effectiveRange: nil) as? String,
+           kind == FormattedBlock.Style.checklist.rawValue {
+            let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: index, length: 0))
+            let markerRange = NSRange(location: paragraph.location, length: 0)
+            var actualMarker = markerRange
+            if markerRange.location < storage.length,
+               storage.attribute(.folioMarker, at: markerRange.location, effectiveRange: &actualMarker) as? Bool == true,
+               index <= actualMarker.upperBound {
+                toggleChecklistItem(at: index)
+                return
+            }
+        }
         super.mouseDown(with: event)
+    }
+
+    func toggleChecklistItem(at index: Int) {
+        guard let storage = textStorage, index < storage.length,
+              storage.attribute(.folioBlock, at: index, effectiveRange: nil) as? String == FormattedBlock.Style.checklist.rawValue else { return }
+        let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: index, length: 0))
+        var markerRange = NSRange(location: paragraph.location, length: 0)
+        guard paragraph.location < storage.length,
+              storage.attribute(.folioMarker, at: paragraph.location, effectiveRange: &markerRange) as? Bool == true else { return }
+        let checked = !(storage.attribute(.folioChecked, at: paragraph.location, effectiveRange: nil) as? Bool ?? false)
+        var markerAttributes = storage.attributes(at: markerRange.location, effectiveRange: nil)
+        markerAttributes[.folioChecked] = checked
+        editAttributes(name: "Toggle Checklist Item") { text in
+            text.addAttribute(.folioChecked, value: checked, range: paragraph)
+            text.replaceCharacters(in: markerRange, with: NSAttributedString(
+                string: checked ? "☑ " : "☐ ", attributes: markerAttributes))
+        }
+    }
+
+    override func insertTab(_ sender: Any?) {
+        guard let storage = textStorage, storage.length > 0 else { super.insertTab(sender); return }
+        let selection = selectedRange()
+        let paragraph = (storage.string as NSString).paragraphRange(for: selection)
+        guard storage.attribute(.folioTableRow, at: paragraph.location, effectiveRange: nil) as? Bool == true else {
+            super.insertTab(sender)
+            return
+        }
+        let body = storage.string as NSString
+        var next = NSNotFound
+        if selection.location < paragraph.upperBound {
+            let search = NSRange(location: selection.location, length: paragraph.upperBound - selection.location)
+            next = body.range(of: "\t", options: [], range: search).location
+        }
+        if next != NSNotFound {
+            setSelectedRange(NSRange(location: next + 1, length: 0))
+        } else {
+            let row = body.substring(with: NSRange(location: paragraph.location, length: paragraph.length))
+            let columns = max(2, row.filter { $0 == "\t" }.count + 1)
+            let attributes = storage.attributes(at: paragraph.location, effectiveRange: nil)
+            insertText(NSAttributedString(string: "\n" + String(repeating: "\t", count: columns - 1),
+                                          attributes: attributes), replacementRange: selection)
+        }
     }
 
     @discardableResult
@@ -411,11 +651,17 @@ final class PageTextView: DocumentTextView {
 
     override func insertNewline(_ sender: Any?) {
         let style = FormattedBlock.Style(rawValue: typingAttributes[.folioBlock] as? String ?? "") ?? .paragraph
-        if style == .bullet, let storage = textStorage, storage.length > 0 {
+        if NativePageCodec.isList(style), let storage = textStorage, storage.length > 0 {
             let range = (storage.string as NSString).paragraphRange(for: selectedRange())
             let paragraph = storage.attributedSubstring(from: range)
             let visible = paragraph.string.trimmingCharacters(in: .whitespacesAndNewlines)
-            if visible == "\u{2022}" {
+            let empty = switch style {
+            case .bullet: visible == "•"
+            case .ordered: visible.range(of: #"^\d+\.$"#, options: .regularExpression) != nil
+            case .checklist: ["☐", "☑"].contains(visible)
+            default: false
+            }
+            if empty {
                 insertText("", replacementRange: range)
                 typingAttributes = NativePageCodec.attributes(style: .paragraph, size: pageFontSize,
                     family: pageFont, color: textColor ?? .textColor)
@@ -423,11 +669,19 @@ final class PageTextView: DocumentTextView {
             }
         }
         super.insertNewline(sender)
-        if style == .bullet {
-            var attrs = NativePageCodec.attributes(style: .bullet, size: pageFontSize,
-                                                   family: pageFont, color: textColor ?? .textColor)
+        if NativePageCodec.isList(style) {
+            let depth = typingAttributes[.folioListDepth] as? Int ?? 0
+            var attrs = NativePageCodec.attributes(style: style, size: pageFontSize,
+                family: pageFont, color: textColor ?? .textColor, listDepth: depth)
             attrs[.folioMarker] = true
-            insertText(NSAttributedString(string: "\u{2022} ", attributes: attrs), replacementRange: selectedRange())
+            attrs[.folioBlock] = style.rawValue
+            attrs[.folioListDepth] = depth
+            let number = (typingAttributes[.folioOrderedNumber] as? Int ?? 1) + 1
+            attrs[.folioOrderedNumber] = number
+            let checked = false
+            attrs[.folioChecked] = checked
+            insertText(NSAttributedString(string: NativePageCodec.listMarker(style, number: number, checked: checked),
+                                          attributes: attrs), replacementRange: selectedRange())
             attrs.removeValue(forKey: .folioMarker)
             typingAttributes = attrs
         } else if style == .heading1 || style == .heading2 {
@@ -680,7 +934,7 @@ struct FormattedEditor: View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
                 Menu {
-                    ForEach(FormattedBlock.Style.allCases, id: \.rawValue) { style in
+                    ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
                         Button(style.title) { actions.setStyle(style) }
                     }
                 } label: { Text(actions.style.title).frame(minWidth: 56, alignment: .leading) }
@@ -707,6 +961,16 @@ struct FormattedEditor: View {
                     .help("Bullet list").accessibilityLabel("Bullet list")
                     .background(actions.style == .bullet ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
                     .accessibilityValue(actions.style == .bullet ? "On" : "Off")
+                Button { actions.setStyle(actions.style == .ordered ? .paragraph : .ordered) } label: { Image(systemName: "list.number") }
+                    .help("Numbered list").accessibilityLabel("Numbered list")
+                Button { actions.setStyle(actions.style == .checklist ? .paragraph : .checklist) } label: { Image(systemName: "checklist") }
+                    .help("Checklist").accessibilityLabel("Checklist")
+                Button { actions.indentList(by: -1) } label: { Image(systemName: "decrease.indent") }
+                    .help("Decrease list indent").accessibilityLabel("Decrease list indent")
+                Button { actions.indentList(by: 1) } label: { Image(systemName: "increase.indent") }
+                    .help("Increase list indent").accessibilityLabel("Increase list indent")
+                Button { actions.insertTable() } label: { Image(systemName: "tablecells") }
+                    .help("Insert editable table").accessibilityLabel("Insert editable table")
                 Button { addingLink = true } label: { Image(systemName: "link") }
                     .help("Add link").accessibilityLabel("Add link")
                 Spacer()

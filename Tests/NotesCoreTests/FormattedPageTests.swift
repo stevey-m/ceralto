@@ -69,4 +69,65 @@ struct FormattedPageTests {
         #expect(page.blocks.count == 3)
         #expect(page.blocks[1].runs.isEmpty)
     }
+
+    @Test func orderedNestedChecklistAndGFMTableKeepTheirSemanticStructure() throws {
+        let source = """
+        3. Parent
+           1. **Nested**
+              - Deep item
+        4. Last
+
+        - [x] Done
+        - [ ] Later
+
+        | Name | Details |
+        | --- | --- |
+        | **A \\| B** | [Open](folio-note://123e4567-e89b-12d3-a456-426614174000) |
+        """
+        let page = try FormattedPage(markdown: source)
+        #expect(page.blocks.map(\.style) == [.ordered, .ordered, .bullet, .ordered, .checklist, .checklist, .table])
+        #expect(page.blocks.map(\.listDepth) == [0, 1, 2, 0, 0, 0, 0])
+        #expect(page.blocks[0].orderedNumber == 3)
+        #expect(page.blocks[3].orderedNumber == 4)
+        #expect(page.blocks[4].checked)
+        #expect(!page.blocks[5].checked)
+        #expect(page.blocks[6].tableRows.count == 2)
+        #expect(page.blocks[6].tableRows[1][0].runs.map(\.text).joined() == "A | B")
+        #expect(page.blocks[6].tableRows[1][1].runs.contains {
+            $0.link == "folio-note://123e4567-e89b-12d3-a456-426614174000"
+        })
+
+        let restored = try FormattedPage(markdown: page.markdown())
+        #expect(restored == page)
+        let fromHTML = try FormattedPage(html: page.html())
+        #expect(fromHTML == page)
+        #expect(page.markdown().contains("| **A \\| B** |"))
+    }
+
+    @Test func looseTaskListsInlineFormattingAndNestedOrderedStartsRoundTrip() throws {
+        let loose = try FormattedPage(markdown: "- [x] **Done** item\n\n- [ ] Open `code`\n")
+        #expect(loose.blocks.map(\.style) == [.checklist, .checklist])
+        #expect(loose.blocks.map(\.checked) == [true, false])
+        #expect(loose.blocks[0].runs.contains { $0.bold && $0.text == "Done" })
+        #expect(loose.blocks[1].runs.contains { $0.code && $0.text == "code" })
+        let nested = FormattedPage(blocks: [
+            FormattedBlock(style: .ordered, runs: [FormattedRun(text: "First")], orderedNumber: 1),
+            FormattedBlock(style: .ordered, runs: [FormattedRun(text: "Second")], listDepth: 1, orderedNumber: 2)
+        ])
+        let restored = try FormattedPage(markdown: nested.markdown())
+        #expect(restored.blocks.map(\.listDepth) == [0, 1])
+        #expect(restored.blocks.map(\.orderedNumber) == [1, 2])
+        #expect(restored.blocks.map { $0.runs.map(\.text).joined() } == ["First", "Second"])
+        #expect(throws: (any Error).self) { try FormattedPage(markdown: "- Item\n\n  > quoted inside item\n") }
+    }
+
+    @Test func internalNoteLinksAreSafeAndPortable() throws {
+        let valid = "folio-note://123e4567-e89b-12d3-a456-426614174000"
+        #expect(FormattedPage.allowedLink(valid))
+        #expect(!FormattedPage.allowedLink("folio-note://user@123e4567-e89b-12d3-a456-426614174000"))
+        #expect(!FormattedPage.allowedLink("folio-note://not-a-uuid"))
+        #expect(!FormattedPage.allowedLink("folio-note://123e4567-e89b-12d3-a456-426614174000/other"))
+        let page = try FormattedPage(markdown: "[Related](\(valid))")
+        #expect(page.markdown() == "[Related](\(valid))")
+    }
 }
