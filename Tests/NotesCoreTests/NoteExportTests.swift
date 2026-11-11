@@ -73,9 +73,10 @@ struct NoteExportPanelTests {
         #expect(pickerRect.minX >= labelRect.maxX + 8)
         #expect(pickerRect.maxX <= width - 24)
         #expect(pickerFrame.minX >= 20 && pickerFrame.maxX <= width - 20)
-        #expect(pickerRect.width >= 170 && pickerRect.height >= 22)
+        #expect(pickerRect.width >= 170)
+        #expect(pickerFrame.height >= export.formatPicker.intrinsicContentSize.height)
         #expect(labelRect.minY >= 8 && labelRect.maxY <= accessory.bounds.height - 8)
-        #expect(pickerRect.minY >= 8 && pickerRect.maxY <= accessory.bounds.height - 8)
+        #expect(pickerFrame.minY >= 8 && pickerFrame.maxY <= accessory.bounds.height - 8)
         func baseline(_ view: NSView) -> Double {
             let y = view.isFlipped ? view.firstBaselineOffsetFromTop
                 : view.bounds.height - view.firstBaselineOffsetFromTop
