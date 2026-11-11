@@ -2,6 +2,7 @@ import AppKit
 import NotesCore
 import SwiftUI
 import Testing
+import WebKit
 @testable import Folio
 
 struct DocumentWorkspaceTests {
@@ -50,7 +51,7 @@ struct DocumentWorkspaceTests {
 @MainActor
 struct NavigationTests {
     @Test(arguments: [NoteFormat.markdown, .html], [false, true])
-    func existingNotesOpenEditableWithoutAModeGate(format: NoteFormat, unsupported: Bool) async throws {
+    func existingNotesUseDirectEditingOrPreservedRendering(format: NoteFormat, unsupported: Bool) async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -60,7 +61,8 @@ struct NavigationTests {
         defaults.set("Preview", forKey: "readingEditorMode")
         let notebook = Notebook(name: "Existing notes")
         let original = unsupported
-            ? (format.usesHTML ? "<details><summary>Keep this structure</summary><p>Hello world</p></details>" : "### Hello world")
+            ? (format.usesHTML ? "<details><summary>Keep this structure</summary><p>Hello world</p></details>"
+                : "<div><table role=\"none\"><tr><td><p>Hello world</p></td></tr></table>\n\n### Subheading\n\n</div>")
             : (format.usesHTML ? "<p>Hello world</p>" : "Hello world")
         let note = Note(notebookID: notebook.id, title: "Existing note", body: original, format: format)
         let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
@@ -94,8 +96,13 @@ struct NavigationTests {
             #expect(store.library.notes.first == note)
             #expect(try storage.load()?.notes.first == note)
             let source = try #require(descendants(host).compactMap { $0 as? SourceTextView }.first)
-            #expect(source.isEditable)
+            #expect(!source.isEditable)
             #expect(!descendants(host).contains { $0 is PageTextView })
+            #expect(descendants(host).contains { $0 is WKWebView })
+            let editSource = try #require(descendants(host).compactMap { $0 as? NSButton }.first { $0.title == "Edit Source" })
+            #expect(NSApp.sendAction(try #require(editSource.action), to: editSource.target, from: editSource))
+            try await Task.sleep(for: .milliseconds(80))
+            #expect(source.isEditable)
             window.makeFirstResponder(source)
             source.setSelectedRange(NSRange(location: source.string.utf16.count, length: 0))
             source.insertText(" updated", replacementRange: source.selectedRange())
@@ -183,6 +190,20 @@ struct NavigationTests {
         #expect(selected.bold && selected.italic && selected.underline)
         #expect(restored.blocks.first?.runs.last?.fontSize == nil)
         #expect(try storage.load()?.notes.first?.body == styled.body)
+        window.makeFirstResponder(editor)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        try press("Insert Table", in: "note-formatting")
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(window.firstResponder === editor)
+        #expect((editor.string as NSString).substring(with: editor.selectedRange()) == "Column 1")
+        editor.insertText("Topic", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(80))
+        let withTable = try #require(store.selectedNote)
+        let tablePage = try format.usesHTML ? FormattedPage(html: withTable.body) : FormattedPage(markdown: withTable.body)
+        let table = try #require(tablePage.blocks.first { $0.style == .table })
+        #expect(table.tableRows.count == 2 && table.tableRows.allSatisfy { $0.count == 2 })
+        #expect(table.tableRows[0][0].runs.map(\.text).joined() == "Topic")
+        #expect(try storage.load()?.notes.first?.body == withTable.body)
         try press("New Note", in: "note-new")
         try await Task.sleep(for: .milliseconds(160))
         #expect(store.library.notes.count == 2)

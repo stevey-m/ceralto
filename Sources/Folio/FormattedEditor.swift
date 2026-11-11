@@ -113,8 +113,7 @@ enum NativePageCodec {
                     let attachment = NSTextAttachment()
                     let local = resources?.localURL(for: image)
                     let picture = local.flatMap { url -> NSImage? in
-                        guard ["jpg", "jpeg", "png", "gif", "webp", "heic", "tiff", "bmp"]
-                            .contains(url.pathExtension.lowercased()) else { return nil }
+                        guard RasterImageContent.mimeType(at: url) != nil else { return nil }
                         return NSImage(contentsOf: url)
                     }
                     attachment.image = picture ?? NSImage(systemSymbolName: "photo", accessibilityDescription: "Image unavailable")
@@ -588,14 +587,19 @@ final class FormattingActions: ObservableObject {
             let paragraph = NativePageCodec.attributes(style: .paragraph, size: editor.pageFontSize,
                 family: editor.pageFont, color: editor.textColor ?? .textColor)
             let addition = NSMutableAttributedString(attributedString: value)
+            var firstCell = selection.location
             if selection.location > 0, source.substring(with: NSRange(location: selection.location - 1, length: 1)) != "\n" {
                 addition.insert(NSAttributedString(string: "\n", attributes: paragraph), at: 0)
+                firstCell += 1
             }
             if selection.upperBound < source.length, source.substring(with: NSRange(location: selection.upperBound, length: 1)) != "\n" {
                 addition.append(NSAttributedString(string: "\n", attributes: paragraph))
             }
             editor.editAttributes(name: "Insert Table") { $0.replaceCharacters(in: selection, with: addition) }
-            editor.setSelectedRange(NSRange(location: selection.location + addition.length, length: 0))
+            let header = NSRange(location: firstCell, length: "Column 1".utf16.count)
+            editor.window?.makeFirstResponder(editor)
+            editor.setSelectedRange(header)
+            editor.scrollRangeToVisible(header)
             refresh()
         } catch { editor.onError?("Could not insert table: \(error.localizedDescription)") }
     }
@@ -1334,10 +1338,10 @@ struct NoteFormattingControls: View {
                     .folioAppearance()
                 }
             }
-            Button { actions.setStyle(actions.style == .checklist ? .paragraph : .checklist) } label: {
-                Image(systemName: "checklist")
+            NoteToolbarButton(title: "Checklist", selected: actions.style == .checklist, symbol: "checklist", bordered: false) {
+                actions.setStyle(actions.style == .checklist ? .paragraph : .checklist)
             }.help("Checklist").accessibilityLabel("Checklist")
-            Button { actions.insertTable() } label: { Image(systemName: "tablecells") }
+            NoteToolbarButton(title: "Insert Table", symbol: "tablecells", bordered: false) { actions.insertTable() }
                 .help("Insert editable table").accessibilityLabel("Insert editable table")
         }
         .buttonStyle(.borderless)

@@ -1,8 +1,26 @@
 import AppKit
+import ImageIO
 import NotesCore
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+
+enum RasterImageContent {
+    static func mimeType(at url: URL) -> String? {
+        mimeType(CGImageSourceCreateWithURL(url as CFURL, nil))
+    }
+
+    static func mimeType(in data: Data) -> String? {
+        mimeType(CGImageSourceCreateWithData(data as CFData, nil))
+    }
+
+    private static func mimeType(_ source: CGImageSource?) -> String? {
+        guard let source, let identifier = CGImageSourceGetType(source),
+              let type = UTType(identifier as String), type.conforms(to: .image),
+              let mime = type.preferredMIMEType, mime != "image/svg+xml" else { return nil }
+        return mime
+    }
+}
 
 struct MarkdownPreview: View {
     @ThemeColors private var palette
@@ -178,24 +196,28 @@ struct DocumentWebView: NSViewRepresentable {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame, let reference = message.body as? String,
-                  let url = URL(string: reference), let local = parent.resources?.fileURL(for: url),
-                  Self.isRasterImage(local) else { return }
+                  let url = URL(string: reference), let local = parent.resources?.fileURL(for: url) else { return }
+            guard Self.isRasterImage(local) else {
+                parent.onError("This image is missing or is not a supported raster image.")
+                return
+            }
             parent.onImage(local)
         }
 
         static func isRasterImage(_ url: URL) -> Bool {
-            ["jpg", "jpeg", "png", "gif", "webp", "heic", "tiff", "tif", "bmp", "avif"].contains(url.pathExtension.lowercased())
+            RasterImageContent.mimeType(at: url) != nil
         }
 
         func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
-            guard let url = urlSchemeTask.request.url, let local = parent.resources?.fileURL(for: url),
-                  Self.isRasterImage(local) else {
+            guard let url = urlSchemeTask.request.url, let local = parent.resources?.fileURL(for: url) else {
                 urlSchemeTask.didFailWithError(URLError(.noPermissionsToReadFile))
                 return
             }
             do {
                 let data = try Data(contentsOf: local)
-                let mime = UTType(filenameExtension: local.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                guard let mime = RasterImageContent.mimeType(in: data) else {
+                    throw URLError(.cannotDecodeContentData)
+                }
                 urlSchemeTask.didReceive(URLResponse(url: url, mimeType: mime, expectedContentLength: data.count,
                                                     textEncodingName: nil))
                 urlSchemeTask.didReceive(data)

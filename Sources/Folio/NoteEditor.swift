@@ -119,16 +119,25 @@ struct NoteEditor: View {
             if isTrashed {
                 preview
             } else if initialized {
+                if let sourceEditingReason {
+                    HStack(alignment: .top, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Rendered note").fontWeight(.medium)
+                            Text("This layout needs source editing for changes.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        NoteToolbarButton(title: isPreviewing ? "Edit Source" : "Show Note") {
+                            isPreviewing.toggle()
+                        }
+                    }
+                    .font(.callout)
+                    .padding(12)
+                    .help(sourceEditingReason)
+                    .background(.secondary.opacity(0.08))
+                }
                 ZStack {
                     VStack(spacing: 0) {
-                        if let sourceEditingReason {
-                            Label("Source editing preserves this note's unsupported formatting. \(sourceEditingReason)",
-                                  systemImage: "info.circle")
-                                .font(.callout)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12)
-                                .background(.secondary.opacity(0.08))
-                        }
                         if usesCompose {
                             FormattedEditor(note: note, fontSize: fontSize,
                                             family: ReadingFont(rawValue: readingFont) ?? .system,
@@ -208,7 +217,7 @@ struct NoteEditor: View {
     @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
         ToolbarItem(id: "note-formatting", placement: .automatic) {
             NoteFormattingControls(actions: formatting)
-                .disabled(isTrashed || !usesCompose || isPreviewing)
+                .disabled(isTrashed || !usesCompose || isPreviewing || formatting.editor == nil)
                 .help(usesCompose ? "Format selected text" : "Visual formatting is unavailable in source editing")
         }
         ToolbarItem(id: "note-attachments", placement: .automatic) {
@@ -306,7 +315,7 @@ struct NoteEditor: View {
             isPreviewing = false
         } catch {
             usesCompose = false
-            isPreviewing = false
+            isPreviewing = true
             sourceEditingReason = error.localizedDescription
         }
     }

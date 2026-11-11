@@ -725,6 +725,7 @@ struct NoteToolbarButton: NSViewRepresentable {
     let title: String
     var selected: Bool? = nil
     var symbol: String? = nil
+    var bordered = true
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
 
@@ -732,7 +733,8 @@ struct NoteToolbarButton: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSButton {
         let button = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.press))
-        button.bezelStyle = .texturedRounded
+        button.bezelStyle = bordered ? .texturedRounded : .inline
+        button.isBordered = bordered
         button.setButtonType(selected == nil ? .momentaryPushIn : .pushOnPushOff)
         if let symbol {
             button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)

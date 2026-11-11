@@ -143,7 +143,9 @@ public enum PreviewDocument {
         let linked = try NoteLinks.linkedBody(sanitizedBody(input, resources: resources), targets: noteLinks)
         let document = try SwiftSoup.parseBodyFragment(linked)
         for table in try document.select("table") {
-            try table.wrap("<div class=\"folio-table-scroll\"></div>")
+            if try !["none", "presentation"].contains(table.attr("role")) {
+                try table.wrap("<div class=\"folio-table-scroll\"></div>")
+            }
         }
         let safe = try document.body()?.html() ?? ""
         let thumbnail = min(max(options.thumbnailSize, 64), 400)
@@ -191,6 +193,10 @@ public enum PreviewDocument {
         td[align=center],th[align=center] { text-align: center; }
         td[align=right],th[align=right] { text-align: right; }
         table tr:nth-child(even) { background: var(--code); }
+        table[role=none],table[role=presentation] { width: 100%; }
+        table:is([role=none],[role=presentation]) > :is(thead,tbody,tfoot) > tr { background: transparent; }
+        table:is([role=none],[role=presentation]) > :is(thead,tbody,tfoot) > tr > :is(td,th) {
+          border: 0; padding: 0; background: transparent; }
         hr { border: 0; border-top: 1px solid var(--line); margin: 1.5em 0; }
         img.folio-thumbnail { display: inline-block; \(imageSizing)
           height: auto !important; object-fit: contain;
@@ -208,6 +214,17 @@ public enum PreviewDocument {
         let document = try SwiftSoup.parse(html)
         // Remove active content before cleaning, rather than retaining script text.
         try document.select("script,style,iframe,object,embed,form,base,link,meta,svg,math").remove()
+        for image in try document.select("img") {
+            if let width = Double(try image.attr("width")), let height = Double(try image.attr("height")),
+               (0...1).contains(width), (0...1).contains(height) {
+                try image.remove()
+            }
+        }
+        for table in try document.select("table[role]") {
+            let role = try table.attr("role").lowercased()
+            if ["none", "presentation"].contains(role) { try table.attr("role", role) }
+            else { try table.removeAttr("role") }
+        }
         for element in try document.select("[style]") {
             if let size = FormattedPage.fontSize(in: try element.attr("style")) {
                 try element.attr("style", "font-size:\(size)px")
@@ -222,6 +239,7 @@ public enum PreviewDocument {
             .addAttributes("a", "id", "name")
             .addAttributes("h1", "id").addAttributes("h2", "id").addAttributes("h3", "id")
             .addAttributes("td", "align").addAttributes("th", "align")
+            .addAttributes("table", "role")
             .removeProtocols("a", "href", "ftp")
         // URLs are explicitly resolved and allowlisted below, including relative paths.
         try whitelist.removeProtocols("img", "src", "http", "https")

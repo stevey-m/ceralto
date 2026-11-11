@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.5.
+their original names; the instructions below describe Ceralto 0.23.6.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -121,9 +121,18 @@ Use **Edit > Undo** or **Command-Z** to restore deleted text, and
 **Command-Shift-Z** to redo it. Restored text is saved automatically.
 Merely opening the editor does not rewrite the saved source or
 change its format: Markdown stays Markdown, and HTML stays HTML when edited.
-If Compose cannot represent the note's structure, a visible notice explains why
-the editable source is shown instead, without changing its content. Advanced headings (H3-H6),
-horizontal rules and complex HTML still require source editing.
+If Compose cannot represent the note's structure, the note opens rendered with
+its supported formatting instead of exposing raw HTML or Markdown. **Edit
+Source** in the **Rendered note** notice opens its unchanged source for editing; **Show Note**
+returns to the rendered view. Advanced headings (H3-H6), horizontal rules and
+complex HTML still require source editing, not visual editing.
+Imported HTML presentation tables retain their borderless layout rather than
+being styled as data grids. One-pixel tracking images are omitted from display,
+and local raster images are identified by their contents, including Joplin's
+timestamp-suffixed filenames. External images and trackers remain blocked.
+The table toolbar button inserts a two-column table, selects its first header,
+and returns keyboard focus to the note body. The native editor presents simple
+tab-separated cells; the rendered view shows the table grid.
 Use **Note actions > Use Markdown Source Editor...** or **Use HTML Source Editor...**
 to choose literal source editing explicitly. Live Markdown folders remain a
 separate source-editing workflow.

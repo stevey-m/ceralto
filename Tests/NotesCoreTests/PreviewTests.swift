@@ -3,6 +3,39 @@ import NotesCore
 import Testing
 
 struct PreviewTests {
+    @Test func preservesMixedMarkdownAndNestedPresentationTablesWithoutTrackingPixels() throws {
+        let resources = ImportedResources(source: URL(fileURLWithPath: "/tmp/vault/Work/Import/note.md"),
+                                          root: URL(fileURLWithPath: "/tmp/vault"))
+        let source = """
+        <div class="joplin-table-wrapper">
+        <table role="none" class="jop-noMdConv"><tr><td>
+        <table role="presentation"><tr><td><p>Layout paragraph</p>
+        <img src="../../_resources/photo.pngt1769895959">
+        <img src="../../_resources/pixel.gift1769895959" width="1" height="1">
+        </td></tr></table></td></tr></table>
+
+        ## Markdown heading
+
+        ### Subheading
+
+        - List item with **emphasis**
+
+        </div>
+        """
+        #expect(throws: JoplinImportError.self) { try FormattedPage(markdown: source) }
+        let html = try PreviewDocument.html(source: source, format: .markdown, resources: resources)
+        #expect(html.contains("<table role=\"none\">"))
+        #expect(html.contains("<table role=\"presentation\">"))
+        #expect(html.contains("<h2>Markdown heading</h2>"))
+        #expect(html.contains("<h3>Subheading</h3>"))
+        #expect(html.contains("<strong>emphasis</strong>"))
+        #expect(html.contains("folio-resource://local/_resources/photo.pngt1769895959"))
+        #expect(!html.contains("pixel.gift"))
+        #expect(!html.contains("class=\"folio-table-scroll\""))
+        #expect(!html.contains("jop-noMdConv"))
+        #expect(html.contains("script-src 'none'; connect-src 'none'"))
+    }
+
     @Test func preservesJoplinStyleLineBreaksAndSemanticTables() throws {
         let source = """
         First line
@@ -64,7 +97,7 @@ struct PreviewTests {
 
         [photo]: ../assets/two.jpeg
 
-        <img src="../assets/three.jpg" width="1" height="1" onerror="alert(1)">
+        <img src="../assets/three.jpg" width="12" height="8" onerror="alert(1)">
         """, format: .markdown, resources: resources)
         #expect(html.components(separatedBy: "class=\"folio-thumbnail\"").count == 4)
         #expect(html.contains("folio-resource://local/assets/photo%20one.jpg"))
