@@ -25,7 +25,7 @@ final class LiveMarkdownStore: ObservableObject {
     @Published private(set) var baseline: MarkdownSource?
     @Published private(set) var conflict = false
     @Published private(set) var refreshing = false
-    @Published var message = "Open a separate Markdown folder. Your Deltos library stays unchanged."
+    @Published var message = "Open a separate Markdown folder. Your Ceralto library stays unchanged."
     @Published private(set) var recoveryIssue: String?
     @Published private(set) var recoverable: [MarkdownDraft] = []
     @Published private(set) var hasRememberedFolder = false
@@ -97,7 +97,7 @@ final class LiveMarkdownStore: ObservableObject {
             guard candidate.root != library,
                   !candidate.root.path.hasPrefix(library.path + "/"),
                   !library.path.hasPrefix(candidate.root.path + "/") else {
-                throw NoteWorkflowError("Choose a folder separate from Deltos's existing library storage.")
+                throw NoteWorkflowError("Choose a folder separate from Ceralto's existing library storage.")
             }
             let listed = try candidate.entries()
             var drafts = try recovery.drafts(for: candidate.root)
@@ -148,7 +148,7 @@ final class LiveMarkdownStore: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.message = "Open an ordinary Markdown folder, not Joplin's internal sync folder. Deltos edits files in place. Keep an independent backup."
+        panel.message = "Open an ordinary Markdown folder, not Joplin's internal sync folder. Ceralto edits files in place. Keep an independent backup."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try open(url, avoiding: libraryURL) }
         catch { message = "Could not open folder: \(error.localizedDescription)" }
@@ -167,7 +167,7 @@ final class LiveMarkdownStore: ObservableObject {
             setDocument(path: path, source: loaded, text: loaded.text)
             rememberSelection()
             conflict = false
-            message = "Editing \(path). Save writes the original file; your normal Deltos library is separate."
+            message = "Editing \(path). Save writes the original file; your normal Ceralto library is separate."
         } catch { message = "Could not open note: \(error.localizedDescription)" }
     }
 
@@ -207,7 +207,7 @@ final class LiveMarkdownStore: ObservableObject {
             guard disk.digest != baseline.digest else { return }
             if dirty {
                 conflict = true
-                message = "The selected file changed outside Deltos. Your unsaved draft is preserved. Reload disk or save a separate copy."
+                message = "The selected file changed outside Ceralto. Your unsaved draft is preserved. Reload disk or save a separate copy."
             } else {
                 setDocument(path: path, source: disk, text: disk.text)
                 conflict = false
@@ -272,7 +272,7 @@ final class LiveMarkdownStore: ObservableObject {
         guard dirty else { return true }
         let alert = NSAlert()
         alert.messageText = "Keep your Markdown changes?"
-        alert.informativeText = "The draft for \(selectedPath ?? "this note") has not been saved. A file changed outside Deltos will not be overwritten."
+        alert.informativeText = "The draft for \(selectedPath ?? "this note") has not been saved. A file changed outside Ceralto will not be overwritten."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Discard Draft")
@@ -362,7 +362,7 @@ final class LiveMarkdownStore: ObservableObject {
             setDocument(path: draft.path, source: draft.original, text: draft.text)
             conflict = disk?.digest != draft.original.digest
             message = conflict
-                ? "Recovered \(draft.path). The file changed outside Deltos; reload disk or save your draft as a new copy."
+                ? "Recovered \(draft.path). The file changed outside Ceralto; reload disk or save your draft as a new copy."
                 : "Recovered unsaved changes to \(draft.path). Review them, then Save or explicitly discard."
         }
         rememberSelection()

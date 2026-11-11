@@ -19,7 +19,7 @@ struct FolioApp: App {
     @FocusedValue(\.searchLibrary) private var searchLibrary
 
     var body: some Scene {
-        Window("Deltos", id: "library") {
+        Window("Ceralto", id: "library") {
             LibraryWindowContent()
                 .environmentObject(store)
                 .onAppear {
@@ -30,6 +30,7 @@ struct FolioApp: App {
         }
         .defaultSize(width: 1240, height: 800)
         .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings...") { settings.show(store: store) }
@@ -101,7 +102,7 @@ struct FolioApp: App {
                     .disabled(!store.isLoaded)
                 Button("Export Open Markdown Folder...", action: store.exportVault)
                     .disabled(!store.isLoaded)
-                Button("Import Deltos Backup...", action: store.importBackup)
+                Button("Import Ceralto Backup...", action: store.importBackup)
                     .disabled(!store.isLoaded)
             }
             CommandGroup(replacing: .saveItem) {
@@ -185,16 +186,16 @@ struct FolioApp: App {
                 .onAppear { delegate.markdown = markdown }
         }
         .defaultSize(width: 1240, height: 800)
-        MenuBarExtra("Deltos", systemImage: "square.and.pencil") {
+        MenuBarExtra("Ceralto", systemImage: "square.and.pencil") {
             Button("Quick Capture") { capture() }.disabled(!store.isLoaded)
-            Button("Open Deltos") {
+            Button("Open Ceralto") {
                 openWindow(id: "library")
                 NSApp.activate(ignoringOtherApps: true)
             }
             Button(store.isSyncing ? "Syncing..." : "Sync Now", action: store.syncNow)
                 .disabled(store.syncFolderName == nil || store.isSyncing)
             Divider()
-            Button("Quit Deltos") { NSApp.terminate(nil) }.keyboardShortcut("q")
+            Button("Quit Ceralto") { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
     }
 
@@ -224,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if store?.backupManager?.busy == true {
             let alert = NSAlert()
             alert.messageText = "A complete backup is still running"
-            alert.informativeText = "Wait for the backup to finish before quitting Deltos."
+            alert.informativeText = "Wait for the backup to finish before quitting Ceralto."
             alert.runModal()
             return .terminateCancel
         }
@@ -233,9 +234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard store.hasUnsavedChanges else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "Your latest changes have not been saved"
-        alert.informativeText = "Stay in Deltos to retry saving or export your notes. Quitting now will discard changes that could not be written to disk."
+        alert.informativeText = "Stay in Ceralto to retry saving or export your notes. Quitting now will discard changes that could not be written to disk."
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Keep Deltos Open")
+        alert.addButton(withTitle: "Keep Ceralto Open")
         alert.addButton(withTitle: "Quit Without Saving")
         return alert.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }

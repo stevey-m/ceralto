@@ -8,8 +8,8 @@ import WebKit
 @Suite(.serialized)
 @MainActor
 struct PresentationTests {
-    @Test(arguments: [FolioTheme.light, .dracula])
-    func libraryWorkspaceRespectsTheNativeTitlebar(theme: FolioTheme) async throws {
+    @Test(arguments: [FolioTheme.light, .dark, .dracula], [720.0, 1240.0])
+    func libraryWorkspaceRespectsTheNativeTitlebar(theme: FolioTheme, width: Double) async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -25,14 +25,14 @@ struct PresentationTests {
         try storage.save(Library(notebooks: [notebook], notes: notes))
         let store = NotesStore(storage: storage, preferences: defaults)
         store.openNote(notes[0].id)
-        store.openNoteInNewTab(notes[1].id)
         let host = NSHostingView(rootView: LibraryWindowContent()
             .environmentObject(store).defaultAppStorage(defaults))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 800),
                               styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
         window.contentView = host
         defer { window.contentView = nil }
         try await Task.sleep(for: .milliseconds(200))
@@ -47,15 +47,57 @@ struct PresentationTests {
         #expect(rect.maxY <= window.contentLayoutRect.maxY,
                 "The workspace headers and tabs must start below the native titlebar.")
         #expect(rect.width >= 720 && rect.height >= 520)
-        #expect(store.workspace.tabs.count == 2)
+        #expect(store.workspace.tabs.count == 1)
         #expect(store.library.notes == notes)
         let frame = try #require(host.superview)
+        let toolbar = try #require(window.toolbar)
+        let required = ["sidebar-options", "note-list-title", "note-list-options", "note-new",
+                        "note-formatting", "note-attachments", "note-export", "note-actions", "library-search"]
+        func toolbarRect(_ identifier: String) throws -> NSRect {
+            let item = try #require(toolbar.visibleItems?.first { $0.itemIdentifier.rawValue == identifier },
+                                    "\(identifier) must be visible, not relegated to toolbar overflow.")
+            let view = try #require(item.view)
+            return view.convert(view.bounds, to: nil)
+        }
+        let controlRects = try required.map(toolbarRect)
+        let centers = controlRects.map(\.midY)
+        #expect(try #require(centers.max()) - #require(centers.min()) <= 4,
+                "Folder, list, editing and search controls must share one native toolbar row.")
+        for control in controlRects {
+            #expect(control.minY >= window.contentLayoutRect.maxY)
+            #expect(control.minX >= 0 && control.maxX <= width,
+                    "Every primary control must fit, including at the 720-point minimum width.")
+        }
+        let widths = PaneWidths(available: width)
+        let notesStart = widths.notebooks + PaneWidths.divider
+        let notesEnd = notesStart + widths.notes
+        let title = try toolbarRect("note-list-title")
+        #expect(title.minX >= notesStart && title.maxX <= notesEnd)
+        #expect(try toolbarRect("note-new").maxX <= notesEnd + 8,
+                "New note belongs above the note-list column, not above the editor.")
+        #expect(try toolbarRect("note-formatting").minX >= notesEnd)
+        #expect(abs(try toolbarRect("library-search").maxX - (width - 8)) <= 8,
+                "Search and sharing must remain at the right edge of the toolbar.")
+        let searchFields = descendants(frame).compactMap { $0 as? NSTextField }
+            .filter { $0.placeholderString == "Search" }
+        #expect(searchFields.isEmpty == (widths.document < 560),
+                "Narrow windows must show the search button instead of a clipped search field.")
         let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
         frame.cacheDisplay(in: frame.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
-        try png.write(to: package.appendingPathComponent("dist/Deltos-titlebar-\(theme.rawValue.lowercased())-preview.png"))
+        try png.write(to: package.appendingPathComponent("dist/Ceralto-toolbar-\(theme.rawValue.lowercased())-\(Int(width))-preview.png"))
+        for key in ["showNotebookPane", "showNoteListPane"] {
+            defaults.set(false, forKey: key)
+            try await Task.sleep(for: .milliseconds(150))
+            host.layoutSubtreeIfNeeded()
+            for identifier in ["sidebar-options", "note-new", "note-formatting", "note-export", "library-search"] {
+                let control = try toolbarRect(identifier)
+                #expect(control.minX >= 0 && control.maxX <= width)
+            }
+            #expect(store.library.notes == notes)
+        }
     }
 
     @Test func nestedNotebookSidebarRendersAlongsideScopedNotesWithoutChangingLibrary() async throws {

@@ -24,6 +24,18 @@ struct ContentView: View {
     @ViewState private var collapsedBranches: Set<String> = []
     @ViewState private var collapsedNotebookBranches: Set<String> = []
     @FocusState private var searchFocused: Bool
+    @ViewState private var windowWidth = 1240.0
+    @AppStorage("notebookPaneWidth") private var notebookWidth = 220.0
+    @AppStorage("noteListPaneWidth") private var noteWidth = 250.0
+
+    private var paneWidths: PaneWidths {
+        PaneWidths(available: windowWidth, notebooks: notebookWidth, notes: noteWidth,
+                   showNotebooks: showNotebooks, showNotes: showNotes)
+    }
+
+    private var showsNotebookButton: Bool {
+        !showNotebooks || paneWidths.notebooks >= 190
+    }
 
     private var notebookLayout: some View {
         NotebookLayout(showNotebooks: showNotebooks, showNotes: showNotes) {
@@ -62,7 +74,70 @@ struct ContentView: View {
         .background(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
         .foregroundStyle(palette?.foregroundColor ?? Color.primary)
-        .navigationTitle("Deltos")
+        .navigationTitle("Ceralto")
+        .background {
+            GeometryReader { geometry in
+                Color.clear
+                    .onAppear { windowWidth = geometry.size.width }
+                    .onChange(of: geometry.size.width) { _, width in windowWidth = width }
+            }
+        }
+        .toolbar {
+            if showsNotebookButton {
+                if showNotebooks {
+                    ToolbarItem(id: "window-controls-spacing", placement: .navigation) {
+                        Color.clear.frame(width: max(1, paneWidths.notebooks - 184), height: 1)
+                    }
+                    .withoutSharedBackground
+                }
+                ToolbarItem(id: "notebook-new", placement: .navigation) {
+                    Button { store.notebookDraft = NotebookDraft() } label: { Image(systemName: "folder.badge.plus") }
+                        .help("New notebook").accessibilityLabel("New notebook").disabled(!store.isLoaded)
+                }
+            }
+            ToolbarItem(id: "sidebar-options", placement: .navigation) {
+                Menu {
+                    if !showsNotebookButton {
+                        Button("New Notebook") { store.notebookDraft = NotebookDraft() }
+                            .disabled(!store.isLoaded)
+                        Divider()
+                    }
+                    Button("Toggle Notebooks") { showNotebooks.toggle() }
+                    Button("Toggle Note List") { showNotes.toggle() }
+                } label: { Image(systemName: "sidebar.left") }
+                    .menuIndicator(.hidden).accessibilityLabel("Sidebar options")
+            }
+            if showNotes {
+                if showsNotebookButton && showNotebooks {
+                    ToolbarItem(id: "notebook-spacing", placement: .navigation) {
+                        Color.clear.frame(width: 20, height: 1)
+                    }
+                    .withoutSharedBackground
+                }
+                ToolbarItem(id: "note-list-title", placement: .navigation) {
+                    noteListTitle.frame(width: max(50, paneWidths.notes - 100), alignment: .leading)
+                }
+                .withoutSharedBackground
+                ToolbarItem(id: "note-list-options", placement: .navigation) {
+                    noteListOptions
+                }
+            }
+            ToolbarItem(id: "note-new", placement: .navigation) {
+                Button(action: store.createNote) { Image(systemName: "square.and.pencil") }
+                    .help("New Note (Command-N)").accessibilityLabel("New note").disabled(!store.isLoaded)
+            }
+            if showNotebooks && showNotes && !showsNotebookButton {
+                ToolbarItem(id: "editor-column-spacing", placement: .navigation) {
+                    Color.clear.frame(width: 16, height: 1)
+                }
+                .withoutSharedBackground
+            }
+            if store.selectedNote == nil {
+                ToolbarItem(id: "library-search", placement: .primaryAction) {
+                    LibrarySearchField(focused: $searchFocused).frame(width: 220)
+                }
+            }
+        }
         .onChange(of: store.scope) { _, _ in
             store.reconcileSelection()
             revealSelectedNotebook()
@@ -106,7 +181,7 @@ struct ContentView: View {
         }) {
             CommandPalette(onSelect: { pendingCommand = $0 }).environmentObject(store)
         }
-        .alert("Deltos", isPresented: Binding(
+        .alert("Ceralto", isPresented: Binding(
             get: { store.importSummary != nil },
             set: { if !$0 { store.importSummary = nil } }
         )) {
@@ -117,7 +192,7 @@ struct ContentView: View {
         } message: {
             Text(store.importSummary ?? "")
         }
-        .alert("Deltos needs your attention", isPresented: Binding(
+        .alert("Ceralto needs your attention", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
         )) {
@@ -180,7 +255,7 @@ struct ContentView: View {
                     if let note = store.library.notes.first(where: { $0.id == id }) {
                         let active = store.selectedNoteID == id
                         NoteEditor(note: note, onPermanentDelete: { noteToDelete = note }, isActive: active,
-                                   searchFocus: $searchFocused)
+                                   searchFocus: $searchFocused, toolbarWidth: paneWidths.document)
                             .opacity(active ? 1 : 0)
                             .allowsHitTesting(active)
                             .accessibilityHidden(!active)
@@ -189,28 +264,19 @@ struct ContentView: View {
                     }
                 }
                 if store.selectedNote == nil {
-                    VStack(spacing: 0) {
-                    HStack {
-                        Spacer()
-                        LibrarySearchField(focused: $searchFocused).frame(maxWidth: 240)
-                    }
-                    .padding(.horizontal, 16).frame(height: 52)
-                    .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
-                    Divider()
                     ContentUnavailableView {
                         Label(store.isLoaded ? "Room for a new thought" : "Your library is unavailable",
                               systemImage: store.isLoaded ? "square.and.pencil" : "externaldrive.badge.exclamationmark")
                     } description: {
                         Text(store.isLoaded
                              ? "Select a note, or create something new."
-                             : "Retry opening your library. Deltos will not overwrite a file it cannot read.")
+                             : "Retry opening your library. Ceralto will not overwrite a file it cannot read.")
                     } actions: {
                         if store.isLoaded {
                             Button("New Note", action: store.createNote)
                         } else {
                             Button("Retry Opening Library", action: store.load)
                         }
-                    }
                     }
                     .zIndex(2)
                 }
@@ -256,19 +322,6 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Spacer()
-                Button { store.notebookDraft = NotebookDraft() } label: { Image(systemName: "folder.badge.plus") }
-                    .help("New notebook").accessibilityLabel("New notebook").disabled(!store.isLoaded)
-                Menu {
-                    Button("Toggle Notebooks") { showNotebooks.toggle() }
-                    Button("Toggle Note List") { showNotes.toggle() }
-                } label: { Image(systemName: "sidebar.left") }
-                    .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Sidebar options")
-            }
-            .buttonStyle(.borderless)
-            .padding(.horizontal, 16).frame(height: 52)
-
             List(selection: $store.mainFolderScope) {
                 Section("On My Mac") {
                     scopeRow("All Notes", icon: "tray.full", scope: .all)
@@ -477,7 +530,7 @@ struct ContentView: View {
                         Button(note.isPinned ? "Unpin Note" : "Pin Note") {
                             store.update(note.id) { $0.isPinned.toggle() }
                         }
-                        Button("Export Markdown...") { store.exportMarkdown(note) }
+                        Button("Export Note...") { store.exportMarkdown(note) }
                         Button("Move to Trash", role: .destructive) { store.trash(note.id) }
                     }
                 }
@@ -497,15 +550,16 @@ struct ContentView: View {
         .padding(.vertical, 3)
     }
 
-    private var noteListHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
+    private var noteListTitle: some View {
+        VStack(alignment: .leading, spacing: 2) {
                 Text(store.navigationFolder?.name ?? store.scopeTitle).font(.headline).lineLimit(1)
                 Text("\(store.outlineNotes.count) \(store.outlineNotes.count == 1 ? "note" : "notes")")
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Menu {
+        }
+    }
+
+    private var noteListOptions: some View {
+        Menu {
                 Button(gallery ? "View as List" : "View as Gallery") { gallery.toggle() }
                 Button("Search Notes") { searchFocused = true }
                 Button("Search Help") { showingSearchHelp = true }
@@ -524,26 +578,15 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
-            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
             .help("Note list options")
             .accessibilityLabel("Note list options")
-            Button(action: store.createNote) {
-                Image(systemName: "square.and.pencil").font(.title3)
-            }
-            .buttonStyle(.borderless)
-            .help("New Note (Command-N)")
-            .accessibilityLabel("New note")
-            .disabled(!store.isLoaded)
-        }
-        .padding(.horizontal, 12).frame(height: 52)
-        .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
         .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440).folioAppearance() }
     }
 
     private var noteList: some View {
         VStack(spacing: 0) {
-            noteListHeader
             if let folder = store.activeSmartFolder {
                 HStack(alignment: .top) {
                     Text(folder.query).font(.caption.monospaced()).lineLimit(3).help(folder.query)

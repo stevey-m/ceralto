@@ -16,7 +16,7 @@ final class SettingsWindowController: NSWindowController, ObservableObject {
             // AppKit owns resize constraints; SwiftUI must not reset them after layout.
             host.sizingOptions = []
             window.contentViewController = host
-            window.title = "Deltos Settings"
+            window.title = "Ceralto Settings"
             window.identifier = NSUserInterfaceItemIdentifier("deltos-settings")
             window.isReleasedWhenClosed = false
             window.contentMinSize = NSSize(width: 720, height: 480)

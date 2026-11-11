@@ -38,7 +38,7 @@ public struct ThemePack: Codable, Equatable, Sendable {
         guard data.count <= maximumBytes else { throw NoteWorkflowError("Theme packs are limited to 32 KiB.") }
         let keys: Set<String> = ["version", "id", "name", "isDark", "background", "sidebar", "selection", "foreground", "accent", "muted", "code"]
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], Set(object.keys) == keys else {
-            throw NoteWorkflowError("Choose a Deltos JSON theme pack, not a Joplin plugin, CSS file or script.")
+            throw NoteWorkflowError("Choose a Ceralto JSON theme pack, not a Joplin plugin, CSS file or script.")
         }
         let result = try JSONDecoder().decode(ThemePack.self, from: data)
         try result.validate()
@@ -48,7 +48,7 @@ public struct ThemePack: Codable, Equatable, Sendable {
     public static func load(from url: URL) throws -> ThemePack {
         let info = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard info.isRegularFile == true, info.isSymbolicLink != true, let size = info.fileSize, size <= maximumBytes else {
-            throw NoteWorkflowError("Choose a regular Deltos theme file no larger than 32 KiB.")
+            throw NoteWorkflowError("Choose a regular Ceralto theme file no larger than 32 KiB.")
         }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }

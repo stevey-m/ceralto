@@ -38,16 +38,16 @@ public struct TemplateChoice: Identifiable, Equatable, Sendable {
     }
 
     public static let builtInPackID = "dev.folio.builtin"
-    public static let daily = TemplateChoice(packID: builtInPackID, packName: "Deltos", template:
+    public static let daily = TemplateChoice(packID: builtInPackID, packName: "Ceralto", template:
         NoteTemplate(id: "daily", name: "Daily page", title: "{{date}}",
                      body: "# {{date}}\n\n## Notes\n\n\n## Tasks\n\n", tags: ["daily"]))
 
     public static let builtIn: [TemplateChoice] = [
         daily,
-        TemplateChoice(packID: "dev.folio.builtin", packName: "Deltos", template:
+        TemplateChoice(packID: "dev.folio.builtin", packName: "Ceralto", template:
             NoteTemplate(id: "meeting", name: "Meeting notes", title: "Meeting - {{date}}",
                          body: "# Meeting\n\n## Agenda\n\n\n## Notes\n\n\n## Actions\n\n", tags: ["meetings"])),
-        TemplateChoice(packID: "dev.folio.builtin", packName: "Deltos", template:
+        TemplateChoice(packID: "dev.folio.builtin", packName: "Ceralto", template:
             NoteTemplate(id: "project", name: "Project brief", title: "New project",
                          body: "# Project\n\n## Goal\n\n\n## Next steps\n\n- [ ] Define the next step\n", tags: ["projects"]))
     ]
@@ -81,7 +81,7 @@ public enum NoteExtensions {
                   !pack.templates.isEmpty, Set(pack.templates.map(\.id)).count == pack.templates.count,
                   pack.templates.allSatisfy({ validID($0.id) && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
                   !result.contains(where: { $0.id == pack.id }) else {
-                throw JoplinImportError.invalid("Invalid or unsupported extension: \(folder.lastPathComponent). Deltos supports template API version 1.")
+                throw JoplinImportError.invalid("Invalid or unsupported extension: \(folder.lastPathComponent). Ceralto supports template API version 1.")
             }
             result.append(pack)
         }

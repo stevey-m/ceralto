@@ -890,7 +890,7 @@ final class PageTextView: DocumentTextView {
                 } else {
                     throw JoplinImportError.invalid("The clipboard image could not be decoded. Copy it again or attach the original file.")
                 }
-                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Deltos-paste-\(UUID().uuidString)")
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Ceralto-paste-\(UUID().uuidString)")
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
                 defer {
                     do { try FileManager.default.removeItem(at: folder) }
@@ -915,7 +915,7 @@ final class PageTextView: DocumentTextView {
         var newResources = resources
         if !content.images.isEmpty {
             guard let onImportFiles else { throw NoteWorkflowError("Image attachment insertion is unavailable.") }
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Deltos-rich-paste-\(UUID().uuidString)")
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Ceralto-rich-paste-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
             defer {
                 do { try FileManager.default.removeItem(at: folder) }
@@ -1113,7 +1113,7 @@ struct NoteFormattingControls: View {
                 Button("Add Link...") { addingLink = true }
                 Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
             } label: { Image(systemName: "textformat") }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuIndicator(.hidden).fixedSize()
             .help("Text formatting").accessibilityLabel("Text formatting")
             Button { actions.setStyle(actions.style == .checklist ? .paragraph : .checklist) } label: {
                 Image(systemName: "checklist")

@@ -646,7 +646,7 @@ final class NotesStore: ObservableObject {
             return
         }
         guard let window = NSApp.keyWindow ?? NSApp.mainWindow else {
-            errorMessage = "Open the Deltos note window before printing."
+            errorMessage = "Open the Ceralto note window before printing."
             return
         }
         do {
@@ -1048,7 +1048,7 @@ final class NotesStore: ObservableObject {
             let leaf = source.split(separator: "/").last.map(String.init) ?? source
             return renameNotebookBranch(source, to: path + "/" + leaf)
         }
-        errorMessage = "Drag a Deltos note or one notebook branch onto a notebook."
+        errorMessage = "Drag a Ceralto note or one notebook branch onto a notebook."
         return false
     }
 
@@ -1212,7 +1212,7 @@ final class NotesStore: ObservableObject {
         #if os(macOS)
         syncManager.setConnected(true, newFolder: changedFolder)
         #endif
-        syncMessage = "Folder connected. Choose Sync Now for local snapshot exchange. Cloud upload and delivery are managed by your provider and are not verified by Deltos."
+        syncMessage = "Folder connected. Choose Sync Now for local snapshot exchange. Cloud upload and delivery are managed by your provider and are not verified by Ceralto."
     }
 
     func disconnectSyncFolder() {
@@ -1245,7 +1245,7 @@ final class NotesStore: ObservableObject {
             #if os(macOS)
             syncManager.setConnected(true)
             #endif
-            syncMessage = "Folder connection restored. Local notes are available offline; cloud upload and delivery are not verified by Deltos."
+            syncMessage = "Folder connection restored. Local notes are available offline; cloud upload and delivery are not verified by Ceralto."
         } catch {
             syncMessage = "Shared folder needs reconnection: \(error.localizedDescription)"
         }
@@ -1274,7 +1274,7 @@ final class NotesStore: ObservableObject {
             throw SyncFailure.deferred("Finish importing and open the library before syncing.")
         }
         guard !syncDiskChangedExternally else {
-            throw SyncFailure.deferred("The library file changed outside Deltos during the last exchange. Preserve both versions, then restart Deltos before syncing again.")
+            throw SyncFailure.deferred("The library file changed outside Ceralto during the last exchange. Preserve both versions, then restart Ceralto before syncing again.")
         }
         guard let folder = syncFolder else { throw CancellationError() }
         let snapshot = library
@@ -1312,7 +1312,7 @@ final class NotesStore: ObservableObject {
             }
             guard let diskCurrent = try? Data(contentsOf: storage.url), diskCurrent == diskSnapshot else {
                 syncDiskChangedExternally = true
-                throw SyncFailure.deferred("The local library file changed or became unavailable during sync. No notes were replaced. Preserve both versions and restart Deltos before syncing again.")
+                throw SyncFailure.deferred("The local library file changed or became unavailable during sync. No notes were replaced. Preserve both versions and restart Ceralto before syncing again.")
             }
             try storage.save(result.library)
             library = result.library
@@ -1329,7 +1329,7 @@ final class NotesStore: ObservableObject {
     func folderExchangeMessage(at time: String, conflicts: Int) -> String {
         let operation = isReadOnly ? "Downloaded snapshots read locally" : "Snapshot exchange completed locally"
         let conflictMessage = conflicts == 0 ? "" : " \(conflicts) conflicts preserved; see #sync-conflict."
-        return "\(operation) at \(time).\(conflictMessage) Cloud upload and delivery are not verified by Deltos."
+        return "\(operation) at \(time).\(conflictMessage) Cloud upload and delivery are not verified by Ceralto."
     }
 
     func validateCloudFolder(_ folder: URL) throws {
@@ -1340,7 +1340,7 @@ final class NotesStore: ObservableObject {
         let root = folder.standardizedFileURL.resolvingSymlinksInPath().path
         let local = storage.url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath().path
         guard root != "/", root != local, !root.hasPrefix(local + "/"), !local.hasPrefix(root + "/") else {
-            throw JoplinImportError.invalid("Choose a dedicated cloud folder outside Deltos's local library storage, not that storage or one of its parent folders.")
+            throw JoplinImportError.invalid("Choose a dedicated cloud folder outside Ceralto's local library storage, not that storage or one of its parent folders.")
         }
     }
 
@@ -1352,7 +1352,7 @@ final class NotesStore: ObservableObject {
         let accessing = parent.startAccessingSecurityScopedResource()
         defer { if accessing { parent.stopAccessingSecurityScopedResource() } }
         try validateCloudFolder(parent)
-        let name = "Deltos Backup " + date.ISO8601Format().replacingOccurrences(of: ":", with: "-") + " " + UUID().uuidString
+        let name = "Ceralto Backup " + date.ISO8601Format().replacingOccurrences(of: ":", with: "-") + " " + UUID().uuidString
         let destination = parent.appendingPathComponent(name, isDirectory: true)
         var coordinationError: NSError?
         var result: Result<Void, Error>?
@@ -1388,13 +1388,13 @@ final class NotesStore: ObservableObject {
         if exporting {
             let panel = NSSavePanel()
             panel.title = "Save Encrypted Complete Backup"
-            panel.nameFieldStringValue = "Deltos Backup " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-") + ".deltosbackup"
+            panel.nameFieldStringValue = "Ceralto Backup " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-") + ".deltosbackup"
             panel.message = "Manual password-encrypted archive of notes, history and original attachments. Existing files are never overwritten. Your live library and scheduled backups remain unencrypted."
             guard panel.runModal() == .OK, let selected = panel.url else { return }
             url = selected
         } else {
             let panel = NSOpenPanel()
-            panel.title = "Import Encrypted Deltos Backup"
+            panel.title = "Import Encrypted Ceralto Backup"
             panel.message = "Choose a .deltosbackup archive. Notes are added as copies, not replacements."
             panel.canChooseDirectories = false
             panel.allowsMultipleSelection = false
@@ -1418,7 +1418,7 @@ final class NotesStore: ObservableObject {
                     try await Task.detached(priority: .userInitiated) {
                         try EncryptedBackup.export(snapshot, to: url, password: password)
                     }.value
-                    importSummary = "Encrypted complete backup saved. Deltos did not store your password. Cloud upload is not verified."
+                    importSummary = "Encrypted complete backup saved. Ceralto did not store your password. Cloud upload is not verified."
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 } else {
                     let result = try await Task.detached(priority: .userInitiated) {
@@ -1450,7 +1450,7 @@ final class NotesStore: ObservableObject {
     func chooseSyncFolder() {
         let panel = NSOpenPanel()
         panel.title = "Connect a Cloud Folder"
-        panel.message = "Choose a dedicated, locally downloaded folder in Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Deltos exchanges snapshots manually; the provider handles upload. Start on one Mac and wait for delivery before connecting the next. Provider delivery is experimental and unverified."
+        panel.message = "Choose a dedicated, locally downloaded folder in Dropbox, OneDrive, Google Drive, iCloud Drive or another provider's Mac app. Ceralto exchanges snapshots manually; the provider handles upload. Start on one Mac and wait for delivery before connecting the next. Provider delivery is experimental and unverified."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
@@ -1467,7 +1467,7 @@ final class NotesStore: ObservableObject {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let parent = panel.url else { return }
-        let name = "Deltos Open Export " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
+        let name = "Ceralto Open Export " + Date().ISO8601Format().replacingOccurrences(of: ":", with: "-")
         do {
             let folder = parent.appendingPathComponent(name, isDirectory: true)
             try exportVault(to: folder)
@@ -1488,8 +1488,8 @@ final class NotesStore: ObservableObject {
 
     func exportBackup() {
         let panel = NSOpenPanel()
-        panel.title = "Choose Where to Save a Complete Deltos Backup"
-        panel.message = "Choose a local folder or a downloaded Dropbox, OneDrive, Google Drive or iCloud folder. A new dated copy includes notes, history and original attachments. This is a manual backup, not scheduled backup or live sync. Deltos cannot confirm cloud upload."
+        panel.title = "Choose Where to Save a Complete Ceralto Backup"
+        panel.message = "Choose a local folder or a downloaded Dropbox, OneDrive, Google Drive or iCloud folder. A new dated copy includes notes, history and original attachments. This is a manual backup, not scheduled backup or live sync. Ceralto cannot confirm cloud upload."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
@@ -1503,7 +1503,7 @@ final class NotesStore: ObservableObject {
 
     func importBackup() {
         let panel = NSOpenPanel()
-        panel.title = "Import a Deltos Backup"
+        panel.title = "Import a Ceralto Backup"
         panel.message = "Select a backup folder containing library.json. Its notes will be added without replacing current notes."
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -1518,7 +1518,7 @@ final class NotesStore: ObservableObject {
         guard isLoaded, !isImportingJoplin, let notebookID = currentNotebookID else { return }
         let panel = NSOpenPanel()
         panel.title = "Import Markdown or HTML Files"
-        panel.message = "Linked local images and attachments in the same folder are copied into Deltos. For shared parent resources, use Import Folder."
+        panel.message = "Linked local images and attachments in the same folder are copied into Ceralto. For shared parent resources, use Import Folder."
         panel.allowedContentTypes = [.plainText, .html, UTType(filenameExtension: "md") ?? .plainText,
                                      UTType(filenameExtension: "markdown") ?? .plainText]
         panel.allowsMultipleSelection = true
@@ -1534,7 +1534,7 @@ final class NotesStore: ObservableObject {
                     try DocumentFileImport.prepare(files: files, notebookID: notebookID, importsDirectory: importsDirectory)
                 }.value
                 try commitJoplinImport(result)
-                importSummary = "Imported \(result.notes.count) documents and copied their local resources into Deltos."
+                importSummary = "Imported \(result.notes.count) documents and copied their local resources into Ceralto."
             } catch {
                 errorMessage = "Import failed; no notes were imported: \(error.localizedDescription)"
             }
@@ -1560,7 +1560,7 @@ final class NotesStore: ObservableObject {
         isImportingJoplin = true
         let panel = NSOpenPanel()
         panel.title = "Import Joplin JEX Archive"
-        panel.message = "Export JEX from Joplin after downloading attachments and decrypting/unlocking notes. Existing Deltos notes are preserved."
+        panel.message = "Export JEX from Joplin after downloading attachments and decrypting/unlocking notes. Existing Ceralto notes are preserved."
         panel.allowedContentTypes = [UTType(filenameExtension: "jex") ?? .data]
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -1588,7 +1588,7 @@ final class NotesStore: ObservableObject {
         guard isLoaded, !isImportingJoplin else { return }
         let panel = NSOpenPanel()
         panel.title = includeHTML ? "Import Markdown or HTML Folder" : "Import Joplin Markdown + Front Matter Folder"
-        panel.message = "Subfolders become notebooks. Original images and attachments are copied to Deltos without resizing."
+        panel.message = "Subfolders become notebooks. Original images and attachments are copied to Ceralto without resizing."
         panel.prompt = "Import Folder"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -1603,7 +1603,7 @@ final class NotesStore: ObservableObject {
                     try JoplinImport.prepare(folder: folder, importsDirectory: importsDirectory, includeHTML: includeHTML)
                 }.value
                 try commitJoplinImport(result)
-                importSummary = "Imported \(result.notes.count) notes into \(result.notebooks.count) notebooks. A copy of the export, including attachments, is stored in Deltos's Imports folder."
+                importSummary = "Imported \(result.notes.count) notes into \(result.notebooks.count) notebooks. A copy of the export, including attachments, is stored in Ceralto's Imports folder."
             } catch {
                 errorMessage = "Folder import failed; no notes were imported: \(error.localizedDescription)"
             }

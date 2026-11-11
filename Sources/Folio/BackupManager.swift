@@ -201,7 +201,7 @@ final class BackupManager: ObservableObject {
         folder = nil
         folderName = nil
         backups = []
-        message = "Settings reset. Existing backups were not deleted; use Import Deltos Backup to recover older sets."
+        message = "Settings reset. Existing backups were not deleted; use Import Ceralto Backup to recover older sets."
     }
 }
 
@@ -216,7 +216,7 @@ struct BackupReliabilitySettings: View {
                 .help(manager.folderPath ?? "Choose a separate backup folder")
             LabeledContent("Last complete backup", value: manager.schedule.lastSuccess?.formatted() ?? "Not yet backed up")
             Button("Choose Backup Folder…", action: manager.chooseFolder).disabled(manager.busy)
-            Toggle("Back up while Deltos is open (unencrypted)", isOn: Binding(
+            Toggle("Back up while Ceralto is open (unencrypted)", isOn: Binding(
                 get: { manager.schedule.enabled }, set: { manager.configure(enabled: $0) }
             )).disabled(!manager.available || manager.folderName == nil || manager.busy)
             Picker("Interval", selection: Binding(get: { manager.schedule.hours },
@@ -243,7 +243,7 @@ struct BackupReliabilitySettings: View {
             Button("Reset Settings", role: .destructive, action: manager.resetSettings)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Scheduling is disabled and the saved configuration discarded. No backups are deleted. Older backup sets remain recoverable with Import Deltos Backup but will no longer be managed by this schedule.")
+            Text("Scheduling is disabled and the saved configuration discarded. No backups are deleted. Older backup sets remain recoverable with Import Ceralto Backup but will no longer be managed by this schedule.")
         }
         Section("Verified backup browser") {
             Button("Refresh & Verify Backups") { Task { await manager.refresh() } }.disabled(manager.busy)

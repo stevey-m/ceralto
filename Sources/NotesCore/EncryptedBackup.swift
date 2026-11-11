@@ -103,7 +103,7 @@ public enum EncryptedBackup {
         let data = try readBounded(archive, limit: maximumPlaintextBytes + headerSize + 28)
         guard data.count == size, data.prefix(8) == magic,
               data[24..<28].reduce(UInt32(0), { ($0 << 8) | UInt32($1) }) == rounds else {
-            throw failure("This is not a supported Deltos encrypted backup.")
+            throw failure("This is not a supported Ceralto encrypted backup.")
         }
         let header = Data(data.prefix(headerSize))
         let salt = Data(data[8..<24])

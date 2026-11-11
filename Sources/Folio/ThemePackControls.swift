@@ -56,7 +56,7 @@ struct ThemePackControls: View {
             Button("Export Theme Pack...") { exportTheme() }
                 .disabled(theme != FolioTheme.custom.rawValue || saved == nil)
         }
-        Text("Import a .deltostheme or JSON colour pack. These native palettes apply across Deltos; they do not install Joplin .jpl plugins, CodeMirror themes or arbitrary CSS. Native macOS controls use the pack's light or dark appearance.")
+        Text("Import a .deltostheme or JSON colour pack. These native palettes apply across Ceralto; they do not install Joplin .jpl plugins, CodeMirror themes or arbitrary CSS. Native macOS controls use the pack's light or dark appearance.")
             .font(.caption).foregroundStyle(.secondary)
         if theme == FolioTheme.custom.rawValue, saved == nil {
             Label("The saved theme pack cannot be read. Its data is preserved; choose a built-in appearance or import a valid pack.", systemImage: "exclamationmark.triangle")
@@ -69,8 +69,8 @@ struct ThemePackControls: View {
 
     private func importTheme() {
         let panel = NSOpenPanel()
-        panel.title = "Import Deltos Theme"
-        panel.message = "Choose a Deltos JSON colour pack, not a Joplin plugin or CSS file. The current theme is unchanged if import fails."
+        panel.title = "Import Ceralto Theme"
+        panel.message = "Choose a Ceralto JSON colour pack, not a Joplin plugin or CSS file. The current theme is unchanged if import fails."
         panel.allowedContentTypes = [.json, .data]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -83,7 +83,7 @@ struct ThemePackControls: View {
     private func exportTheme() {
         guard let saved else { error = "Choose a valid theme pack before exporting."; return }
         let panel = NSSavePanel()
-        panel.title = "Export Deltos Theme"
+        panel.title = "Export Ceralto Theme"
         panel.nameFieldStringValue = saved.id + ".deltostheme"
         panel.allowedContentTypes = [.data]
         guard panel.runModal() == .OK, let url = panel.url else { return }

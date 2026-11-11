@@ -4,13 +4,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 swift build --configuration release
 BIN_DIR="$(swift build --configuration release --show-bin-path)"
-APP="$PWD/dist/Deltos.app"
+APP="$PWD/dist/Ceralto.app"
 mkdir -p "$PWD/dist"
 STAGING="$(mktemp -d "$PWD/dist/app-staging.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
-BUNDLE="$STAGING/Deltos.app"
+BUNDLE="$STAGING/Ceralto.app"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
-cp "$BIN_DIR/Folio" "$BUNDLE/Contents/MacOS/Deltos"
+cp "$BIN_DIR/Folio" "$BUNDLE/Contents/MacOS/Ceralto"
 cp Support/Info.plist "$BUNDLE/Contents/Info.plist"
 install -m 644 .build/checkouts/Yams/LICENSE "$BUNDLE/Contents/Resources/Yams-LICENSE.txt"
 install -m 644 .build/checkouts/SwiftSoup/LICENSE "$BUNDLE/Contents/Resources/SwiftSoup-LICENSE.txt"

@@ -42,7 +42,7 @@ extension NotesStore {
         guard panel.runModal() == .OK, let parent = panel.url else { return }
         let accessing = parent.startAccessingSecurityScopedResource()
         defer { if accessing { parent.stopAccessingSecurityScopedResource() } }
-        let folder = parent.appendingPathComponent("Deltos Selected Notes " + UUID().uuidString, isDirectory: true)
+        let folder = parent.appendingPathComponent("Ceralto Selected Notes " + UUID().uuidString, isDirectory: true)
         do {
             try exportSelectedNotes(ids, to: folder)
             NSWorkspace.shared.activateFileViewerSelecting([folder])

@@ -8,7 +8,7 @@ enum BackupPasswordPrompt {
         let alert = NSAlert()
         alert.messageText = exporting ? "Encrypt Complete Backup" : "Unlock Encrypted Backup"
         alert.informativeText = exporting
-            ? "Use at least 12 characters. Deltos never stores this password and cannot recover it. Keep it somewhere safe, separately from the backup."
+            ? "Use at least 12 characters. Ceralto never stores this password and cannot recover it. Keep it somewhere safe, separately from the backup."
             : "Enter this backup's password. Import adds copies; it does not replace existing notes. The restored notes and attachments will be unencrypted in your local library."
         alert.addButton(withTitle: exporting ? "Encrypt Backup" : "Unlock & Import")
         alert.addButton(withTitle: "Cancel")
@@ -27,7 +27,7 @@ enum BackupPasswordPrompt {
         while alert.runModal() == .alertFirstButtonReturn {
             let value = password.stringValue
             if value.isEmpty || value.utf8.count > 1_024 || (exporting && value.count < 12) {
-                alert.informativeText = "Enter \(exporting ? "at least 12 characters and " : "")no more than 1,024 UTF-8 bytes. Deltos never stores this password."
+                alert.informativeText = "Enter \(exporting ? "at least 12 characters and " : "")no more than 1,024 UTF-8 bytes. Ceralto never stores this password."
             } else if exporting && value != confirmation.stringValue {
                 alert.informativeText = "The passwords do not match. Enter the same password in both fields."
             } else {

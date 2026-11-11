@@ -4,8 +4,8 @@
 
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
-The project is now **Ceralto**. Existing installers and app menus still use
-**Deltos**, so the instructions below retain those names where applicable.
+The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
+their original names; the instructions below describe Ceralto 0.23.0.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -15,7 +15,7 @@ The project is now **Ceralto**. Existing installers and app menus still use
 **A quiet place for everything worth keeping.**
 
 Native Mac writing. An offline iPad reader. Readable Markdown. MIT licensed.
-Deltos aims for Apple Notes' simplicity, Joplin's notebook management and
+Ceralto aims for Apple Notes' simplicity, Joplin's notebook management and
 Obsidian's ownership and extensibility, without turning your notebook into
 a dashboard.
 
@@ -27,10 +27,15 @@ Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.22.1 is a development release, not a finished replacement for your library.**
+**0.23.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
+
+The Mac workspace has one native toolbar: notebook controls, the note-list
+title and options, writing tools, export and search share the same row.
+Tabs appear below it only when multiple notes are open (unless enabled in
+Settings). Narrow windows use a search button instead of clipping the field.
 
 The cloud-folder exchange is **experimental**. Its merge, conflict,
 deletion and offline-resource behaviour is covered by local filesystem tests;
@@ -41,12 +46,12 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/ceralto/releases).
-Open `Deltos-0.22.1-arm64.dmg`, drag **Deltos 0.22.1** to **Applications**, eject the
+Open `Ceralto-0.23.0-arm64.dmg`, drag **Ceralto 0.23.0** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
 If building locally, the installers are in `dist/`.
-Quit every running Deltos copy before upgrading. Existing libraries
+Quit every running Ceralto, Deltos or Folio copy before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
 older releases cannot read the new native-composition format marker.
 
@@ -61,15 +66,17 @@ preference keys, extension IDs, backup formats and `Folio Sync` cloud directory
 remain unchanged for compatibility. The public source repository is now
 [`stevey-m/ceralto`](https://github.com/stevey-m/ceralto). Existing versions use
 `~/Library/Application Support/Folio/`; no manual data move is needed.
-The packaged Mac executable is now named `Deltos`; the source module name
+The `.deltosbackup` and `.deltostheme` extensions and scheduled `Deltos Backups`
+directory are retained deliberately so existing backups and theme packs keep working.
+The packaged Mac executable is now named `Ceralto`; the source module name
 does not determine the name shown for the installed process.
-Quit Folio before launching Deltos and remove the old Folio app from Applications
-only after confirming your notes in Deltos. Never run both against the same
+Quit Deltos or Folio before launching Ceralto. Keep your older app as a recovery
+copy until you confirm your notes in Ceralto. Never run different copies against the same
 library at once.
 
 ## Save or export a note
 
-**Save** keeps the note in Deltos' local library; it does not create a separate
+**Save** keeps the note in Ceralto's local library; it does not create a separate
 document. Choose **File > Export Note...** or the share icon to save a file.
 The save panel now has a **File format** selector: **Markdown (.md)**,
 **HTML (.html)** or **Plain Text (.txt)**. Its filename extension follows your
@@ -134,12 +141,12 @@ insertion but keeps the file available for redo, history and backups.
 
 Compose copy, cut and paste exchange **RTF, RTFD and HTML** with rich-text apps
 such as Apple Notes. Supported content includes bold, italic, underline,
-strikethrough, inline code, safe links (including Deltos note links), basic
+strikethrough, inline code, safe links (including Ceralto note links), basic
 headings, bullet and numbered lists, nested lists, checklists, GFM tables and
 embedded images. RTFD and HTML copies contain the image bytes, not links back to a
-Deltos attachment directory. Pasted images are copied into managed attachments
+Ceralto attachment directory. Pasted images are copied into managed attachments
 before the text is inserted, and the complete insertion supports undo/redo.
-Formatting is normalized to Deltos's font and theme for readable results;
+Formatting is normalized to Ceralto's font and theme for readable results;
 arbitrary fonts, text colours and exact application-specific layouts are not
 retained. RTF heading sizes are interpreted as basic headings, not an exact
 Apple Notes document model.
@@ -150,7 +157,7 @@ non-image attachments. Unsupported content produces an error without replacing
 selected text. Compose includes toolbar actions for ordered and nested lists,
 checklists (click the checkbox marker to toggle), and editable tables. Table
 cells are separated with Tab; Tab moves between cells. HTML clipboard images must be embedded;
-Deltos neither downloads remote images nor follows local image paths supplied
+Ceralto neither downloads remote images nor follows local image paths supplied
 by clipboard HTML. Copy the image itself or attach its original file instead.
 Formatted clipboard payloads and individual images are limited to 32 MiB.
 These standard-format round trips are covered by isolated synthetic pasteboards;
@@ -224,7 +231,7 @@ the visible Close Settings button, Escape and the native close control remain av
 
 **Settings > Appearance** includes **Choose Native Theme Pack**, **Import Theme...**
 and **Export Theme Pack...**. Seven palette equivalents are included: GitHub
-Dark/Light, Nord, One Dark, Solarized Dark/Light and Monokai. Import a Deltos
+Dark/Light, Nord, One Dark, Solarized Dark/Light and Monokai. Import a Ceralto
 `.deltostheme` or JSON colour pack; an invalid import leaves the current theme
 unchanged. See the [format and example](../EXTENSIONS.md#native-theme-packs-020).
 The active pack applies across the Mac workspace, editors and previews.
@@ -262,7 +269,7 @@ shared editor/preview text size (11–28 pt), remembers your choice, and does no
 change the note's content.
 
 - **Start with today.** Open **Today's Note** from the sidebar, Navigate menu,
-  command palette or Command-Shift-D. Deltos reuses today's dated note without
+  command palette or Command-Shift-D. Ceralto reuses today's dated note without
   replacing your words. Choose a notebook path and starter template in
   **Settings > Editor > Daily notes**.
 - **Choose a useful starting page.** The searchable template chooser combines
@@ -278,7 +285,7 @@ change the note's content.
   Duplicate bindings and reserved standard commands are rejected.
 - **Choose your tools.** Settings separates **Built-in Features** from
   **Community Extensions**. Switch Daily notes, Template chooser and Task
-  overview on or off without changing notes. Enable individual Deltos template
+  overview on or off without changing notes. Enable individual Ceralto template
   packs, or disable all community packs. Register extracted Joplin or Obsidian
   folders to inspect their names, versions and declared host requirements.
   **Inspection is not execution:** those plugins cannot run in this release.
@@ -325,7 +332,7 @@ change the note's content.
   Source Editor** or **File > New Markdown Source Note**. Switching changes
   only the editing mode, not the body.
 - **Capture without organising.** Quick Capture is a separate floating window,
-  available from the menu bar, File menu or Command-Shift-Space while Deltos is
+  available from the menu bar, File menu or Command-Shift-Space while Ceralto is
   active. Save to Inbox with Command-Return. Unsubmitted drafts remain locally
   when the window closes; failed saves keep the draft. This is not a global
   keyboard hook.
@@ -370,7 +377,7 @@ change the note's content.
   The iPad reader's sidebar also offers appearance and accent choices.
 
 Notes save atomically to the local library. Save failures are visible; changes
-stay in memory and Deltos warns before quitting. History defaults to 20
+stay in memory and Ceralto warns before quitting. History defaults to 20
 title/body/format checkpoints, at most once per five minutes of editing.
 In **Settings > Files & Backups > Note history**, choose 5, 20, 50 or 100
 checkpoints and a 1, 5, 15 or 30 minute capture interval, or pause capture.
@@ -406,7 +413,7 @@ deletion. For bulk note operations, see [Sort and select multiple notes](#sort-a
 ## Live Markdown folders
 
 Choose **File > Open Live Markdown Folder** on Mac. This opens a separate
-native window, not a conversion of your current Deltos library. The normal
+native window, not a conversion of your current Ceralto library. The normal
 library and its notes stay untouched. Open an ordinary folder or Obsidian
 vault containing `.md`/`.markdown` files, **not Joplin's internal sync folder**.
 Joplin's OneDrive sync storage is not an ordinary Markdown vault; continue
@@ -415,7 +422,7 @@ using a Joplin Markdown export to exchange those notes.
 The tree reflects actual directories, including empty folders. Select a note
 to edit its UTF-8 source in Source, Split or Preview mode. **Save** (or your
 configured Save shortcut, Command-S by default) writes that original file.
-Front matter and unknown metadata remain in the source; Deltos does not
+Front matter and unknown metadata remain in the source; Ceralto does not
 reconstruct or normalise YAML, or insert its own metadata. Relative local
 images use the existing safe preview with the open folder as their resource
 boundary. Local attachment links open with their macOS application.
@@ -427,7 +434,7 @@ overwrite destinations. Links are not automatically rewritten when moving a
 file or directory; keeping attachments beside a note and moving their shared
 parent preserves their relative relationship.
 
-Every three seconds while the window is active, Deltos polls for filesystem
+Every three seconds while the window is active, Ceralto polls for filesystem
 changes. Clean selected notes reload from disk. If your draft is unsaved,
 external edits, renames or deletion preserve it and show a conflict.
 Save checks the original content digest again and refuses stale writes.
@@ -444,7 +451,7 @@ use **Open Markdown Folder** to reconnect. Folder renames that macOS can resolve
 through the bookmark carry their recovery drafts to the new location.
 
 The **Local Drafts** menu lists recoverable notes, including files moved,
-renamed or deleted outside Deltos. Recovery never writes to those disk files.
+renamed or deleted outside Ceralto. Recovery never writes to those disk files.
 If the original changed, the normal stale-write check still blocks Save;
 use **Save Draft as New Copy** to keep both versions. Successful Save, an
 explicit discard or a confirmed disk reload clears that draft's recovery
@@ -475,7 +482,7 @@ The first live-folder implementation edits UTF-8 Markdown notes up to 16 MB;
 hidden files (including `.obsidian` configuration), symbolic links and
 non-Markdown files are not offered for editing. No files are imported into the
 JSON library and no sidecar library/index is written to your folder. The live window does not run plugins,
-resolve Deltos-library wiki links, provide native Compose, or share the normal
+resolve Ceralto-library wiki links, provide native Compose, or share the normal
 library's search/tags/history/Trash, scheduled backups or snapshot sync.
 Keep an independent folder backup (for example Time Machine).
 
@@ -490,20 +497,20 @@ Joplin compatibility.
 
 On Mac, choose **Settings > Cloud Folders > Connect Cloud Folder** and select
 a dedicated folder managed by your provider's installed desktop app.
-Sign in using that app, not Deltos, and mark the entire folder as downloaded or
+Sign in using that app, not Ceralto, and mark the entire folder as downloaded or
 available offline. Select the same folder on another Mac only after the
 provider has delivered the initial snapshot. **Sync Now** remains available
 manually. Scheduling is **off by default**: opt in under **Cloud Folders** and
 choose a 5, 15, 30 or 60 minute interval. The preference, last successful local
-exchange and next attempt survive restarting Deltos. Scheduled attempts run
+exchange and next attempt survive restarting Ceralto. Scheduled attempts run
 only while the app is open; an overdue attempt runs after reopening, without
 replaying every missed interval. Failed/offline attempts retry after five
 minutes. No accounts or folders are connected automatically. Check the
 provider's status before refreshing the other Mac.
 
-Deltos keeps its working library local and exchanges immutable, checksummed
+Ceralto keeps its working library local and exchanges immutable, checksummed
 snapshots with original attachments. Connection rejects folders overlapping
-Deltos's local storage. Status reports **local exchange**, never verified
+Ceralto's local storage. Status reports **local exchange**, never verified
 upload or delivery. Offline placeholders, partially delivered snapshots and
 provider failures may require keeping the folder downloaded and retrying.
 This generic folder path is experimental, not a certified integration with
@@ -520,7 +527,7 @@ an exchange are never replaced with its older result; a scheduled retry (or
 exchange also prevents replacement and blocks further exchange until restart:
 preserve both versions before restarting. An external write between the final
 check and save cannot be ruled out; do not edit the live library file while
-Deltos is running. Disconnecting does not delete local notes, attachments or
+Ceralto is running. Disconnecting does not delete local notes, attachments or
 shared snapshots.
 
 **Review preserved conflicts** lists every `sync-conflict` variant, including
@@ -533,7 +540,7 @@ run. You may manually edit or consolidate retained notes afterward.
 
 **Export Dated Complete Backup** lets you choose a separate local/cloud
 location. Each manual backup creates a unique dated directory containing
-notes, history and original attachments. Restore with **Import Deltos Backup**;
+notes, history and original attachments. Restore with **Import Ceralto Backup**;
 import adds copies without replacing current notes. Sync snapshots are not a
 substitute for independent backups: cloud deletion can propagate to backups
 in the same account. Manual exports are never automatically pruned.
@@ -549,7 +556,7 @@ and contents are encrypted with AES-256-GCM and a fresh random nonce and salt;
 the password key uses PBKDF2-HMAC-SHA256 with 600,000 iterations. The version
 header is authenticated. Existing archives are never overwritten.
 
-Enter and confirm at least 12 characters. Deltos asks each time and never
+Enter and confirm at least 12 characters. Ceralto asks each time and never
 saves the password in settings or Keychain. There is **no password recovery**.
 Keep the password independently. Export builds the archive in memory without
 plaintext staging; encoded contents are limited to 256 MiB and 50,000 files.
@@ -569,9 +576,9 @@ backups for device protection. Cloud upload is not verified.
 ### Scheduled complete backups and safe recovery
 
 Open **Settings > Files & Backups**, choose a separate downloaded local/cloud
-folder, and enable backups while Deltos is open. Choose hourly, six-hourly or
+folder, and enable backups while Ceralto is open. Choose hourly, six-hourly or
 daily backups, retaining 1–100 verified managed copies (default: daily, 10).
-Scheduling is off until you opt in. Deltos checks once a minute while running,
+Scheduling is off until you opt in. Ceralto checks once a minute while running,
 attempts overdue backups on launch/wake, and retries failures at most once
 every five minutes. It does not back up while quit or asleep and does not
 confirm cloud upload. Scheduled backups are unencrypted and labelled as such;
@@ -598,13 +605,13 @@ repeating recovery creates duplicates. Backups are verified again before
 import. This is additive recovery into a working, editable library, not
 whole-library replacement or a repair of an unreadable live library.
 For unreadable live JSON, use the opening-day recovery procedure below.
-Use **Import Deltos Backup** to recover a manual export or an older backup
+Use **Import Ceralto Backup** to recover a manual export or an older backup
 set after reconnecting/resetting preferences. Library backups exclude settings,
 smart folders, workspace state, plugin registrations and unsaved capture drafts.
 Unreadable schedule settings are preserved and scheduling is blocked until
 you explicitly reset them. Reset never deletes existing backups.
 
-Keep an independent copy. Files in cloud folders are readable; Deltos does not
+Keep an independent copy. Files in cloud folders are readable; Ceralto does not
 provide end-to-end encryption. The existing iPad iCloud reader remains
 experimental; Dropbox/OneDrive/Google Drive access through iPad Files is not
 validated and is not enabled by connecting a Mac folder.
@@ -619,7 +626,7 @@ active notes already have today's title there, the most recently edited is
 opened. A dated note in Trash must be restored explicitly, not silently
 resurrected or duplicated. Renaming a dated note allows a new note with the
 original daily title to be created; changing/renaming the notebook path likewise
-changes where Deltos looks. It is not a permanent calendar-ID system.
+changes where Ceralto looks. It is not a permanent calendar-ID system.
 
 The configured template supplies the Markdown body and tags; the daily title
 stays the date, and `daily` is added to its tags. Built-in templates work offline
@@ -697,7 +704,7 @@ other Macs, nor included in complete backups, open-folder exports or local
 daily library recovery copies. Preserve this file separately, or include the
 entire Folio storage folder in Time Machine. A corrupt or newer smart-folder file is
 left untouched; the library still opens, and **Reload Smart Folders** lets
-you retry after repairing or preserving/removing the file while Deltos is quit.
+you retry after repairing or preserving/removing the file while Ceralto is quit.
 
 Selecting a matching open tab keeps the smart folder and refinement. Opening
 a note outside its results reveals that note's real notebook. New notes and
@@ -707,7 +714,7 @@ never applied to new notes as implicit tags or pins.
 
 ## Local opening-day recovery
 
-On Mac, Deltos also saves the first validated on-disk library from each UTC day
+On Mac, Ceralto also saves the first validated on-disk library from each UTC day
 when opening an existing library, retaining the last seven opening days in
 `Recovery/`. Reopening on the same day does not overwrite that day's copy.
 Recovery-copy failures stop the library opening for editing and show an error;
@@ -718,10 +725,10 @@ previously deleted notes, and are not a replacement for complete backups.
 There is no library-schema migration in this release.
 
 Use **Settings > Files & Backups > Show Local Recovery Copies** to find them.
-To recover: quit Deltos, preserve the current `library.json` separately, copy
+To recover: quit Ceralto, preserve the current `library.json` separately, copy
 the chosen JSON file into the library folder as `library.json`, then reopen.
 Original attachment folders must still exist. Do not replace the live library
-while Deltos is running.
+while Ceralto is running.
 
 ## Your Mac library on iPad
 
@@ -729,7 +736,7 @@ The first iPad experience is deliberately **viewing only**: notebooks, tags,
 search, readable pages and tap-to-open original images in the document area. There are no
 half-finished editing controls.
 
-1. On Mac, create a dedicated folder in **iCloud Drive**. In Deltos choose
+1. On Mac, create a dedicated folder in **iCloud Drive**. In Ceralto choose
    **File > Connect Cloud Folder**, then **Sync Now**.
 2. Let iCloud upload it. In Files on iPad, make the folder available offline
    using **Keep Downloaded** where available.
@@ -748,7 +755,7 @@ Mac edits are retained as deterministic conflict copies tagged `sync-conflict`.
 Permanent deletions have tombstones so a stale device does not resurrect them.
 The read-only iPad pulls snapshots without publishing changes.
 
-This is manual or opt-in scheduled snapshot exchange while Deltos is open,
+This is manual or opt-in scheduled snapshot exchange while Ceralto is open,
 **not continuous provider sync**. iCloud may
 deliver files at different times; incomplete or damaged snapshots fail
 verification and need a later retry. Initialise the folder on one Mac and let
@@ -790,9 +797,9 @@ on your iPad.
 
 **Joplin:** export **MD - Markdown + Front Matter**, then choose **File >
 Import Joplin Folder**. Titles, tags, dates and notebook paths are preserved.
-The export and its original resources are copied into Deltos; the source export
+The export and its original resources are copied into Ceralto; the source export
 can then be removed. Other YAML fields remain in the copied originals.
-For a JEX export, choose **File > Import Joplin JEX Archive**. Deltos validates
+For a JEX export, choose **File > Import Joplin JEX Archive**. Ceralto validates
 the entire archive and imports notes, nested notebooks, tags and original
 attachments without replacing existing notes. Joplin resource and note links
 are translated to managed relative attachments and internal note links.
@@ -823,7 +830,7 @@ quotes, links and sanitized HTML. HTML source is retained, but its original
 stylesheets and active content are not reproduced. Remote images, scripts,
 forms and embeds are blocked. Local images are restricted to the note's
 resource root. Relative links to other documents open their saved originals,
-not editable Deltos notes.
+not editable Ceralto notes.
 
 Evernote ENEX, web clipping and OCR are not implemented.
 
@@ -837,7 +844,7 @@ This is a portable snapshot you can open with other tools, not a live Obsidian
 vault backend.
 
 **File > Export Complete Backup** includes the full library, history and copied
-original resource trees. **Import Deltos Backup** adds records without replacing
+original resource trees. **Import Ceralto Backup** adds records without replacing
 existing notes. Backups use portable relative paths and can be moved between
 devices. Device-local sync state and folder permissions are not exported.
 
@@ -861,14 +868,14 @@ in a shared folder or run separate app processes against it. Individual-note
 export offers Markdown, HTML or plain text without copying attachments; use an
 open-folder export or complete backup for original attachments.
 
-There is no Deltos account, subscription, analytics service or runtime server.
+There is no Ceralto account, subscription, analytics service or runtime server.
 Your chosen provider's desktop app handles file delivery. Local notes, drafts
-and snapshots are not encrypted by Deltos. Use device protection/FileVault.
+and snapshots are not encrypted by Ceralto. Use device protection/FileVault.
 History and retained attachments are not substitutes for independent backups.
 
 ## Settings that stay out of your way
 
-Open **Deltos > Settings** (Command-comma). The fixed **Close Settings** button
+Open **Ceralto > Settings** (Command-comma). The fixed **Close Settings** button
 stays above the scrollable content in every theme; Escape also closes the
 Settings window. Drag the window edges or corners to resize it, down to
 720 x 480 points; larger sizes are not capped by its initial layout.
@@ -904,7 +911,7 @@ source archive or repository, start at its root:
 ```bash
 bash scripts/test.sh
 bash scripts/build-app.sh
-open dist/Deltos.app
+open dist/Ceralto.app
 bash scripts/build-dmg.sh
 bash scripts/build-ipad.sh
 bash scripts/package-source.sh
@@ -924,7 +931,7 @@ embedded document preview, not a web-app shell.
 
 The standalone source archive includes MIT licensing, contributor guidance,
 an example extension and macOS CI. The nested `.github/workflows` becomes
-active when Deltos is published at its own repository root; it does not
+active when Ceralto is published at its own repository root; it does not
 replace the original parent repository's workflows.
 
 ## License

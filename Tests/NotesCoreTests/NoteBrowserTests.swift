@@ -240,18 +240,19 @@ struct NoteBrowserPresentationTests {
         }
         try await Task.sleep(for: .milliseconds(150))
         host.layoutSubtreeIfNeeded()
-        #expect(!searchFields(in: host).isEmpty)
+        let frame = try #require(host.superview)
+        #expect(!searchFields(in: frame).isEmpty)
         store.query = "no-matching-notes"
         try await Task.sleep(for: .milliseconds(150))
         host.layoutSubtreeIfNeeded()
         #expect(store.selectedNote == nil)
-        let emptySearch = try #require(searchFields(in: host).first)
+        let emptySearch = try #require(searchFields(in: frame).first)
         #expect(emptySearch.stringValue == "no-matching-notes")
         #expect(window.makeFirstResponder(emptySearch))
         store.query = ""
         try await Task.sleep(for: .milliseconds(150))
         host.layoutSubtreeIfNeeded()
-        #expect(!searchFields(in: host).isEmpty)
+        #expect(!searchFields(in: frame).isEmpty)
         #expect(store.library.notes == [note])
     }
 }

@@ -11,6 +11,7 @@ struct NoteEditor: View {
     let onPermanentDelete: () -> Void
     var isActive = true
     var searchFocus: FocusState<Bool>.Binding
+    var toolbarWidth: Double
     @AppStorage("readingEditorMode") private var preferredMode = EditorMode.preview.rawValue
     @ViewState private var mode = EditorMode.preview.rawValue
     @ViewState private var initialized = false
@@ -47,10 +48,6 @@ struct NoteEditor: View {
 
     private var notePage: some View {
         VStack(spacing: 0) {
-            if isActive {
-                editorToolbar
-                Divider()
-            }
             if isTrashed {
                 HStack {
                     Label("This note is in Trash", systemImage: "trash")
@@ -156,6 +153,11 @@ struct NoteEditor: View {
             }
         }
         .background(palette?.backgroundColor ?? Color(nsColor: .textBackgroundColor))
+        .toolbar {
+            if isActive {
+                editorToolbar
+            }
+        }
         .onAppear {
             guard !initialized else { return }
             initialized = true
@@ -188,11 +190,12 @@ struct NoteEditor: View {
         }
     }
 
-    private var editorToolbar: some View {
-        HStack(spacing: 16) {
-            if note.contentFormat == .formatted && editorMode == .write {
-                NoteFormattingControls(actions: formatting).disabled(isTrashed)
-            }
+    @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
+        ToolbarItem(id: "note-formatting", placement: .automatic) {
+            NoteFormattingControls(actions: formatting)
+                .disabled(isTrashed || note.contentFormat != .formatted || editorMode != .write)
+        }
+        ToolbarItem(id: "note-attachments", placement: .automatic) {
                 Button {
                     if note.contentFormat == .formatted && editorMode == .write {
                         formatting.chooseAttachments()
@@ -203,7 +206,17 @@ struct NoteEditor: View {
                     .help("Add images or attachments")
                     .accessibilityLabel("Add attachments")
                     .disabled(isTrashed)
-                Spacer(minLength: 4)
+        }
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+        } else {
+            ToolbarItem(placement: .principal) { Spacer() }
+        }
+        #else
+        ToolbarItem(placement: .principal) { Spacer() }
+        #endif
+        ToolbarItem(id: "note-export", placement: .primaryAction) {
                 Button {
                     store.exportMarkdown(note)
                 } label: {
@@ -211,6 +224,8 @@ struct NoteEditor: View {
                 }
                 .help("Export as Markdown, HTML or plain text")
                 .accessibilityLabel("Export note")
+        }
+        ToolbarItem(id: "note-actions", placement: .primaryAction) {
                 Menu {
                     Picker("Editor Mode", selection: $mode) {
                         ForEach(EditorMode.allCases, id: \.rawValue) { mode in
@@ -246,8 +261,12 @@ struct NoteEditor: View {
                 }
                 .help("Note actions")
                 .accessibilityLabel("Note actions")
-                ViewThatFits(in: .horizontal) {
-                    searchField.frame(width: 180)
+                .menuIndicator(.hidden)
+        }
+        ToolbarItem(id: "library-search", placement: .primaryAction) {
+                if toolbarWidth >= 560 {
+                    searchField.frame(width: min(220, toolbarWidth - 340))
+                } else {
                     Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
                         .help("Search notes").accessibilityLabel("Search notes")
                         .popover(isPresented: $showingSearch) {
@@ -255,12 +274,7 @@ struct NoteEditor: View {
                                 .onAppear { searchFocus.wrappedValue = true }
                         }
                 }
-            }
-        .buttonStyle(.borderless)
-        .padding(.leading, 20)
-        .padding(.trailing, 16)
-        .frame(height: 52)
-        .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
+        }
     }
 
     private var searchField: some View {

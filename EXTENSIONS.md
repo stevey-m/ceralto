@@ -1,6 +1,6 @@
-# Deltos extensions: small powers, quiet interface
+# Ceralto extensions: small powers, quiet interface
 
-Deltos supports **data-only template packs and native colour theme packs**. It is not an
+Ceralto supports **data-only template packs and native colour theme packs**. It is not an
 Obsidian or Joplin `.jpl` plugin compatibility layer, a JavaScript runtime, or a marketplace.
 No extension code executes. Packs cannot access your library, filesystem,
 network, credentials or other installed extensions.
@@ -42,7 +42,7 @@ disable templates used by daily notes. Disabling Task overview leaves every
 Markdown checkbox intact and editable in its note. Notes, tool preferences
 and shortcuts are retained.
 
-**Settings > Community Extensions** lists installed Deltos template packs with
+**Settings > Community Extensions** lists installed Ceralto template packs with
 enable switches and an explicit **Disable All Community Template Packs**
 action. Disabled packs disappear from the chooser and template menus, but their
 files and previously created notes are untouched. A daily template from a
@@ -68,7 +68,7 @@ plugins ship inside Obsidian and are not independently importable packages.
 Manifests are not evidence that the underlying code works or is safe.
 
 Manager preferences and folder registrations are Mac-local, versioned data in
-Deltos's preferences, not in the note library, complete backups, sync snapshots
+Ceralto's preferences, not in the note library, complete backups, sync snapshots
 or opening-day recovery copies. Invalid/future manager data is preserved:
 community packs become inactive, manager changes are blocked, and Settings
 provides retry or an explicitly confirmed reset. Reset forgets registrations
@@ -122,7 +122,7 @@ Each pack has one UTF-8 `extension.json`:
 
 Pack IDs must be unique. Template IDs must be unique within a pack. IDs use
 lowercase ASCII letters, numbers, dots and hyphens, at most 100 characters.
-The pack ID `dev.folio.builtin` is reserved for Deltos's built-in templates.
+The pack ID `dev.folio.builtin` is reserved for Ceralto's built-in templates.
 Names must not be empty. `tags` is optional. Unknown API versions, duplicate
 IDs, malformed JSON and symbolic links are rejected with a visible error.
 Failed reloads leave the previously loaded packs available.

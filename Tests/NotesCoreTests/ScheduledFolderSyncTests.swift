@@ -111,7 +111,7 @@ struct ScheduledFolderSyncTests {
             await store.syncManager.waitForCurrentExchange()
             #expect(try storage.load() == external)
             #expect(store.syncManager.status == .deferred)
-            #expect(store.syncManager.message.contains("restart Deltos"))
+            #expect(store.syncManager.message.contains("restart Ceralto"))
         }
     }
 

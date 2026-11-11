@@ -33,7 +33,7 @@ enum FolioCommand: String, CaseIterable, Identifiable {
         case .exportNote: "Export Current Note..."
         case .exportVault: "Export Open Markdown Folder..."
         case .backup: "Export Complete Backup..."
-        case .importBackup: "Import Deltos Backup..."
+        case .importBackup: "Import Ceralto Backup..."
         case .encryptedBackup: "Export Encrypted Complete Backup..."
         case .importEncryptedBackup: "Import Encrypted Backup..."
         case .sync: "Sync Now"

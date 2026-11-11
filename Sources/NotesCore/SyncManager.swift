@@ -95,7 +95,7 @@ public final class SyncManager: ObservableObject {
         if !isRunning {
             status = value ? .idle : .disconnected
             if settingsAvailable {
-                message = value ? "Folder connected. Cloud upload and delivery are not verified by Deltos." :
+                message = value ? "Folder connected. Cloud upload and delivery are not verified by Ceralto." :
                     "Disconnected. All local notes and attachments are still here."
             }
         }
@@ -176,7 +176,7 @@ public final class SyncManager: ObservableObject {
             guard token == generation, connected else { return }
             schedule.lastSuccess = now()
             status = .idle
-            message = "Snapshot exchange completed locally. Cloud upload and delivery are not verified by Deltos."
+            message = "Snapshot exchange completed locally. Cloud upload and delivery are not verified by Ceralto."
             schedule.nextAttempt = schedule.enabled ? now().addingTimeInterval(interval) : nil
         } catch {
             if token != generation || Task.isCancelled {

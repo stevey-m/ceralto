@@ -70,7 +70,7 @@ public struct LiveMarkdownFolder: Sendable {
         return try coordinateWrite(try url(for: path)) { file in
             let current = try read(path)
             guard current.digest == expectedDigest else {
-                throw NoteWorkflowError("This file changed outside Deltos. Your draft is preserved. Reload the disk version or save your draft as a new copy.")
+                throw NoteWorkflowError("This file changed outside Ceralto. Your draft is preserved. Reload the disk version or save your draft as a new copy.")
             }
             try Data(text.utf8).write(to: file, options: .atomic)
             return try read(path)

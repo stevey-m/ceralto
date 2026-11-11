@@ -2,6 +2,20 @@ import AppKit
 import NotesCore
 import SwiftUI
 
+extension ToolbarContent {
+    @ToolbarContentBuilder var withoutSharedBackground: some ToolbarContent {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            self.sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}
+
 private struct LibrarySearchActionKey: FocusedValueKey {
     typealias Value = @MainActor () -> Void
 }

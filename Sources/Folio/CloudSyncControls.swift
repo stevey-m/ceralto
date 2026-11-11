@@ -15,7 +15,7 @@ struct CloudSyncControls: View {
             LabeledContent("Last successful local exchange",
                            value: manager.schedule.lastSuccess?.formatted(date: .abbreviated, time: .shortened) ?? "Never")
             LabeledContent("Next attempt", value: nextAttempt)
-            Toggle("Schedule local exchange while Deltos is open", isOn: Binding(
+            Toggle("Schedule local exchange while Ceralto is open", isOn: Binding(
                 get: { manager.schedule.enabled },
                 set: { manager.configure(enabled: $0) }
             )).disabled(!manager.settingsAvailable)
@@ -27,7 +27,7 @@ struct CloudSyncControls: View {
                     Text("\(minutes) minutes").tag(minutes)
                 }
             }.disabled(!manager.settingsAvailable || !manager.schedule.enabled)
-            Text("Off by default. Missed attempts run after reopening Deltos; failures retry after five minutes. Manual and scheduled attempts never overlap. This exchanges local snapshots, not verified provider delivery.")
+            Text("Off by default. Missed attempts run after reopening Ceralto; failures retry after five minutes. Manual and scheduled attempts never overlap. This exchanges local snapshots, not verified provider delivery.")
                 .font(.caption).foregroundStyle(.secondary)
             if !manager.settingsAvailable {
                 Button("Reset sync schedule to manual", action: manager.resetSchedule)

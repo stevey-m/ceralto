@@ -187,7 +187,7 @@ extension NotesStore {
         panel.canChooseFiles = false
         panel.showsHiddenFiles = true
         panel.prompt = "Inspect Folder"
-        panel.message = "Select an extracted Joplin or Obsidian plugin folder containing manifest.json. Deltos reads metadata only; it cannot run these plugins. No source files will be changed."
+        panel.message = "Select an extracted Joplin or Obsidian plugin folder containing manifest.json. Ceralto reads metadata only; it cannot run these plugins. No source files will be changed."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         inspectPluginFolder(url)
     }

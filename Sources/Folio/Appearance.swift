@@ -306,7 +306,7 @@ struct AppearanceSettings: View {
                 editorMode = "Preview"
                 thumbnailSize = 0
             }
-            Text("Your selection applies throughout Deltos, including windows, sheets, popovers and native dialogs. System follows your Mac; Light and Dark stay fixed. Dracula is optional and has its own accent choice. Native macOS menus and controls use the matching light or dark appearance.")
+            Text("Your selection applies throughout Ceralto, including windows, sheets, popovers and native dialogs. System follows your Mac; Light and Dark stay fixed. Dracula is optional and has its own accent choice. Native macOS menus and controls use the matching light or dark appearance.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

@@ -180,7 +180,7 @@ struct ShortcutSettings: View {
                 }
                 .disabled(!store.shortcutsAvailable || draft == store.shortcutBindings)
             }
-            Text("Only Deltos application commands are configurable here. Standard editing, window and system shortcuts remain reserved. These are local preferences, not global hotkeys.")
+            Text("Only Ceralto application commands are configurable here. Standard editing, window and system shortcuts remain reserved. These are local preferences, not global hotkeys.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("Reset all application shortcuts?", isPresented: $confirmingReset, titleVisibility: .visible) {

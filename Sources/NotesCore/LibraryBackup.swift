@@ -50,7 +50,7 @@ public enum LibraryBackup {
         let root = folder.standardizedFileURL.resolvingSymlinksInPath()
         let destination = importsDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         guard !destination.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(root.path + "/") else {
-            throw JoplinImportError.invalid("Choose a backup outside Deltos's import storage.")
+            throw JoplinImportError.invalid("Choose a backup outside Ceralto's import storage.")
         }
         try FileManager.default.createDirectory(at: importsDirectory, withIntermediateDirectories: true)
         let hasReceipt = FileManager.default.fileExists(atPath: root.appendingPathComponent("backup-receipt.json").path)
@@ -70,7 +70,7 @@ public enum LibraryBackup {
 
     static func importedSnapshot(at destination: URL) throws -> JoplinImportResult {
         guard var library = try LibraryStorage(url: destination.appendingPathComponent("library.json")).load() else {
-            throw JoplinImportError.invalid("This folder is not a Deltos or Folio backup.")
+            throw JoplinImportError.invalid("This folder is not a Ceralto, Deltos or Folio backup.")
         }
         let root = destination.standardizedFileURL.resolvingSymlinksInPath()
         var ids: [UUID: UUID] = [:]
