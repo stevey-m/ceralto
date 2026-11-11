@@ -97,6 +97,11 @@ struct NoteEditor: View {
                 }
                 TextField("Untitled note", text: noteBinding(\.title))
                     .focused($titleFocused)
+                    .onAppear(perform: focusNewTitle)
+                    .onChange(of: isActive) { _, active in
+                        if active { focusNewTitle() }
+                        else { titleFocused = false }
+                    }
                     .onSubmit {
                         if let editor = formatting.editor { editor.window?.makeFirstResponder(editor) }
                     }
@@ -174,7 +179,6 @@ struct NoteEditor: View {
             if note.contentFormat == .formatted || (note.body.isEmpty && note.title.isEmpty) {
                 mode = EditorMode.write.rawValue
             }
-            if note.body.isEmpty && note.title.isEmpty && isActive { titleFocused = true }
         }
         .onChange(of: mode) { _, value in preferredMode = value }
         .onChange(of: tagsFocused) { _, focused in
@@ -312,6 +316,11 @@ struct NoteEditor: View {
             mode = EditorMode.write.rawValue
             store.errorMessage = "This note needs source editing to preserve its structure. Its content has not been changed. \(error.localizedDescription)"
         }
+    }
+
+    private func focusNewTitle() {
+        guard isActive, !isTrashed, note.title.isEmpty, note.body.isEmpty else { return }
+        DispatchQueue.main.async { titleFocused = true }
     }
 
     private var sourceEditor: some View {
