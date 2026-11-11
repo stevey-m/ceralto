@@ -10,10 +10,15 @@ struct NoteEditor: View {
     let note: Note
     let onPermanentDelete: () -> Void
     var isActive = true
+    var searchFocus: FocusState<Bool>.Binding
     @AppStorage("readingEditorMode") private var preferredMode = EditorMode.preview.rawValue
     @ViewState private var mode = EditorMode.preview.rawValue
     @ViewState private var initialized = false
     @AppStorage("editorFontSize") private var fontSize = 15.0
+    @AppStorage("showNoteDetails") private var showDetails = false
+    @AppStorage("showNotebookPane") private var showNotebooks = true
+    @AppStorage("showNoteListPane") private var showNotes = true
+    @ViewState private var showingSearch = false
     @ThemeColors private var palette
     @AppStorage("readingFont") private var readingFont = ReadingFont.system.rawValue
     @ViewState private var tagsText = ""
@@ -44,6 +49,10 @@ struct NoteEditor: View {
 
     private var notePage: some View {
         VStack(spacing: 0) {
+            if isActive {
+                editorToolbar
+                Divider()
+            }
             if isTrashed {
                 HStack {
                     Label("This note is in Trash", systemImage: "trash")
@@ -55,7 +64,11 @@ struct NoteEditor: View {
                 .padding(12)
                 .background(.orange.opacity(0.1))
             }
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(note.updatedAt, format: .dateTime.month(.wide).day().year().hour().minute())
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                if showDetails {
                 HStack {
                     Menu {
                         ForEach(store.library.notebooks) { notebook in
@@ -83,9 +96,10 @@ struct NoteEditor: View {
                     .help("Show or edit tags")
                     .accessibilityLabel("Show or edit tags")
                 }
+                }
                 TextField("Untitled note", text: noteBinding(\.title))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 24, weight: .semibold))
                     .disabled(isTrashed)
                     .accessibilityLabel("Note title")
                 if showingTags {
@@ -103,13 +117,12 @@ struct NoteEditor: View {
                             .disabled(isTrashed)
                             .accessibilityLabel("Tags, separated by commas")
                     }
-                } else if !note.tags.isEmpty {
+                } else if showDetails && !note.tags.isEmpty {
                     Text(note.tags.map { "#\($0)" }.joined(separator: "  "))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
-            .padding(28)
-            Divider()
+            .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 4)
             if note.contentFormat == .formatted && editorMode != .preview && !isTrashed {
                 FormattedEditor(note: note, fontSize: fontSize,
                                 family: ReadingFont(rawValue: readingFont) ?? .system,
@@ -128,6 +141,7 @@ struct NoteEditor: View {
             } else {
                 sourceEditor
             }
+            if showDetails || store.hasUnsavedChanges {
             Divider()
             HStack(spacing: 14) {
                 Label(store.hasUnsavedChanges ? "Not saved" : "Saved locally",
@@ -141,6 +155,7 @@ struct NoteEditor: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 22)
             .padding(.vertical, 12)
+            }
         }
         .background(palette?.backgroundColor ?? Color(nsColor: .textBackgroundColor))
         .onAppear {
@@ -156,28 +171,30 @@ struct NoteEditor: View {
         .onChange(of: tagsFocused) { _, focused in
             if !focused { tagsText = note.tags.joined(separator: ", ") }
         }
+        .onChange(of: searchFocus.wrappedValue) { _, focused in
+            if focused && isActive { showingSearch = true }
+        }
         .sheet(isPresented: $showingHistory) {
             NoteHistoryView(note: note)
         }
         .sheet(isPresented: $showingBacklinks) {
             LinkedMentionsView(note: note)
         }
-        .toolbar {
-            if isActive {
-                ToolbarItem(placement: .automatic) {
-                    Picker("Editor mode", selection: $mode) {
-                        ForEach(EditorMode.allCases, id: \.rawValue) { mode in
-                            if note.contentFormat != .formatted || mode != .split {
-                                Text(note.contentFormat == .formatted && mode == .write ? "Compose" : mode.rawValue)
-                                    .tag(mode.rawValue)
-                            }
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .disabled(isTrashed)
-                }
-            ToolbarItemGroup(placement: .primaryAction) {
+        .confirmationDialog("Switch to Markdown source?", isPresented: $confirmingSource, titleVisibility: .visible) {
+            Button("Use Source Editor") {
+                store.update(note.id) { $0.format = .markdown }
+                mode = EditorMode.write.rawValue
+            }
+        } message: {
+            Text("The note is already stored as readable Markdown. Source mode supports advanced Markdown such as tables and nested lists. The note will remain in source mode; its text and attachments will not be converted.")
+        }
+    }
+
+    private var editorToolbar: some View {
+        HStack(spacing: 16) {
+            if note.contentFormat == .formatted && editorMode == .write {
+                NoteFormattingControls(actions: formatting).disabled(isTrashed)
+            }
                 Button {
                     if note.contentFormat == .formatted && editorMode == .write {
                         formatting.chooseAttachments()
@@ -188,22 +205,31 @@ struct NoteEditor: View {
                     .help("Add images or attachments")
                     .accessibilityLabel("Add attachments")
                     .disabled(isTrashed)
-                Button {
-                    store.update(note.id) { $0.isPinned.toggle() }
-                } label: {
-                    Image(systemName: note.isPinned ? "pin.fill" : "pin")
-                }
-                .help(note.isPinned ? "Unpin note" : "Pin note")
-                .accessibilityLabel(note.isPinned ? "Unpin note" : "Pin note")
-                .disabled(isTrashed)
+                Spacer(minLength: 4)
                 Button {
                     store.exportMarkdown(note)
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export note in its original format")
+                .help("Export as Markdown, HTML or plain text")
                 .accessibilityLabel("Export note")
                 Menu {
+                    Picker("Editor Mode", selection: $mode) {
+                        ForEach(EditorMode.allCases, id: \.rawValue) { mode in
+                            if note.contentFormat != .formatted || mode != .split {
+                                Text(note.contentFormat == .formatted && mode == .write ? "Compose" : mode.rawValue).tag(mode.rawValue)
+                            }
+                        }
+                    }.disabled(isTrashed)
+                    Button("Edit Tags") { showingTags.toggle() }
+                    Menu("Move to Notebook") {
+                        ForEach(store.library.notebooks) { notebook in
+                            Button(notebook.name) { store.moveNotes([note.id], to: notebook.name) }
+                        }
+                    }.disabled(isTrashed)
+                    Button(note.isPinned ? "Unpin Note" : "Pin Note") { store.update(note.id) { $0.isPinned.toggle() } }
+                        .disabled(isTrashed)
+                    Divider()
                     TextSizeButtons()
                     Button("Note History...") { showingHistory = true }
                         .disabled(isTrashed || (note.history ?? []).isEmpty)
@@ -222,18 +248,25 @@ struct NoteEditor: View {
                 }
                 .help("Note actions")
                 .accessibilityLabel("Note actions")
+                ViewThatFits(in: .horizontal) {
+                    searchField.frame(width: 180)
+                    Button { showingSearch = true } label: { Image(systemName: "magnifyingglass") }
+                        .help("Search notes").accessibilityLabel("Search notes")
+                        .popover(isPresented: $showingSearch) {
+                            searchField.padding().frame(width: 280).folioAppearance()
+                                .onAppear { searchFocus.wrappedValue = true }
+                        }
+                }
             }
-            }
-        }
+        .buttonStyle(.borderless)
+        .padding(.leading, showNotebooks || showNotes ? 20 : 84)
+        .padding(.trailing, 16)
+        .frame(height: 52)
+        .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
+    }
 
-        .confirmationDialog("Switch to Markdown source?", isPresented: $confirmingSource, titleVisibility: .visible) {
-            Button("Use Source Editor") {
-                store.update(note.id) { $0.format = .markdown }
-                mode = EditorMode.write.rawValue
-            }
-        } message: {
-            Text("The note is already stored as readable Markdown. Source mode supports advanced Markdown such as tables and nested lists. The note will remain in source mode; its text and attachments will not be converted.")
-        }
+    private var searchField: some View {
+        LibrarySearchField(focused: searchFocus)
     }
 
     private var sourceEditor: some View {

@@ -1542,13 +1542,10 @@ final class NotesStore: ObservableObject {
     }
 
     func exportMarkdown(_ note: Note) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = note.contentFormat == .html
-            ? String(MarkdownFile.filename(for: note).dropLast(3)) + ".html" : MarkdownFile.filename(for: note)
-        panel.allowedContentTypes = note.contentFormat == .html ? [.html] : [UTType(filenameExtension: "md") ?? .plainText]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let export = NoteExportPanel(note: note)
+        guard export.panel.runModal() == .OK, let url = export.panel.url else { return }
         do {
-            try MarkdownFile.export(note, to: url)
+            try export.format.contents(of: note).write(to: url, atomically: true, encoding: .utf8)
         } catch {
             errorMessage = "Could not export this note: \(error.localizedDescription)"
         }

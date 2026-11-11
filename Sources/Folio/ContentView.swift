@@ -14,7 +14,8 @@ struct ContentView: View {
     @ViewState private var showingAttachments = false
     @ViewState private var groupingDate = Date()
     @AppStorage("noteListGallery") private var gallery = false
-    @AppStorage("noteListGroupDates") private var groupDates = false
+    @AppStorage("noteListGroupDates") private var groupDates = true
+    @AppStorage("alwaysShowTabs") private var alwaysShowTabs = false
     @AppStorage("noteListSpacing") private var noteSpacing = NoteListSpacing.comfortable.rawValue
     @ViewState private var selectedNoteIDs: Set<UUID> = []
     @ThemeColors private var palette
@@ -23,7 +24,6 @@ struct ContentView: View {
     @ViewState private var collapsedBranches: Set<String> = []
     @ViewState private var collapsedNotebookBranches: Set<String> = []
     @FocusState private var searchFocused: Bool
-    @Environment(\.openWindow) private var openWindow
 
     private var notebookLayout: some View {
         NotebookLayout(showNotebooks: showNotebooks, showNotes: showNotes) {
@@ -62,7 +62,6 @@ struct ContentView: View {
         .background(palette?.backgroundColor ?? Color(nsColor: .windowBackgroundColor))
         .folioAppearance()
         .foregroundStyle(palette?.foregroundColor ?? Color.primary)
-        .toolbar { navigationToolbar }
         .navigationTitle("Deltos")
         .onChange(of: store.scope) { _, _ in
             store.reconcileSelection()
@@ -73,45 +72,9 @@ struct ContentView: View {
             if let id = store.selectedNoteID { selectedNoteIDs = [id] }
         }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
+        .focusedSceneValue(\.searchLibrary, { searchFocused = true })
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in groupingDate = Date() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in groupingDate = Date() }
-    }
-
-    @ToolbarContentBuilder private var navigationToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-                Button(action: store.navigateBack) { Image(systemName: "chevron.left") }
-                    .help("Back (\(store.shortcut(.back).label))").accessibilityLabel("Back")
-                    .disabled(!store.workspace.canGoBack)
-                Button(action: store.navigateForward) { Image(systemName: "chevron.right") }
-                    .help("Forward (\(store.shortcut(.forward).label))").accessibilityLabel("Forward")
-                    .disabled(!store.workspace.canGoForward)
-                Button { showNotebooks.toggle() } label: { Image(systemName: "sidebar.left") }
-                    .help("Toggle notebooks (\(store.shortcut(.toggleFolders).label))")
-                    .accessibilityLabel("Toggle notebooks")
-                Button { showNotes.toggle() } label: { Image(systemName: "rectangle.split.2x1") }
-                    .help("Toggle note list (\(store.shortcut(.toggleNotes).label))")
-                    .accessibilityLabel("Toggle note list")
-                Button {
-                    let focused = !showNotebooks && !showNotes
-                    showNotebooks = focused
-                    showNotes = focused
-                } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                    .help("Toggle focused writing")
-                    .accessibilityLabel("Toggle focused writing")
-                Button { showNotes = true; searchFocused = true } label: { Image(systemName: "magnifyingglass") }
-                    .help("Find notes (Command-F)")
-                    .accessibilityLabel("Find notes")
-                    .keyboardShortcut("f")
-                Button { store.showingFinder = true } label: { Image(systemName: "text.magnifyingglass") }
-                    .help("Find across all notes (\(store.shortcut(.find).label))")
-                    .accessibilityLabel("Find across all notes")
-                Button { store.showingCommands = true } label: { Image(systemName: "command") }
-                    .help("Command palette (\(store.shortcut(.palette).label))")
-                    .accessibilityLabel("Command palette")
-                Button { openWindow(id: "capture") } label: { Image(systemName: "tray.and.arrow.down") }
-                    .help("Quick capture")
-                    .accessibilityLabel("Quick capture")
-        }
     }
 
     private var presentedWorkspace: some View {
@@ -208,7 +171,7 @@ struct ContentView: View {
 
     private var detail: some View {
         VStack(spacing: 0) {
-            if !store.workspace.tabs.isEmpty {
+            if store.workspace.tabs.count > 1 || (alwaysShowTabs && !store.workspace.tabs.isEmpty) {
                 documentTabs
                 Divider()
             }
@@ -216,7 +179,8 @@ struct ContentView: View {
                 ForEach(store.workspace.tabs, id: \.self) { id in
                     if let note = store.library.notes.first(where: { $0.id == id }) {
                         let active = store.selectedNoteID == id
-                        NoteEditor(note: note, onPermanentDelete: { noteToDelete = note }, isActive: active)
+                        NoteEditor(note: note, onPermanentDelete: { noteToDelete = note }, isActive: active,
+                                   searchFocus: $searchFocused)
                             .opacity(active ? 1 : 0)
                             .allowsHitTesting(active)
                             .accessibilityHidden(!active)
@@ -225,6 +189,14 @@ struct ContentView: View {
                     }
                 }
                 if store.selectedNote == nil {
+                    VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+                        LibrarySearchField(focused: $searchFocused).frame(maxWidth: 240)
+                    }
+                    .padding(.horizontal, 16).frame(height: 52)
+                    .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
+                    Divider()
                     ContentUnavailableView {
                         Label(store.isLoaded ? "Room for a new thought" : "Your library is unavailable",
                               systemImage: store.isLoaded ? "square.and.pencil" : "externaldrive.badge.exclamationmark")
@@ -238,6 +210,7 @@ struct ContentView: View {
                         } else {
                             Button("Retry Opening Library", action: store.load)
                         }
+                    }
                     }
                     .zIndex(2)
                 }
@@ -284,20 +257,20 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "book.closed.fill")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Deltos").font(.title2.weight(.semibold))
-                    Text("Your offline library")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
                 Spacer()
+                Button { store.notebookDraft = NotebookDraft() } label: { Image(systemName: "folder.badge.plus") }
+                    .help("New notebook").accessibilityLabel("New notebook").disabled(!store.isLoaded)
+                Menu {
+                    Button("Toggle Notebooks") { showNotebooks.toggle() }
+                    Button("Toggle Note List") { showNotes.toggle() }
+                } label: { Image(systemName: "sidebar.left") }
+                    .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Sidebar options")
             }
-            .padding(18)
+            .buttonStyle(.borderless)
+            .padding(.leading, 80).padding(.trailing, 16).frame(height: 52)
 
             List(selection: $store.mainFolderScope) {
-                Section("Library") {
+                Section("On My Mac") {
                     scopeRow("All Notes", icon: "tray.full", scope: .all)
                     if let inbox = store.inboxID {
                         scopeRow("Inbox", icon: "tray", scope: .notebook(inbox))
@@ -305,37 +278,14 @@ struct ContentView: View {
                     scopeRow("Pinned", icon: "pin", scope: .pinned)
                     scopeRow("Trash", icon: "trash", scope: .trash)
                 }
-                if BuiltInFeature.allCases.contains(where: store.featureEnabled) {
-                    Section("Workspace") {
-                        if store.featureEnabled(.dailyNotes) {
-                            Button { store.perform(.today) } label: { Label("Today's Note", systemImage: "calendar") }
-                                .buttonStyle(.plain).disabled(!store.isLoaded)
-                        }
-                        if store.featureEnabled(.templates) {
-                            Button { store.perform(.templates) } label: { Label("Templates", systemImage: "doc.on.doc") }
-                                .buttonStyle(.plain).disabled(!store.isLoaded)
-                        }
-                        if store.featureEnabled(.tasks) {
-                            Button { store.perform(.tasks) } label: { Label("Tasks", systemImage: "checklist") }
-                                .buttonStyle(.plain).disabled(!store.isLoaded)
-                        }
-                    }
-                }
                 Section {
                     ForEach(store.sidebarNotebooks) { branch in
                         notebookTree(branch)
                     }
-                    Button {
-                        store.notebookDraft = NotebookDraft()
-                    } label: {
-                        Label("New Notebook", systemImage: "plus")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!store.isLoaded)
                 } header: {
                     Text("Notebooks")
                 }
+                if !store.smartFolders.isEmpty || !store.smartFoldersAvailable {
                 Section("Smart Folders") {
                     ForEach(store.smartFolders) { folder in
                         HStack {
@@ -364,6 +314,7 @@ struct ContentView: View {
                         Text("Saved rules unavailable").font(.caption).foregroundStyle(.orange)
                     }
                 }
+                }
                 if !store.tags.isEmpty {
                     Section("Tags") {
                         ForEach(store.tags, id: \.self) { tag in
@@ -375,8 +326,17 @@ struct ContentView: View {
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
             Divider()
-            VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(store.hasUnsavedChanges ? "Changes not saved" : "On My Mac")
+                    .foregroundStyle(store.hasUnsavedChanges ? .orange : .secondary)
+                Spacer()
                 Menu {
+                    if store.featureEnabled(.dailyNotes) { Button("Today's Note") { store.perform(.today) } }
+                    if store.featureEnabled(.templates) { Button("Templates...") { store.perform(.templates) } }
+                    if store.featureEnabled(.tasks) { Button("Tasks...") { store.perform(.tasks) } }
+                    Button("New Smart Folder...", action: store.draftSmartFolder)
+                        .disabled(!store.smartFoldersAvailable)
+                    Divider()
                     Text(store.syncMessage)
                     Button("Connect Cloud Folder...", action: store.chooseSyncFolder)
                         .disabled(store.isSyncing)
@@ -384,26 +344,17 @@ struct ContentView: View {
                         .disabled(store.syncFolderName == nil || store.isSyncing)
                     Button("Disconnect", action: store.disconnectSyncFolder)
                         .disabled(store.syncFolderName == nil || store.isSyncing)
+                    Button("Show Library in Finder", action: store.revealLibrary)
                 } label: {
-                    Label(store.isSyncing ? "Exchanging snapshots..." : store.syncFolderName ?? "Connect Cloud Folder",
-                          systemImage: store.isSyncing ? "arrow.triangle.2.circlepath" : "icloud")
+                    Image(systemName: store.isSyncing ? "arrow.triangle.2.circlepath" : "ellipsis.circle")
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Library actions")
+            }.font(.caption).padding(12)
+            if store.syncFolderName != nil || store.isSyncing {
                 Text(store.syncMessage).font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(3).help(store.syncMessage)
-            }.padding(.horizontal, 14).padding(.top, 12)
-            HStack(spacing: 6) {
-                Image(systemName: store.hasUnsavedChanges ? "exclamationmark.icloud" : "internaldrive")
-                Text(store.hasUnsavedChanges ? "Changes not saved" : "Stored on this Mac")
-                Spacer()
-                Button(action: store.revealLibrary) { Image(systemName: "folder") }
-                    .buttonStyle(.plain)
-                    .help("Show library in Finder")
-                    .accessibilityLabel("Show library in Finder")
+                    .padding(.horizontal, 12).padding(.bottom, 8)
             }
-            .font(.caption)
-            .foregroundStyle(store.hasUnsavedChanges ? .orange : .secondary)
-            .padding(14)
         }
         .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
         .foregroundStyle(palette != nil ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
@@ -549,13 +500,17 @@ struct ContentView: View {
     private var noteListHeader: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(store.navigationFolder?.name ?? store.scopeTitle).font(.title2.weight(.semibold)).lineLimit(1)
+                Text(store.navigationFolder?.name ?? store.scopeTitle).font(.headline).lineLimit(1)
                 Text("\(store.outlineNotes.count) \(store.outlineNotes.count == 1 ? "note" : "notes")")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Menu {
                 Button(gallery ? "View as List" : "View as Gallery") { gallery.toggle() }
+                Button("Search Notes") { searchFocused = true }
+                Button("Search Help") { showingSearchHelp = true }
+                Button("Save Search...", action: store.draftSmartFolder)
+                    .disabled(!store.smartFoldersAvailable || store.scope == .trash || store.searchError != nil)
                 Menu("Sort By") { noteOrderingControls }
                 Toggle("Group By Date", isOn: $groupDates)
                 Divider()
@@ -581,24 +536,14 @@ struct ContentView: View {
             .accessibilityLabel("New note")
             .disabled(!store.isLoaded)
         }
-        .padding(18)
+        .padding(.leading, showNotebooks ? 12 : 84).padding(.trailing, 12).frame(height: 52)
+        .background(palette?.sidebarColor ?? Color(nsColor: .windowBackgroundColor))
+        .popover(isPresented: $showingSearchHelp) { SearchSyntaxHelp().padding(20).frame(width: 440).folioAppearance() }
     }
 
     private var noteList: some View {
         VStack(spacing: 0) {
             noteListHeader
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search notes", text: $store.query).textFieldStyle(.plain)
-                    .focused($searchFocused)
-                if !store.query.isEmpty {
-                    Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).accessibilityLabel("Clear search")
-                }
-            }
-            .padding(10)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
-            .padding(.horizontal, 12).padding(.bottom, 12)
             if let folder = store.activeSmartFolder {
                 HStack(alignment: .top) {
                     Text(folder.query).font(.caption.monospaced()).lineLimit(3).help(folder.query)
@@ -609,18 +554,6 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 12).padding(.bottom, 8)
             }
-            HStack {
-                Button("Search Help") { showingSearchHelp.toggle() }
-                    .popover(isPresented: $showingSearchHelp) {
-                        SearchSyntaxHelp().padding(20).frame(width: 440).folioAppearance()
-                    }
-                Spacer()
-                Button("Save Search...", action: store.draftSmartFolder)
-                    .disabled(!store.isLoaded || !store.smartFoldersAvailable || store.scope == .trash ||
-                              store.searchError != nil)
-            }
-            .font(.caption).buttonStyle(.borderless)
-            .padding(.horizontal, 12).padding(.bottom, 10)
             if let error = store.searchError {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
@@ -653,34 +586,7 @@ struct ContentView: View {
                     )
                 }
             }
-            Divider()
-            HStack {
-                Menu {
-                    Button("Markdown or HTML Files...", action: store.importMarkdown)
-                    Button("Joplin Export Folder...", action: store.importJoplinFolder)
-                        .disabled(store.isImportingJoplin)
-                    Button("Joplin JEX Archive...", action: store.importJoplinArchive)
-                        .disabled(store.isImportingJoplin || store.isSyncing)
-                    Button("Markdown or HTML Folder...") { store.importJoplinFolder(includeHTML: true) }
-                        .disabled(store.isImportingJoplin)
-                } label: {
-                    Label(store.isImportingJoplin ? "Importing Joplin..." : "Import",
-                          systemImage: "square.and.arrow.down")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .disabled(!store.isLoaded)
-                if store.isImportingJoplin { ProgressView().controlSize(.small) }
-                Spacer()
-                Menu {
-                    noteOrderingControls
-                } label: {
-                    Label(store.noteOrdering.field.rawValue, systemImage: store.noteOrdering.ascending ? "arrow.up" : "arrow.down")
-                }.menuStyle(.borderlessButton).fixedSize()
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(12)
+            if store.isImportingJoplin { ProgressView("Importing...").controlSize(.small).padding(8) }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if selectedNoteIDs.count > 1 {

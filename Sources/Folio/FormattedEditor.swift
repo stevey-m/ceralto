@@ -1060,66 +1060,10 @@ struct FormattedEditor: View {
     var onImage: (URL) -> Void
     var currentSource: (() -> String)?
     var onImportFiles: (([URL]) throws -> Attachments.Imported)?
-    @ViewState private var addingLink = false
-    @ViewState private var link = ""
-
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Menu {
-                    ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
-                        Button(style.title) { actions.setStyle(style) }
-                    }
-                } label: { Text(actions.style.title).frame(minWidth: 56, alignment: .leading) }
-                .menuStyle(.borderlessButton).fixedSize()
-                Divider().frame(height: 18)
-                Button { actions.toggle(.boldFontMask) } label: { Image(systemName: "bold") }
-                    .keyboardShortcut("b").help("Bold (Command-B)").accessibilityLabel("Bold")
-                    .background(actions.bold ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                    .accessibilityValue(actions.bold ? "On" : "Off")
-                Button { actions.toggle(.italicFontMask) } label: { Image(systemName: "italic") }
-                    .keyboardShortcut("i").help("Italic (Command-I)").accessibilityLabel("Italic")
-                    .background(actions.italic ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                    .accessibilityValue(actions.italic ? "On" : "Off")
-                Menu {
-                    Button(actions.underline ? "Remove Underline" : "Underline") { actions.toggleInline(.underlineStyle) }
-                        .keyboardShortcut("u")
-                    Button(actions.struck ? "Remove Strikethrough" : "Strikethrough") { actions.toggleInline(.strikethroughStyle) }
-                    Button(actions.code ? "Remove Inline Code" : "Inline Code") { actions.toggleInline(.folioCode) }
-                    Divider()
-                    Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
-                } label: { Image(systemName: "textformat") }
-                .help("More text formatting").accessibilityLabel("More text formatting")
-                Button { actions.setStyle(actions.style == .bullet ? .paragraph : .bullet) } label: { Image(systemName: "list.bullet") }
-                    .help("Bullet list").accessibilityLabel("Bullet list")
-                    .background(actions.style == .bullet ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 4))
-                    .accessibilityValue(actions.style == .bullet ? "On" : "Off")
-                Button { actions.setStyle(actions.style == .ordered ? .paragraph : .ordered) } label: { Image(systemName: "list.number") }
-                    .help("Numbered list").accessibilityLabel("Numbered list")
-                Button { actions.setStyle(actions.style == .checklist ? .paragraph : .checklist) } label: { Image(systemName: "checklist") }
-                    .help("Checklist").accessibilityLabel("Checklist")
-                Button { actions.indentList(by: -1) } label: { Image(systemName: "decrease.indent") }
-                    .help("Decrease list indent").accessibilityLabel("Decrease list indent")
-                Button { actions.indentList(by: 1) } label: { Image(systemName: "increase.indent") }
-                    .help("Increase list indent").accessibilityLabel("Increase list indent")
-                Button { actions.insertTable() } label: { Image(systemName: "tablecells") }
-                    .help("Insert editable table").accessibilityLabel("Insert editable table")
-                Button { addingLink = true } label: { Image(systemName: "link") }
-                    .help("Add link").accessibilityLabel("Add link")
-                Spacer()
-                Text("COMPOSE").font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .tracking(2).foregroundStyle(.secondary)
-            }
-            .buttonStyle(.borderless)
-            .padding(.horizontal, 28).padding(.vertical, 12)
-            Divider()
-            NativePageView(html: note.body, resources: resources, size: fontSize, family: family,
-                           dracula: dracula, actions: actions, onChange: onChange,
-                           onError: onError, onImage: onImage, currentSource: currentSource, onImportFiles: onImportFiles)
-        }
-        .popover(isPresented: $addingLink) {
-            LinkEditorPopover(link: $link, insert: insertLink)
-        }
+        NativePageView(html: note.body, resources: resources, size: fontSize, family: family,
+                       dracula: dracula, actions: actions, onChange: onChange,
+                       onError: onError, onImage: onImage, currentSource: currentSource, onImportFiles: onImportFiles)
     }
 
     struct LinkEditorPopover: View {
@@ -1141,10 +1085,50 @@ struct FormattedEditor: View {
         return ImportedResources(source: source, root: root)
     }
 
-    private func insertLink() {
-        guard actions.addLink(link.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-        addingLink = false
-        link = ""
+}
+
+struct NoteFormattingControls: View {
+    @ObservedObject var actions: FormattingActions
+    @ViewState private var addingLink = false
+    @ViewState private var link = ""
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Menu {
+                ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
+                    Button(style.title) { actions.setStyle(style) }
+                }
+                Divider()
+                Toggle("Bold", isOn: Binding(get: { actions.bold }, set: { _ in actions.toggle(.boldFontMask) }))
+                    .keyboardShortcut("b")
+                Toggle("Italic", isOn: Binding(get: { actions.italic }, set: { _ in actions.toggle(.italicFontMask) }))
+                    .keyboardShortcut("i")
+                Toggle("Underline", isOn: Binding(get: { actions.underline }, set: { _ in actions.toggleInline(.underlineStyle) }))
+                    .keyboardShortcut("u")
+                Button(actions.struck ? "Remove Strikethrough" : "Strikethrough") { actions.toggleInline(.strikethroughStyle) }
+                Button(actions.code ? "Remove Inline Code" : "Inline Code") { actions.toggleInline(.folioCode) }
+                Divider()
+                Button("Decrease List Indent") { actions.indentList(by: -1) }
+                Button("Increase List Indent") { actions.indentList(by: 1) }
+                Button("Add Link...") { addingLink = true }
+                Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
+            } label: { Image(systemName: "textformat") }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help("Text formatting").accessibilityLabel("Text formatting")
+            Button { actions.setStyle(actions.style == .checklist ? .paragraph : .checklist) } label: {
+                Image(systemName: "checklist")
+            }.help("Checklist").accessibilityLabel("Checklist")
+            Button { actions.insertTable() } label: { Image(systemName: "tablecells") }
+                .help("Insert editable table").accessibilityLabel("Insert editable table")
+        }
+        .buttonStyle(.borderless)
+        .popover(isPresented: $addingLink) {
+            FormattedEditor.LinkEditorPopover(link: $link) {
+                guard actions.addLink(link.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+                addingLink = false
+                link = ""
+            }
+        }
     }
 }
 

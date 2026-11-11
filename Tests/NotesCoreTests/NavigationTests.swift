@@ -56,6 +56,7 @@ struct NavigationTests {
         let suite = "DeltosMultipleSelection-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "noteListGroupDates")
         let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
         let notebook = Notebook(name: "Work")
         let notes = ["Alpha", "Beta", "Gamma"].map { Note(notebookID: notebook.id, title: $0, body: "Body", format: .formatted) }

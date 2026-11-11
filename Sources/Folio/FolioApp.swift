@@ -9,10 +9,12 @@ struct FolioApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.liveMarkdown) private var focusedMarkdown
+    @FocusedValue(\.searchLibrary) private var searchLibrary
 
     var body: some Scene {
         Window("Deltos", id: "library") {
             ContentView()
+                .ignoresSafeArea(.container, edges: .top)
                 .environmentObject(store)
                 .frame(minWidth: 720, minHeight: 520)
                 .onAppear {
@@ -22,6 +24,7 @@ struct FolioApp: App {
                 }
         }
         .defaultSize(width: 1240, height: 800)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings...") { settings.show(store: store) }
@@ -120,6 +123,9 @@ struct FolioApp: App {
                     .disabled(FolioCommand.printNote.unavailableReason(in: store) != nil)
             }
             CommandGroup(after: .textEditing) {
+                Button("Find Notes") { searchLibrary?() }
+                    .keyboardShortcut("f")
+                    .disabled(searchLibrary == nil)
                 Button("Find Across All Notes") {
                     openWindow(id: "library")
                     store.perform(.find)

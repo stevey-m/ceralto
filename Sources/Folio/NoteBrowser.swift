@@ -2,6 +2,35 @@ import AppKit
 import NotesCore
 import SwiftUI
 
+private struct LibrarySearchActionKey: FocusedValueKey {
+    typealias Value = @MainActor () -> Void
+}
+
+extension FocusedValues {
+    var searchLibrary: (@MainActor () -> Void)? {
+        get { self[LibrarySearchActionKey.self] }
+        set { self[LibrarySearchActionKey.self] = newValue }
+    }
+}
+
+struct LibrarySearchField: View {
+    @EnvironmentObject private var store: NotesStore
+    @FocusState.Binding var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search", text: $store.query).textFieldStyle(.plain).focused($focused)
+            if !store.query.isEmpty {
+                Button { store.query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).accessibilityLabel("Clear search")
+            }
+        }
+        .padding(6)
+        .background(.quaternary.opacity(0.4), in: Capsule())
+    }
+}
+
 enum NoteListSpacing: String, CaseIterable {
     case compact = "Compact", comfortable = "Comfortable", spacious = "Spacious"
 

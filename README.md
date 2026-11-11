@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.21.0 is a development release, not a finished replacement for your library.**
+**0.22.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.21.0-arm64.dmg`, drag **Deltos 0.21.0** to **Applications**, eject the
+Open `Deltos-0.22.0-arm64.dmg`, drag **Deltos 0.22.0** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -54,6 +54,23 @@ does not determine the name shown for the installed process.
 Quit Folio before launching Deltos and remove the old Folio app from Applications
 only after confirming your notes in Deltos. Never run both against the same
 library at once.
+
+### Save or export a note
+
+**Save** keeps the note in Deltos' local library; it does not create a separate
+document. Choose **File > Export Note...** or the share icon to save a file.
+The save panel now has a **File format** selector: **Markdown (.md)**,
+**HTML (.html)** or **Plain Text (.txt)**. Its filename extension follows your
+choice. Markdown notes default to Markdown; imported HTML notes default to HTML.
+These are real conversions, not renamed extensions. HTML-to-Markdown conversion
+reports unsupported structure instead of silently flattening it.
+
+Single-file exports do not copy attachments. HTML links to the existing local
+resources, while Markdown retains its references; moving either file to another
+computer does not move those resources. Use **Export Open Markdown Folder...**
+or bulk export for a portable folder including attachments, or **Export Complete
+Backup...** to preserve the full library and history. For a PDF, use the standard
+print panel described below.
 
 ### Print a note
 
@@ -89,8 +106,9 @@ without dropping links, inline styling or the selection. Heading weight is
 kept separate from explicit bold, so returning a heading to Body does not
 leave its words permanently bold.
 
-Use **More text formatting** for Underline (Command-U), Strikethrough, Inline
-Code and Remove Link. With no selection, inline formatting applies to the
+Use the compact **Aa / Text formatting** menu for paragraph styles, Bold,
+Italic, Underline (Command-U), Strikethrough, Inline Code and Remove Link.
+Checklist, table and attachment buttons sit alongside it. With no selection, inline formatting applies to the
 next text you type. Remove Link also works with the caret inside a link.
 Native undo/redo covers formatting and attachment insertion.
 
@@ -133,7 +151,7 @@ Preview mode, the paperclip still appends attachments to the note.
 
 ### Sort and select multiple notes
 
-Use the sort menu at the bottom of the note list, or **Settings > General**,
+Use **Sort By** in the note-list ellipsis menu, or **Settings > General**,
 to order notes by last edited, creation date or natural title, ascending or
 descending. Pinned notes remain first; ties retain stable note-ID order.
 The setting is local to this Mac and applies inside notebook branches, search
@@ -157,8 +175,8 @@ use Files & Backups for that.
 
 The **ellipsis menu beside the note-list title** offers **View as Gallery /
 View as List**, **Sort By**, **Group By Date**, **View Attachments** and
-**Note List Spacing**. Gallery and date grouping are opt-in local preferences;
-ordinary list mode keeps the existing notebook/subtopic tree. Gallery and
+**Note List Spacing**. Date grouping starts enabled; gallery remains opt-in.
+Turn off date grouping for the notebook/subtopic tree inside the note list. Gallery and
 grouped lists show all matching notes in the selected notebook branch,
 including subfolders. Search and smart-folder filters still apply.
 
@@ -177,6 +195,13 @@ opened outside the note's resource folder. Original attachments are unchanged.
 Choose **Compact**, **Comfortable** or **Spacious** note-list spacing in the
 ellipsis menu or **Settings > Appearance**. Appearance also has a separate
 note-list text-size slider; editor/preview size uses Command-Plus/Minus.
+
+The main window now uses aligned compact pane headers and a quieter sidebar.
+Search sits at the top right and **Command-F** focuses it, including when a
+search has no results. Additional actions remain in menus rather than permanent
+control bars. The document tab bar hides when only one tab is open; notebook,
+tag and status details are hidden by default. **Settings > Appearance** can
+restore the tab bar and details. Unsaved-change warnings remain visible.
 
 ### Choose an appearance
 
@@ -248,7 +273,8 @@ change the note's content.
   update service, or import of Obsidian's bundled core plugins.
 - **Save a search, not another copy.** Smart folders collect matching notes
   automatically without moving or copying the originals. Choose **Save Search**
-  above the note list, **New Smart Folder** in the sidebar, or use the File menu
+  in the note-list ellipsis menu, **New Smart Folder** in the sidebar's library
+  actions menu, or use the File menu
   or command palette. Name the folder, edit its rules and see the matching count
   before saving. Right-click a smart folder to edit or delete it; deleting it
   never deletes notes. Tags, pins, text, notebook moves and Trash changes update

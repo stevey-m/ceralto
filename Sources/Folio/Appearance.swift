@@ -241,6 +241,8 @@ struct TextSizeButtons: View {
 }
 
 struct AppearanceSettings: View {
+    @AppStorage("showNoteDetails") private var showNoteDetails = false
+    @AppStorage("alwaysShowTabs") private var alwaysShowTabs = false
     @AppStorage("noteListFontSize") private var noteListFontSize = 13.0
     @AppStorage("noteListSpacing") private var noteListSpacing = NoteListSpacing.comfortable.rawValue
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
@@ -290,6 +292,8 @@ struct AppearanceSettings: View {
                 Text("Medium (300 px)").tag(300)
             }
             Toggle("Full-width preview text", isOn: $fullWidth)
+            Toggle("Show notebook, tags and status details above/below the note", isOn: $showNoteDetails)
+            Toggle("Always show the document tab bar", isOn: $alwaysShowTabs)
             Toggle("Show main folders", isOn: $showNotebooks)
             Toggle("Show subtopics and notes", isOn: $showNotes)
             Text("Images fill the available note width without changing the original. Click to open in the document area; pinch to zoom, scroll to pan, and use Back to note to return.")

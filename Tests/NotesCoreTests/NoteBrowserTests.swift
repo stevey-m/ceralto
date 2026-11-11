@@ -195,6 +195,13 @@ struct NoteBrowserPresentationTests {
             .deletingLastPathComponent().deletingLastPathComponent()
         try png.write(to: package.appendingPathComponent("dist/Deltos-note-browser-preview.png"))
         defaults.set(false, forKey: "noteListGallery")
+        defaults.set(300.0, forKey: "noteListPaneWidth")
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        let listBitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: listBitmap)
+        let listPNG = try #require(listBitmap.representation(using: .png, properties: [:]))
+        try listPNG.write(to: package.appendingPathComponent("dist/Deltos-apple-workspace-preview.png"))
         defaults.set("Spacious", forKey: "noteListSpacing")
         defaults.set(17.0, forKey: "noteListFontSize")
         try await Task.sleep(for: .milliseconds(100))
@@ -204,5 +211,47 @@ struct NoteBrowserPresentationTests {
         #expect(try Data(contentsOf: storage.url) == saved)
         #expect(store.outlineNotes.count == notes.count)
         #expect(store.errorMessage == nil)
+    }
+
+    @Test func searchStaysAvailableWhenTheSelectedNoteIsFilteredOutAndPanesAreHidden() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "DeltosWorkspaceSearch-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "showNotebookPane")
+        defaults.set(false, forKey: "showNoteListPane")
+        let notebook = Notebook(name: "Ideas")
+        let note = Note(notebookID: notebook.id, title: "Sample", body: "A thought", format: .formatted)
+        let storage = LibraryStorage(url: root.appendingPathComponent("library.json"))
+        try storage.save(Library(notebooks: [notebook], notes: [note]))
+        let store = NotesStore(storage: storage, preferences: defaults)
+        store.scope = .all
+        store.openNote(note.id)
+        let host = NSHostingView(rootView: ContentView().environmentObject(store).defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.frame = NSRect(x: 0, y: 0, width: 900, height: 650)
+        func searchFields(in view: NSView) -> [NSTextField] {
+            if let field = view as? NSTextField, field.placeholderString == "Search" { return [field] }
+            return view.subviews.flatMap { searchFields(in: $0) }
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        #expect(!searchFields(in: host).isEmpty)
+        store.query = "no-matching-notes"
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        #expect(store.selectedNote == nil)
+        let emptySearch = try #require(searchFields(in: host).first)
+        #expect(emptySearch.stringValue == "no-matching-notes")
+        #expect(window.makeFirstResponder(emptySearch))
+        store.query = ""
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        #expect(!searchFields(in: host).isEmpty)
+        #expect(store.library.notes == [note])
     }
 }
