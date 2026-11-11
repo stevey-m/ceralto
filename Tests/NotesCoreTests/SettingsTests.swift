@@ -249,10 +249,15 @@ struct SettingsTests {
         #expect(window.contentMinSize == NSSize(width: 720, height: 480))
         #expect(window.contentMaxSize.width > 1_200)
         #expect(window.contentMaxSize.height > 900)
-        window.setContentSize(NSSize(width: 1_200, height: 900))
+        // AppKit clamps visible windows to the display's usable area.
+        let screen = try #require(window.screen)
+        let available = window.contentRect(forFrameRect: screen.visibleFrame).size
+        let expandedSize = NSSize(width: min(1_200, available.width), height: min(900, available.height))
+        #expect(expandedSize.width > 720 && expandedSize.height > 480)
+        window.setContentSize(expandedSize)
         try await Task.sleep(for: .milliseconds(50))
         host.layoutSubtreeIfNeeded()
-        #expect(window.contentLayoutRect.size == NSSize(width: 1_200, height: 900))
+        #expect(window.contentLayoutRect.size == expandedSize)
         #expect(host.bounds.contains(button.convert(button.bounds, to: host)))
         window.setContentSize(NSSize(width: 720, height: 480))
         try await Task.sleep(for: .milliseconds(50))
@@ -265,9 +270,10 @@ struct SettingsTests {
         controller.show(store: store, preferences: defaults)
         #expect(controller.window === window)
         #expect(window.isVisible)
-        window.setContentSize(NSSize(width: 1_100, height: 800))
+        let reopenedSize = NSSize(width: min(1_100, available.width), height: min(800, available.height))
+        window.setContentSize(reopenedSize)
         try await Task.sleep(for: .milliseconds(50))
-        #expect(window.contentLayoutRect.size == NSSize(width: 1_100, height: 800))
+        #expect(window.contentLayoutRect.size == reopenedSize)
         #expect(window.styleMask.contains(.resizable))
     }
 
