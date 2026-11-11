@@ -18,8 +18,10 @@ In the original parent repository, first `cd MacNotes`. Swift Package Manager
 fetches the pinned dependencies on the first build. Build an installer with
 `bash scripts/build-dmg.sh`.
 
-The iOS project is a read-only offline companion. See the README for its signing
+The iOS project is a read-only offline companion. See the
+[iPad companion guide](docs/USER_GUIDE.md#your-mac-library-on-ipad) for its signing
 and runtime limitations; an unsigned build is not a device test.
+More packaging commands are in the [build guide](docs/USER_GUIDE.md#build-and-contribute).
 
 ## Changes that belong here
 

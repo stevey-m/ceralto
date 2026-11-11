@@ -6,7 +6,7 @@ A native, local-first notes app for Mac with rich-text writing and portable
 Markdown. No account, subscription or runtime server.
 
 [Download for Mac](https://github.com/stevey-m/folio/releases) ·
-[User guide](docs/USER_GUIDE.md) · [Contribute](CONTRIBUTING.md)
+[User guide](docs/USER_GUIDE.md) · [Developer guide](CONTRIBUTING.md)
 
 ![Deltos on Mac with synthetic sample notes](docs/mac-compose.png)
 
@@ -33,19 +33,7 @@ Cloud-folder exchange is experimental. The iPad companion is read-only and
 requires Xcode/signing to install. Executable Joplin/Obsidian plugins and OCR
 are not supported. See the [guide](docs/USER_GUIDE.md) for limitations and recovery.
 
-## Build
-
-Requires Swift 6 on macOS; Xcode is needed for the iPad companion.
-From the standalone repository root:
-
-```bash
-bash scripts/test.sh
-bash scripts/build-app.sh
-open dist/Deltos.app
-```
-
-See [build and packaging](docs/USER_GUIDE.md#build-and-contribute),
-[extensions and themes](EXTENSIONS.md), and [contributor guidance](CONTRIBUTING.md).
+For community packs and native themes, see [Extensions](EXTENSIONS.md).
 
 ## License
 
