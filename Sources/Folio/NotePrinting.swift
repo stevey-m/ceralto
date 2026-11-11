@@ -1,5 +1,6 @@
 import AppKit
 import NotesCore
+import PDFKit
 import WebKit
 
 @MainActor
@@ -62,7 +63,7 @@ final class NotePrinter: NSObject {
                   Array.from(document.images).filter(image => !image.complete || image.naturalWidth === 0).length;
                 """, arguments: [:], in: nil, contentWorld: .defaultClient)
                 guard let missing = result as? Int, missing == 0 else {
-                    throw NoteWorkflowError("One or more note images could not be loaded. Restore the missing attachments before printing.")
+                    throw NoteWorkflowError("One or more note images could not be loaded. Restore the missing attachments before printing or exporting a PDF.")
                 }
                 self?.finish(.success(()))
             } catch { self?.finish(.failure(error)) }
@@ -79,11 +80,15 @@ final class NotePrinter: NSObject {
     }
 
     func makeOperation() throws -> NSPrintOperation {
-        guard let webView, isReady else {
-            throw NoteWorkflowError("The note is not ready to print.")
-        }
         guard let info = NSPrintInfo.shared.copy() as? NSPrintInfo else {
             throw NoteWorkflowError("The system print settings could not be copied.")
+        }
+        return try makeOperation(using: info)
+    }
+
+    private func makeOperation(using info: NSPrintInfo) throws -> NSPrintOperation {
+        guard let webView, isReady else {
+            throw NoteWorkflowError("The note is not ready to print.")
         }
         info.topMargin = 36
         info.bottomMargin = 36
@@ -96,6 +101,26 @@ final class NotePrinter: NSObject {
         operation.showsPrintPanel = true
         operation.showsProgressPanel = true
         return operation
+    }
+
+    func pdfData(in window: NSWindow) async throws -> Data {
+        // Export the entire note, not a previous print job's selected page range or copies.
+        let operation = try makeOperation(using: NSPrintInfo(dictionary: [:]))
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Ceralto-PDF-\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: output) }
+        operation.showsPrintPanel = false
+        operation.showsProgressPanel = false
+        operation.printInfo.jobDisposition = .save
+        operation.printInfo.dictionary()[NSPrintInfo.AttributeKey.jobSavingURL] = output
+        guard await run(operation, in: window) else {
+            throw NoteWorkflowError("The PDF could not be generated.")
+        }
+        let data = try Data(contentsOf: output)
+        guard let document = PDFDocument(data: data), document.pageCount > 0 else {
+            throw NoteWorkflowError("The PDF renderer did not produce a readable document.")
+        }
+        return data
     }
 
     func run(_ operation: NSPrintOperation, in window: NSWindow) async -> Bool {

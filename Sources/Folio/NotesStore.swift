@@ -1544,10 +1544,41 @@ final class NotesStore: ObservableObject {
     }
 
     func exportMarkdown(_ note: Note) {
+        let window = NSApp.keyWindow ?? NSApp.mainWindow
         let export = NoteExportPanel(note: note)
         guard export.panel.runModal() == .OK, let url = export.panel.url else { return }
+        let format = export.format
+        Task { await exportNote(note, format: format, to: url, in: window) }
+    }
+
+    func exportNote(_ note: Note, format: NoteExportFormat, to url: URL, in window: NSWindow?) async {
+        if format == .pdf {
+            guard !isPreparingPrint else {
+                errorMessage = "Wait for the current print or PDF export job to finish."
+                return
+            }
+            guard let window else {
+                errorMessage = "Open the Ceralto note window before exporting a PDF."
+                return
+            }
+            do {
+                let printer = try NotePrinter(note: note)
+                notePrinter = printer
+                isPreparingPrint = true
+                defer {
+                    printer.close()
+                    notePrinter = nil
+                    isPreparingPrint = false
+                }
+                try await printer.prepare()
+                try await printer.pdfData(in: window).write(to: url, options: .atomic)
+            } catch {
+                errorMessage = "Could not export this note as PDF: \(error.localizedDescription)"
+            }
+            return
+        }
         do {
-            try export.format.contents(of: note).write(to: url, atomically: true, encoding: .utf8)
+            try format.contents(of: note).write(to: url, atomically: true, encoding: .utf8)
         } catch {
             errorMessage = "Could not export this note: \(error.localizedDescription)"
         }

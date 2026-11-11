@@ -247,7 +247,7 @@ struct NoteEditor: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export as Markdown, HTML or plain text")
+                .help("Export as PDF, Markdown, HTML or plain text")
                 .accessibilityLabel("Export note")
         }
         ToolbarItem(id: "note-actions", placement: .primaryAction) {

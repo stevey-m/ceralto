@@ -97,6 +97,10 @@ struct NoteExportPanelTests {
             #expect(export.format == format)
             #expect(export.panel.nameFieldStringValue == "Renamed meeting." + format.fileExtension)
             #expect(export.panel.allowedContentTypes.first?.preferredFilenameExtension == format.fileExtension)
+            if format == .pdf {
+                #expect(export.panel.message.contains("local images"))
+                #expect(!export.panel.message.contains("Print > PDF"))
+            }
         }
         #expect(!export.panel.isExtensionHidden)
         let html = NoteExportPanel(note: Note(notebookID: UUID(), title: "Imported", format: .html))

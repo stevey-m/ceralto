@@ -5,17 +5,21 @@ public enum NoteExportFormat: String, CaseIterable, Sendable {
     case markdown = "Markdown (.md)"
     case html = "HTML (.html)"
     case plainText = "Plain Text (.txt)"
+    case pdf = "PDF (.pdf)"
 
     public var fileExtension: String {
         switch self {
         case .markdown: "md"
         case .html: "html"
         case .plainText: "txt"
+        case .pdf: "pdf"
         }
     }
 
     public func contents(of note: Note) throws -> String {
         switch self {
+        case .pdf:
+            throw NoteWorkflowError("PDF export requires the native PDF renderer, not a text export.")
         case .markdown:
             guard note.contentFormat == .html else { return note.body }
             do {

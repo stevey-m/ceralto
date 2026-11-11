@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.6.
+their original names; the instructions below describe Ceralto 0.23.7.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -79,17 +79,22 @@ library at once.
 **Save** keeps the note in Ceralto's local library; it does not create a separate
 document. Choose **File > Export > Export Note...** or the share icon to save a file.
 The save panel now has a **File format** selector: **Markdown (.md)**,
-**HTML (.html)** or **Plain Text (.txt)**. Its filename extension follows your
+**HTML (.html)**, **Plain Text (.txt)** or **PDF (.pdf)**. Its filename extension follows your
 choice. Markdown notes default to Markdown; imported HTML notes default to HTML.
 These are real conversions, not renamed extensions. HTML-to-Markdown conversion
 reports unsupported structure instead of silently flattening it.
 
-Single-file exports do not copy attachments. HTML links to the existing local
+Choose **PDF (.pdf)** to export directly, without opening the Print dialog.
+PDF includes the note title, rendered text and local images, in a light,
+paginated layout. Other attached files are not embedded. Missing images stop
+the export with an explicit error; a failed export does not replace an existing
+destination file. Opening or exporting does not rewrite the note.
+
+Text-format exports do not copy attachments. HTML links to the existing local
 resources, while Markdown retains its references; moving either file to another
 computer does not move those resources. Use **Export Open Markdown Folder...**
 or bulk export for a portable folder including attachments, or **Export Complete
-Backup...** to preserve the full library and history. For a PDF, use the standard
-print panel described below.
+Backup...** to preserve the full library and history. DOCX export is not currently supported.
 
 ## Print a note
 

@@ -13,7 +13,6 @@ final class NoteExportPanel: NSObject {
         super.init()
         panel.title = "Export Note"
         panel.prompt = "Export"
-        panel.message = "Attachments stay linked, not copied. To include them, use File > Export Open Markdown Folder. For PDF, choose File > Print > PDF."
         panel.canSelectHiddenExtension = true
         panel.isExtensionHidden = false
         panel.nameFieldStringValue = String(MarkdownFile.filename(for: note).dropLast(3)) + "." + format.fileExtension
@@ -47,6 +46,9 @@ final class NoteExportPanel: NSObject {
     }
 
     private func applyFormat() {
+        panel.message = format == .pdf
+            ? "PDF includes the rendered note and local images. Other attached files are not embedded."
+            : "Attachments stay linked, not copied. To include them, use File > Export > Export Open Markdown Folder."
         let name = panel.nameFieldStringValue as NSString
         let suffixes = Set(NoteExportFormat.allCases.map(\.fileExtension))
         let stem = suffixes.contains(name.pathExtension.lowercased()) ? name.deletingPathExtension : String(name)
