@@ -173,6 +173,7 @@ struct FolioApp: App {
             Button("Quit Deltos") { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
         Settings { SettingsView().environmentObject(store) }
+            .windowResizability(.contentMinSize)
     }
 
     private func capture() {

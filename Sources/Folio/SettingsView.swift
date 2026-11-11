@@ -74,10 +74,32 @@ struct SettingsView: View {
             settingsContent
         }
         .frame(minWidth: 720, idealWidth: 900, minHeight: 480, idealHeight: 680)
+        .background(SettingsWindowSizing())
         .onChange(of: query) { _, _ in
             if selection.map({ !matches.contains($0) }) ?? true { selection = matches.first }
         }
+
         .folioAppearance()
+    }
+
+    private struct SettingsWindowSizing: NSViewRepresentable {
+        func makeNSView(context: Context) -> Probe { Probe() }
+        func updateNSView(_ view: Probe, context: Context) { view.apply() }
+
+        @MainActor final class Probe: NSView {
+            override func viewDidMoveToWindow() {
+                super.viewDidMoveToWindow()
+                apply()
+            }
+
+            func apply() {
+                guard let window else { return }
+                window.styleMask.insert(.resizable)
+                window.contentMinSize = NSSize(width: 720, height: 480)
+                window.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                               height: CGFloat.greatestFiniteMagnitude)
+            }
+        }
     }
 
     private var settingsContent: some View {

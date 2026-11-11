@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.17.1 is a development release, not a finished replacement for your library.**
+**0.17.2 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.17.1-arm64.dmg`, drag **Deltos** to **Applications**, eject the
+Open `Deltos-0.17.2-arm64.dmg`, drag **Deltos** to **Applications**, eject the
 image and launch. If building locally, the DMG is in `dist/`.
 Quit the old Folio or Deltos before upgrading. Existing libraries
 load without manual conversion. Export a complete backup before upgrading;
@@ -712,7 +712,8 @@ History and retained attachments are not substitutes for independent backups.
 
 Open **Deltos > Settings** (Command-comma). The fixed **Close Settings** button
 stays above the scrollable content in every theme; Escape also closes the
-Settings window. The window can shrink to fit smaller displays.
+Settings window. Drag the window edges or corners to resize it, down to
+720 x 480 points; larger sizes are not capped by its initial layout.
 Search settings by name or purpose,
 then select a matching category:
 

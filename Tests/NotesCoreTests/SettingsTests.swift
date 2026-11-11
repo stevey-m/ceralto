@@ -114,10 +114,12 @@ struct SettingsTests {
         let store = NotesStore(storage: LibraryStorage(url: directory.appendingPathComponent("library.json")), preferences: defaults)
         let host = NSHostingView(rootView: SettingsView(section: .files).environmentObject(store).defaultAppStorage(defaults))
         let window = CloseTrackingWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-                                         styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                                         styleMask: [.titled, .closable], backing: .buffered, defer: false)
         let other = CloseTrackingWindow(contentRect: .zero, styleMask: [.titled, .closable],
                                         backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(width: 900, height: 680)
+        window.contentMaxSize = NSSize(width: 900, height: 680)
         window.contentView = host
         host.frame = NSRect(x: 0, y: 0, width: 720, height: 480)
         defer { window.contentView = nil }
@@ -133,6 +135,18 @@ struct SettingsTests {
         #expect(!button.isHiddenOrHasHiddenAncestor)
         #expect(button.isEnabled)
         #expect(button.keyEquivalent == "\u{1b}")
+        #expect(window.styleMask.contains(.resizable))
+        #expect(window.contentMinSize == NSSize(width: 720, height: 480))
+        #expect(window.contentMaxSize.width > 1_200)
+        #expect(window.contentMaxSize.height > 900)
+        window.setContentSize(NSSize(width: 1_200, height: 900))
+        host.layoutSubtreeIfNeeded()
+        #expect(window.contentLayoutRect.size == NSSize(width: 1_200, height: 900))
+        #expect(host.bounds.contains(button.convert(button.bounds, to: host)))
+        window.setContentSize(NSSize(width: 720, height: 480))
+        host.layoutSubtreeIfNeeded()
+        #expect(window.contentLayoutRect.size == NSSize(width: 720, height: 480))
+        #expect(host.bounds.contains(button.convert(button.bounds, to: host)))
         button.performClick(nil)
         #expect(window.closeRequests == 1)
         #expect(other.closeRequests == 0)
