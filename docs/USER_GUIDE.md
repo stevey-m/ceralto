@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.3.
+their original names; the instructions below describe Ceralto 0.23.4.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -27,7 +27,7 @@ Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.23.3 is a development release, not a finished replacement for your library.**
+**0.23.4 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -46,7 +46,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/ceralto/releases).
-Open `Ceralto-0.23.3-arm64.dmg`, drag **Ceralto 0.23.3** to **Applications**, eject the
+Open `Ceralto-0.23.4-arm64.dmg`, drag **Ceralto 0.23.4** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -142,6 +142,21 @@ leave its words permanently bold.
 
 Use the compact **Aa / Text formatting** menu for paragraph styles, Bold,
 Italic, Underline (Command-U), Strikethrough, Inline Code and Remove Link.
+For highlighted words, choose **Aa > Selected Text Size**, then a point size
+or **Custom Size...** (1-512 points). This resizes only that selection, not the
+whole note. Bold, Italic and Underline also work with **Command-B**, **Command-I**
+and **Command-U** while editing the body. Right-click a selection for the same
+actions under **Format Selected Text > Text Size**.
+
+Selected sizes survive saving, reopening, undo/redo and copying between Ceralto
+notes. Markdown remains Markdown, using readable inline HTML spans for sized
+text; HTML notes retain their format. Other Markdown apps that strip inline
+HTML styles will not display these sizes. **Use Note's Default Size** removes
+the selection's explicit size. **Default Reading Size** changes the note's base
+reading size without overwriting explicitly sized words.
+Older Ceralto releases do not preserve these sizes when editing a note; keep a
+backup and use 0.23.4 or newer for notes with selected-text sizing.
+
 Checklist, table and attachment buttons sit alongside it. With no selection, inline formatting applies to the
 next text you type. Remove Link also works with the caret inside a link.
 Native undo/redo covers formatting and attachment insertion.
@@ -161,8 +176,8 @@ headings, bullet and numbered lists, nested lists, checklists, GFM tables and
 embedded images. RTFD and HTML copies contain the image bytes, not links back to a
 Ceralto attachment directory. Pasted images are copied into managed attachments
 before the text is inserted, and the complete insertion supports undo/redo.
-Formatting is normalized to Ceralto's font and theme for readable results;
-arbitrary fonts, text colours and exact application-specific layouts are not
+Formatting uses Ceralto's font and theme for readable results. Explicit selected
+sizes are retained; arbitrary font families, text colours and exact application-specific layouts are not
 retained. RTF heading sizes are interpreted as basic headings, not an exact
 Apple Notes document model.
 

@@ -10,6 +10,7 @@ public struct FormattedRun: Equatable, Sendable {
     public var code = false
     public var link: String?
     public var image: String?
+    public var fontSize: Double?
 
     public init(text: String = "") { self.text = text }
 }
@@ -254,6 +255,7 @@ public struct FormattedPage: Equatable, Sendable {
             if run.underline { text = "<u>\(text)</u>" }
             if run.struck { text = "<s>\(text)</s>" }
             if let link = run.link, allowedLink(link) { text = "<a href=\"\(escape(link))\">\(text)</a>" }
+            if let size = run.fontSize { text = "<span style=\"font-size:\(size)px\">\(text)</span>" }
             return text
         }.joined()
     }
@@ -277,6 +279,9 @@ public struct FormattedPage: Equatable, Sendable {
                 return String(repeating: " ", count: widths.prefix(block.listDepth).reduce(0, +))
             }
             if block.style == .code {
+                if block.runs.contains(where: { $0.fontSize != nil }) {
+                    return "<pre>\(Self.inlineHTML(block.runs))</pre>"
+                }
                 let text = block.runs.map(\.text).joined()
                 let fence = String(repeating: "`", count: max(3, Self.longestBackticks(in: text) + 1))
                 return "\(fence)\n\(text)\n\(fence)"
@@ -284,6 +289,9 @@ public struct FormattedPage: Equatable, Sendable {
             let contents = Self.merged(block.runs).map { run -> String in
                 if let image = run.image {
                     return "![\(Self.markdownText(run.text))](\(Self.markdownURL(image)))"
+                }
+                if run.fontSize != nil {
+                    return Self.inlineHTML([run]).replacingOccurrences(of: "|", with: "&#124;")
                 }
                 let trimmed = run.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { return run.text }
@@ -315,6 +323,9 @@ public struct FormattedPage: Equatable, Sendable {
                 func row(_ cells: [FormattedTableCell]) -> String {
                     "| " + cells.map { cell in
                         Self.merged(cell.runs).map { run in
+                            if run.fontSize != nil {
+                                return Self.inlineHTML([run]).replacingOccurrences(of: "|", with: "&#124;")
+                            }
                             var value = Self.markdownText(run.text)
                             if run.code { value = "`\(value)`" }
                             if run.bold { value = "**\(value)**" }
@@ -408,6 +419,24 @@ public struct FormattedPage: Equatable, Sendable {
         return !value.hasPrefix("//")
     }
 
+    public static func fontSizeDeclaration(in style: String) -> String? {
+        style.split(separator: ";").compactMap { part -> String? in
+            let pair = part.split(separator: ":", maxSplits: 1)
+            guard pair.count == 2,
+                  pair[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "font-size" else { return nil }
+            return pair[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }.last
+    }
+
+    public static func fontSize(in style: String) -> Double? {
+        guard let value = fontSizeDeclaration(in: style),
+              value.hasSuffix("px") || value.hasSuffix("pt"),
+              let number = Double(value.dropLast(2).trimmingCharacters(in: .whitespaces)),
+              number.isFinite else { return nil }
+        let size = value.hasSuffix("pt") ? number * 4 / 3 : number
+        return (1...512).contains(size) ? size : nil
+    }
+
     private static func runs(in node: Node, inheriting inherited: FormattedRun = FormattedRun()) throws -> [FormattedRun] {
         if let text = node as? TextNode {
             var run = inherited
@@ -418,6 +447,13 @@ public struct FormattedPage: Equatable, Sendable {
         }
         guard let element = node as? Element else { return [] }
         var run = inherited
+        let style = try element.attr("style")
+        if fontSizeDeclaration(in: style) != nil {
+            guard let size = fontSize(in: style) else {
+                throw JoplinImportError.invalid("This font size cannot be preserved in Compose. Use source editing; absolute sizes from 1 to 512 screen points are supported.")
+            }
+            run.fontSize = size
+        }
         switch element.tagName() {
         case "strong", "b": run.bold = true
         case "em", "i": run.italic = true

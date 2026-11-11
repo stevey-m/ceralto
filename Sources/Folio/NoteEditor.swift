@@ -26,7 +26,6 @@ struct NoteEditor: View {
     @ViewState private var showingTags = false
     @ViewState private var confirmingSource = false
     @ViewState private var composingImportedNote = false
-    @FocusState private var titleFocused: Bool
     @ViewState private var showingBacklinks = false
     @ViewState private var imageURL: URL?
     @StateObject private var formatting = FormattingActions()
@@ -95,18 +94,11 @@ struct NoteEditor: View {
                     .accessibilityLabel("Show or edit tags")
                 }
                 }
-                TextField("Untitled note", text: noteBinding(\.title))
-                    .focused($titleFocused)
-                    .onAppear(perform: focusNewTitle)
-                    .onChange(of: isActive) { _, active in
-                        if active { focusNewTitle() }
-                        else { titleFocused = false }
-                    }
-                    .onSubmit {
+                NoteTitleField(text: noteBinding(\.title),
+                               focusWhenAttached: isActive && note.title.isEmpty && note.body.isEmpty,
+                               color: NSColor(palette?.foregroundColor ?? Color.primary)) {
                         if let editor = formatting.editor { editor.window?.makeFirstResponder(editor) }
                     }
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 24, weight: .semibold))
                     .disabled(isTrashed)
                     .accessibilityLabel("Note title")
                 if showingTags {
@@ -263,7 +255,7 @@ struct NoteEditor: View {
                     Button(note.isPinned ? "Unpin Note" : "Pin Note") { store.update(note.id) { $0.isPinned.toggle() } }
                         .disabled(isTrashed)
                     Divider()
-                    TextSizeButtons()
+                    Section("Default Reading Size") { TextSizeButtons() }
                     Button("Note History...") { showingHistory = true }
                         .disabled(isTrashed || (note.history ?? []).isEmpty)
                     Button("Linked Mentions...") { showingBacklinks = true }
@@ -318,11 +310,6 @@ struct NoteEditor: View {
         }
     }
 
-    private func focusNewTitle() {
-        guard isActive, !isTrashed, note.title.isEmpty, note.body.isEmpty else { return }
-        DispatchQueue.main.async { titleFocused = true }
-    }
-
     private var sourceEditor: some View {
         SourceEditor(text: noteBinding(\.body), family: ReadingFont(rawValue: readingFont) ?? .system,
                      size: fontSize, dracula: palette != nil,
@@ -339,5 +326,76 @@ struct NoteEditor: View {
             get: { store.library.notes.first { $0.id == note.id }?[keyPath: keyPath] ?? "" },
             set: { value in store.update(note.id) { $0[keyPath: keyPath] = value } }
         )
+    }
+}
+
+private struct NoteTitleField: NSViewRepresentable {
+    @Binding var text: String
+    let focusWhenAttached: Bool
+    let color: NSColor
+    let onSubmit: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeNSView(context: Context) -> TitleField {
+        let field = TitleField()
+        field.delegate = context.coordinator
+        field.isBezeled = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 24, weight: .semibold)
+        field.placeholderString = "Untitled note"
+        field.usesSingleLineMode = true
+        field.setAccessibilityLabel("Note title")
+        return field
+    }
+
+    func updateNSView(_ field: TitleField, context: Context) {
+        context.coordinator.parent = self
+        if field.stringValue != text { field.stringValue = text }
+        field.textColor = color
+        field.isEnabled = isEnabled
+        field.isEditable = isEnabled
+        field.isSelectable = isEnabled
+        field.needsInitialFocus = focusWhenAttached && isEnabled
+        field.requestInitialFocus()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: TitleField, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: nsView.intrinsicContentSize.height)
+    }
+
+    @MainActor final class TitleField: NSTextField {
+        var needsInitialFocus = false
+        private var focusedInitially = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            requestInitialFocus()
+        }
+
+        func requestInitialFocus() {
+            guard needsInitialFocus, !focusedInitially, window != nil else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.needsInitialFocus, !self.focusedInitially, self.isEditable,
+                      let window = self.window else { return }
+                self.focusedInitially = window.makeFirstResponder(self)
+            }
+        }
+    }
+
+    @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: NoteTitleField
+        init(parent: NoteTitleField) { self.parent = parent }
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+            guard command == #selector(NSResponder.insertNewline(_:)) else { return false }
+            parent.onSubmit()
+            return true
+        }
     }
 }

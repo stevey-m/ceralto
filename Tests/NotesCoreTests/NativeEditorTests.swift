@@ -183,6 +183,78 @@ struct NativeEditorTests {
         #expect(error == nil)
     }
 
+    @Test(arguments: [NoteFormat.markdown, .html])
+    func selectedTextSizingIsLocalUndoableAndRetainedOnReopen(format: NoteFormat) async throws {
+        _ = NSApplication.shared
+        let actions = FormattingActions()
+        var saved: String?
+        var error: String?
+        let original = format.usesHTML ? "<p>Hello world</p>" : "Hello world"
+        let host = NSHostingView(rootView: NativePageView(html: original, resources: nil, size: 17,
+            family: .system, dracula: false, actions: actions,
+            onChange: { saved = $0 }, onError: { error = $0 }, contentFormat: format))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil }
+        try await Task.sleep(for: .milliseconds(120))
+        let editor = try #require(actions.editor)
+        window.makeFirstResponder(editor)
+        let selection = NSRange(location: 0, length: 5)
+        editor.setSelectedRange(selection)
+        actions.setFontSize(24)
+        let storage = try #require(editor.textStorage)
+        #expect((storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 24)
+        #expect((storage.attribute(.font, at: 6, effectiveRange: nil) as? NSFont)?.pointSize == 17)
+        #expect(editor.selectedRange() == selection)
+        let changed = try #require(saved)
+        let reopened = try format.usesHTML ? FormattedPage(html: changed) : FormattedPage(markdown: changed)
+        let decoded = try NativePageCodec.decode(reopened.html(), resources: nil, size: 17)
+        #expect((decoded.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 24)
+        #expect((decoded.attribute(.font, at: 6, effectiveRange: nil) as? NSFont)?.pointSize == 17)
+        let board = NSPasteboard(name: .init("CeraltoSelectedSize-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        #expect(editor.copy(to: board))
+        let copied = try #require(try RichClipboard.read(board))
+        #expect(copied.page.blocks.first?.runs.first?.fontSize == 24)
+        let undo = try #require(editor.undoManager)
+        undo.undo()
+        #expect((storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 17)
+        undo.redo()
+        #expect((storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 24)
+        actions.toggle(.boldFontMask)
+        actions.toggleInline(.folioCode)
+        #expect((storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 24)
+        actions.setFontSize(nil)
+        #expect(storage.attribute(.folioFontSize, at: 0, effectiveRange: nil) == nil)
+        #expect((storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 17)
+        actions.toggle(.boldFontMask)
+        actions.toggleInline(.folioCode)
+        let manager = NSFontManager.shared
+        let previousTarget = manager.target
+        let previousAction = manager.action
+        defer { manager.target = previousTarget; manager.action = previousAction }
+        manager.target = editor
+        manager.action = #selector(NSTextView.changeFont(_:))
+        manager.setSelectedFont(try #require(storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont), isMultiple: false)
+        let larger = NSMenuItem(title: "Bigger", action: nil, keyEquivalent: "")
+        larger.tag = Int(NSFontAction.sizeUpFontAction.rawValue)
+        manager.modifyFont(larger)
+        let enlarged = try #require(storage.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        #expect(enlarged.pointSize > 17)
+        let resized = try #require(saved)
+        let resizedPage = try format.usesHTML ? FormattedPage(html: resized) : FormattedPage(markdown: resized)
+        #expect(resizedPage.blocks.first?.runs.first?.fontSize == Double(enlarged.pointSize))
+        let bold = NSMenuItem(title: "Bold", action: nil, keyEquivalent: "")
+        bold.tag = Int(NSFontTraitMask.boldFontMask.rawValue)
+        manager.addFontTrait(bold)
+        let styled = try #require(saved)
+        let styledPage = try format.usesHTML ? FormattedPage(html: styled) : FormattedPage(markdown: styled)
+        #expect(styledPage.blocks.first?.runs.first?.bold == true)
+        #expect(error == nil)
+    }
+
     @Test func paragraphStylesPreserveTextAndDoNotTurnAllMonospaceIntoCode() throws {
         let decoded = try NativePageCodec.decode("<h1>Title</h1><p>Body <strong>bold</strong></p>",
                                                   resources: nil, family: .monospace)

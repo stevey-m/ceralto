@@ -9,6 +9,7 @@ extension NSAttributedString.Key {
     static let folioAlt = Self("FolioAlt")
     static let folioCode = Self("FolioCode")
     static let folioBold = Self("FolioBold")
+    static let folioFontSize = Self("FolioFontSize")
     static let folioListDepth = Self("FolioListDepth")
     static let folioChecked = Self("FolioChecked")
     static let folioOrderedNumber = Self("FolioOrderedNumber")
@@ -88,6 +89,10 @@ enum NativePageCodec {
                         for run in cell.runs {
                             var attrs = rowAttributes
                             var face = attrs[.font] as? NSFont ?? font(family, size: size)
+                            if let size = run.fontSize {
+                                face = NSFontManager.shared.convert(face, toSize: size)
+                                attrs[.folioFontSize] = size
+                            }
                             if run.code { face = font(.monospace, size: face.pointSize) }
                             if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
                             if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
@@ -124,6 +129,10 @@ enum NativePageCodec {
                     continue
                 }
                 var face = attrs[.font] as? NSFont ?? font(family, size: size)
+                if let size = run.fontSize {
+                    face = NSFontManager.shared.convert(face, toSize: size)
+                    attrs[.folioFontSize] = size
+                }
                 if run.code { face = font(.monospace, size: face.pointSize) }
                 if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
                 if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
@@ -165,6 +174,7 @@ enum NativePageCodec {
                         run.italic = traits.contains(.italicFontMask)
                     }
                     run.code = attrs[.folioCode] as? Bool == true
+                    run.fontSize = attrs[.folioFontSize] as? Double
                     run.underline = (attrs[.underlineStyle] as? Int ?? 0) != 0
                     run.struck = (attrs[.strikethroughStyle] as? Int ?? 0) != 0
                     if let url = attrs[.link] as? URL { run.link = url.absoluteString }
@@ -220,6 +230,7 @@ enum NativePageCodec {
 
 @MainActor
 final class FormattingActions: ObservableObject {
+    static let fontSizes = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72]
     weak var editor: PageTextView?
     @Published var style = FormattedBlock.Style.paragraph
     @Published var bold = false
@@ -273,6 +284,54 @@ final class FormattingActions: ObservableObject {
             editor.editAttributes(name: "Format Text") { storage in
                 storage.enumerateAttributes(in: range) { attrs, subrange, _ in
                     guard attrs[.folioMarker] as? Bool != true else { return }
+                    storage.setAttributes(formatted(attrs), range: subrange)
+                }
+            }
+        }
+        refresh()
+        editor.window?.makeFirstResponder(editor)
+    }
+
+    func chooseFontSize() {
+        guard let editor, editor.isEditable else { return }
+        let panel = NSAlert()
+        panel.messageText = "Selected Text Size"
+        panel.informativeText = "Enter a size from 1 to 512 points. This changes highlighted text, or the next text you type if nothing is selected."
+        panel.addButton(withTitle: "Apply")
+        panel.addButton(withTitle: "Cancel")
+        let input = NSTextField(string: "")
+        input.frame = NSRect(x: 0, y: 0, width: 220, height: 24)
+        input.placeholderString = "For example, 19.5"
+        input.setAccessibilityLabel("Selected text size in points")
+        panel.accessoryView = input
+        panel.window.initialFirstResponder = input
+        guard panel.runModal() == .alertFirstButtonReturn else { return }
+        guard let size = Double(input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            editor.onError?("Enter a numeric text size from 1 to 512 points.")
+            return
+        }
+        setFontSize(size)
+    }
+
+    func setFontSize(_ size: Double?) {
+        guard let editor, editor.isEditable else { return }
+        if let size, !size.isFinite || !(1...512).contains(size) {
+            editor.onError?("Choose a text size between 1 and 512 points.")
+            return
+        }
+        func formatted(_ original: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+            var attrs = original
+            if let size { attrs[.folioFontSize] = size }
+            else { attrs.removeValue(forKey: .folioFontSize) }
+            attrs[.font] = Self.face(for: attrs, editor: editor)
+            return attrs
+        }
+        let range = editor.selectedRange()
+        if range.length == 0 { editor.typingAttributes = formatted(editor.typingAttributes) }
+        else {
+            editor.editAttributes(name: "Text Size") { storage in
+                storage.enumerateAttributes(in: range) { attrs, subrange, _ in
+                    guard attrs[.folioMarker] as? Bool != true, attrs[.attachment] == nil else { return }
                     storage.setAttributes(formatted(attrs), range: subrange)
                 }
             }
@@ -380,6 +439,7 @@ final class FormattingActions: ObservableObject {
         var face = NativePageCodec.attributes(style: style, size: editor.pageFontSize,
             family: attrs[.folioCode] as? Bool == true ? .monospace : editor.pageFont,
             color: editor.textColor ?? .textColor)[.font] as? NSFont ?? .systemFont(ofSize: editor.pageFontSize)
+        if let size = attrs[.folioFontSize] as? Double { face = NSFontManager.shared.convert(face, toSize: size) }
         if attrs[.folioBold] as? Bool == true {
             face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask)
         }
@@ -631,6 +691,7 @@ class DocumentTextView: NSTextView {
 
 @MainActor
 final class PageTextView: DocumentTextView {
+    weak var formattingActions: FormattingActions?
     var focusOnAttach = false
     var markdownShortcuts = false
     var resources: ImportedResources?
@@ -639,6 +700,94 @@ final class PageTextView: DocumentTextView {
     var onImage: ((URL) -> Void)?
     var pageFontSize = 16.0
     var pageFont = ReadingFont.system
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if isEditable, window?.firstResponder === self,
+           event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command,
+           let actions = formattingActions {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "b": actions.toggle(.boldFontMask)
+            case "i": actions.toggle(.italicFontMask)
+            case "u": actions.toggleInline(.underlineStyle)
+            default: return super.performKeyEquivalent(with: event)
+            }
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func changeFont(_ sender: Any?) {
+        guard isEditable, let storage = textStorage else { return }
+        let selection = selectedRange()
+        var changes: [(NSRange, [NSAttributedString.Key: Any])] = []
+        var invalidSize = false
+        func convert(_ original: [NSAttributedString.Key: Any], range: NSRange) {
+            guard original[.folioMarker] as? Bool != true, original[.attachment] == nil else { return }
+            let previous = original[.font] as? NSFont ?? NativePageCodec.font(pageFont, size: pageFontSize)
+            let font = NSFontManager.shared.convert(previous)
+            guard font.pointSize.isFinite, (1...512).contains(font.pointSize) else { invalidSize = true; return }
+            var attrs = original
+            attrs[.font] = font
+            if font.pointSize != previous.pointSize { attrs[.folioFontSize] = Double(font.pointSize) }
+            let wasBold = NSFontManager.shared.traits(of: previous).contains(.boldFontMask)
+            let isBold = NSFontManager.shared.traits(of: font).contains(.boldFontMask)
+            if wasBold != isBold { attrs[.folioBold] = isBold }
+            changes.append((range, attrs))
+        }
+        if selection.length == 0 { convert(typingAttributes, range: selection) }
+        else { storage.enumerateAttributes(in: selection) { attrs, range, _ in convert(attrs, range: range) } }
+        guard !invalidSize else { onError?("Choose a text size between 1 and 512 points."); return }
+        if selection.length == 0 {
+            if let attrs = changes.first?.1 { typingAttributes = attrs }
+        } else {
+            editAttributes(name: "Font") { text in
+                for (range, attrs) in changes { text.setAttributes(attrs, range: range) }
+            }
+        }
+        formattingActions?.refresh()
+    }
+
+    func selectionFormattingMenu() -> NSMenu {
+        let menu = NSMenu(title: "Format Selected Text")
+        for (title, action) in [
+            ("Bold", #selector(boldSelection)), ("Italic", #selector(italicSelection)),
+            ("Underline", #selector(underlineSelection))
+        ] {
+            let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = isEditable
+        }
+        let sizes = NSMenu(title: "Text Size")
+        for size in FormattingActions.fontSizes {
+            let item = sizes.addItem(withTitle: "\(size) pt", action: #selector(sizeSelection(_:)), keyEquivalent: "")
+            item.tag = size
+            item.target = self
+        }
+        sizes.addItem(.separator())
+        let custom = sizes.addItem(withTitle: "Custom Size...", action: #selector(customSizeSelection), keyEquivalent: "")
+        custom.target = self
+        let reset = sizes.addItem(withTitle: "Use Note's Default Size", action: #selector(sizeSelection(_:)), keyEquivalent: "")
+        reset.target = self
+        let item = menu.addItem(withTitle: "Text Size", action: nil, keyEquivalent: "")
+        item.submenu = sizes
+        return menu
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        let item = NSMenuItem(title: "Format Selected Text", action: nil, keyEquivalent: "")
+        item.submenu = selectionFormattingMenu()
+        menu.insertItem(item, at: 0)
+        return menu
+    }
+
+    @objc private func boldSelection() { formattingActions?.toggle(.boldFontMask) }
+    @objc private func italicSelection() { formattingActions?.toggle(.italicFontMask) }
+    @objc private func underlineSelection() { formattingActions?.toggleInline(.underlineStyle) }
+    @objc private func customSizeSelection() { formattingActions?.chooseFontSize() }
+    @objc private func sizeSelection(_ sender: NSMenuItem) {
+        formattingActions?.setFontSize(sender.tag == 0 ? nil : Double(sender.tag))
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -1108,6 +1257,15 @@ struct NoteFormattingControls: View {
     var body: some View {
         HStack(spacing: 14) {
             Menu {
+                Menu("Selected Text Size") {
+                    ForEach(FormattingActions.fontSizes, id: \.self) { size in
+                        Button("\(size) pt") { actions.setFontSize(Double(size)) }
+                    }
+                    Divider()
+                    Button("Custom Size...") { actions.chooseFontSize() }
+                    Button("Use Note's Default Size") { actions.setFontSize(nil) }
+                }
+                Divider()
                 ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
                     Button(style.title) { actions.setStyle(style) }
                 }
@@ -1206,6 +1364,7 @@ struct NativePageView: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         let editor = PageTextView(frame: .zero)
+        editor.formattingActions = actions
         editor.focusOnAttach = focusOnAttach
         editor.isRichText = true
         editor.importsGraphics = false

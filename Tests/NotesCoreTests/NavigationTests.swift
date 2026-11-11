@@ -116,6 +116,27 @@ struct NavigationTests {
         #expect(page.blocks.first?.runs.map(\.text).joined() == "Hello world again")
         #expect(changed.contentFormat == format)
         #expect(try storage.load()?.notes.first?.body == changed.body)
+        editor.setSelectedRange(NSRange(location: 0, length: 5))
+        let menu = editor.selectionFormattingMenu()
+        let sizes = try #require(menu.item(withTitle: "Text Size")?.submenu)
+        func invoke(_ item: NSMenuItem) throws {
+            #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
+        }
+        try invoke(try #require(sizes.item(withTitle: "24 pt")))
+        try invoke(try #require(menu.item(withTitle: "Bold")))
+        try invoke(try #require(menu.item(withTitle: "Underline")))
+        let italic = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 0, windowNumber: window.windowNumber, context: nil,
+            characters: "i", charactersIgnoringModifiers: "i", isARepeat: false, keyCode: 34))
+        #expect(editor.performKeyEquivalent(with: italic))
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 5))
+        let styled = try #require(store.selectedNote)
+        let restored = try format.usesHTML ? FormattedPage(html: styled.body) : FormattedPage(markdown: styled.body)
+        let selected = try #require(restored.blocks.first?.runs.first)
+        #expect(selected.text == "Hello" && selected.fontSize == 24)
+        #expect(selected.bold && selected.italic && selected.underline)
+        #expect(restored.blocks.first?.runs.last?.fontSize == nil)
+        #expect(try storage.load()?.notes.first?.body == styled.body)
         try press("New Note", in: "note-new")
         try await Task.sleep(for: .milliseconds(160))
         #expect(store.library.notes.count == 2)

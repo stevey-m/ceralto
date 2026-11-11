@@ -208,8 +208,16 @@ public enum PreviewDocument {
         let document = try SwiftSoup.parse(html)
         // Remove active content before cleaning, rather than retaining script text.
         try document.select("script,style,iframe,object,embed,form,base,link,meta,svg,math").remove()
+        for element in try document.select("[style]") {
+            if let size = FormattedPage.fontSize(in: try element.attr("style")) {
+                try element.attr("style", "font-size:\(size)px")
+            } else {
+                try element.removeAttr("style")
+            }
+        }
         let whitelist = try Whitelist.relaxed()
-            .addTags("input", "details", "summary", "figure", "figcaption", "del", "s", "kbd", "hr")
+            .addTags("input", "details", "summary", "figure", "figcaption", "del", "s", "kbd", "hr", "span")
+            .addAttributes(":all", "style")
             .addAttributes("input", "type", "checked", "disabled")
             .addAttributes("a", "id", "name")
             .addAttributes("h1", "id").addAttributes("h2", "id").addAttributes("h3", "id")

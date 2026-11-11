@@ -3,6 +3,44 @@ import NotesCore
 import Testing
 
 struct FormattedPageTests {
+    @Test func selectedSizesRoundTripWithStylesTablesAndCode() throws {
+        let source = """
+        <p>Before <span style="font-size:18pt"><strong><em><u>selected</u></em></strong></span> after</p>
+        <table><thead><tr><th>Name</th></tr></thead><tbody><tr><td><span style="font-size:24px">A | B</span></td></tr></tbody></table>
+        <pre>code <span style="font-size:20px">larger</span> text</pre>
+        """
+        let page = try FormattedPage(html: source)
+        let selected = try #require(page.blocks[0].runs.first { $0.text == "selected" })
+        #expect(selected.fontSize == 24)
+        #expect(selected.bold && selected.italic && selected.underline)
+        #expect(page.blocks[0].runs.first?.fontSize == nil)
+        #expect(try FormattedPage(html: page.html()) == page)
+        #expect(try FormattedPage(markdown: page.markdown()) == page)
+        #expect(page.markdown().contains("font-size:24.0px"))
+        #expect(page.markdown().contains("&#124;"))
+    }
+
+    @Test(arguments: ["0px", "-1px", "513px", "nanpx", "infinitypx", "1em", "calc(20px)", "20px!important"])
+    func unsupportedFontSizesAreRejectedWithoutFlattening(css: String) {
+        #expect(throws: (any Error).self) {
+            try FormattedPage(html: "<p><span style=\"font-size:\(css)\">Preserve me</span></p>")
+        }
+    }
+
+    @Test func previewKeepsOnlyValidatedFontSizeCSS() throws {
+        let html = """
+        <p><span style="font-size:24px;position:fixed;background:url(https://example.com/tracker)">Selected</span></p>
+        <span style="font-size:999999px;color:red">Untrusted</span>
+        """
+        let safe = try PreviewDocument.sanitizedBody(html, resources: nil)
+        #expect(safe.contains("font-size:24.0px"))
+        #expect(!safe.contains("position:"))
+        #expect(!safe.contains("url("))
+        #expect(!safe.contains("example.com"))
+        #expect(!safe.contains("999999"))
+        #expect(!safe.contains("color:"))
+    }
+
     @Test func portableMarkdownRetainsWritingSemantics() throws {
         let source = """
         # A heading
