@@ -631,6 +631,7 @@ class DocumentTextView: NSTextView {
 
 @MainActor
 final class PageTextView: DocumentTextView {
+    var focusOnAttach = false
     var markdownShortcuts = false
     var resources: ImportedResources?
     var onImportFiles: (([URL]) throws -> Attachments.Imported)?
@@ -638,6 +639,15 @@ final class PageTextView: DocumentTextView {
     var onImage: ((URL) -> Void)?
     var pageFontSize = 16.0
     var pageFont = ReadingFont.system
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard focusOnAttach, window != nil else { return }
+        Task { @MainActor [weak self] in
+            guard let self, self.isEditable else { return }
+            self.window?.makeFirstResponder(self)
+        }
+    }
 
     override func insertText(_ value: Any, replacementRange: NSRange) {
         let selection = selectedRange()
@@ -1055,6 +1065,7 @@ struct FormattedEditor: View {
     let family: ReadingFont
     let dracula: Bool
     @ObservedObject var actions: FormattingActions
+    var focusOnAttach = false
     var onChange: (String) -> Void
     var onError: (String) -> Void
     var onImage: (URL) -> Void
@@ -1063,7 +1074,9 @@ struct FormattedEditor: View {
     var body: some View {
         NativePageView(html: note.body, resources: resources, size: fontSize, family: family,
                        dracula: dracula, actions: actions, onChange: onChange,
-                       onError: onError, onImage: onImage, currentSource: currentSource, onImportFiles: onImportFiles)
+                       onError: onError, onImage: onImage, currentSource: currentSource,
+                       onImportFiles: onImportFiles, contentFormat: note.contentFormat,
+                       focusOnAttach: focusOnAttach)
     }
 
     struct LinkEditorPopover: View {
@@ -1179,6 +1192,8 @@ struct NativePageView: NSViewRepresentable {
     var onImage: ((URL) -> Void)?
     var currentSource: (() -> String)?
     var onImportFiles: (([URL]) throws -> Attachments.Imported)?
+    var contentFormat: NoteFormat = .formatted
+    var focusOnAttach = false
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -1191,6 +1206,7 @@ struct NativePageView: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         let editor = PageTextView(frame: .zero)
+        editor.focusOnAttach = focusOnAttach
         editor.isRichText = true
         editor.importsGraphics = false
         editor.allowsUndo = true
@@ -1229,7 +1245,7 @@ struct NativePageView: NSViewRepresentable {
         editor.markdownShortcuts = markdownShortcuts
         editor.configureWritingWidth(CGFloat(columnWidth), inset: NSSize(width: 28, height: 28))
         editor.isContinuousSpellCheckingEnabled = spellChecking
-        editor.isEditable = isEnabled && coordinator.loadedHTML == html
+        editor.isEditable = isEnabled && coordinator.loadedHTML == html && coordinator.loadedFormat == contentFormat
         editor.isSelectable = isEnabled
         if !isEnabled, editor.window?.firstResponder === editor {
             editor.window?.makeFirstResponder(nil)
@@ -1254,7 +1270,7 @@ struct NativePageView: NSViewRepresentable {
             coordinator.palette = colors
         }
         // Resource ownership can change during an insertion without replacing the native buffer or its undo history.
-        if coordinator.loadedHTML == html && coordinator.size == size &&
+        if coordinator.loadedHTML == html && coordinator.loadedFormat == contentFormat && coordinator.size == size &&
             coordinator.family == family && coordinator.dracula == dracula && previousResources == resources {
             coordinator.resources = resources
             if paletteChanged || coordinator.needsRecolor {
@@ -1265,7 +1281,7 @@ struct NativePageView: NSViewRepresentable {
         }
         do {
             let selection = editor.selectedRange()
-            let page = try FormattedPage(markdown: html)
+            let page = try contentFormat.usesHTML ? FormattedPage(html: html) : FormattedPage(markdown: html)
             let decoded = try NativePageCodec.decode(page.html(), resources: resources, size: size, family: family, color: color)
             coordinator.updating = true
             defer { coordinator.updating = false }
@@ -1284,6 +1300,7 @@ struct NativePageView: NSViewRepresentable {
             editor.isEditable = isEnabled
             if coordinator.loadedHTML != nil && coordinator.loadedHTML != html { editor.undoManager?.removeAllActions() }
             coordinator.loadedHTML = html
+            coordinator.loadedFormat = contentFormat
             coordinator.size = size
             coordinator.family = family
             coordinator.dracula = dracula
@@ -1303,6 +1320,7 @@ struct NativePageView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: NativePageView
         var loadedHTML: String?
+        var loadedFormat: NoteFormat?
         var resources: ImportedResources?
         var size = 0.0
         var family = ReadingFont.system
@@ -1317,7 +1335,7 @@ struct NativePageView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard !updating, let editor = notification.object as? PageTextView,
                   let storage = editor.textStorage else { return }
-            loadedHTML = NativePageCodec.encode(storage, markdown: true)
+            loadedHTML = NativePageCodec.encode(storage, markdown: !parent.contentFormat.usesHTML)
             needsRecolor = true
             if let loadedHTML { parent.onChange(loadedHTML) }
             var typing = editor.typingAttributes

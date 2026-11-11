@@ -146,6 +146,43 @@ struct NativeEditorTests {
         #expect(error == nil)
     }
 
+    @Test(arguments: [NoteFormat.markdown, .html])
+    func existingNoteFormattingPreservesItsStorageFormatAndSupportsUndo(format: NoteFormat) async throws {
+        _ = NSApplication.shared
+        let original = format.usesHTML ? "<p>Hello world</p>" : "Hello world"
+        let actions = FormattingActions()
+        var saved: String?
+        var error: String?
+        let view = NativePageView(html: original, resources: nil, size: 17, family: .system,
+            dracula: false, actions: actions, onChange: { saved = $0 }, onError: { error = $0 },
+            contentFormat: format)
+        let host = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil }
+        try await Task.sleep(for: .milliseconds(120))
+        let editor = try #require(actions.editor)
+        #expect(editor.isEditable && editor.string == "Hello world")
+        #expect(saved == nil, "Entering Compose must not rewrite the existing source.")
+        window.makeFirstResponder(editor)
+        editor.setSelectedRange(NSRange(location: 0, length: 5))
+        actions.toggle(.boldFontMask)
+        let changed = try #require(saved)
+        let reopened = try format.usesHTML ? FormattedPage(html: changed) : FormattedPage(markdown: changed)
+        #expect(reopened.blocks.first?.runs.first?.bold == true)
+        #expect(changed.contains(format.usesHTML ? "<strong>Hello</strong>" : "**Hello**"))
+        let undo = try #require(editor.undoManager)
+        #expect(undo.canUndo)
+        undo.undo()
+        let restored = try #require(saved)
+        let page = try format.usesHTML ? FormattedPage(html: restored) : FormattedPage(markdown: restored)
+        #expect(page.blocks.first?.runs.allSatisfy { !$0.bold } == true)
+        #expect(editor.string == "Hello world")
+        #expect(error == nil)
+    }
+
     @Test func paragraphStylesPreserveTextAndDoNotTurnAllMonospaceIntoCode() throws {
         let decoded = try NativePageCodec.decode("<h1>Title</h1><p>Body <strong>bold</strong></p>",
                                                   resources: nil, family: .monospace)

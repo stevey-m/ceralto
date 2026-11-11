@@ -83,8 +83,9 @@ struct PresentationTests {
         let notesEnd = notesStart + widths.notes
         let title = try toolbarRect("note-list-title")
         #expect(title.minX >= notesStart && title.maxX <= notesEnd)
-        #expect(try toolbarRect("note-new").maxX <= notesEnd + 8,
-                "New note belongs above the note-list column, not above the editor.")
+        let newNoteRect = try toolbarRect("note-new")
+        #expect(newNoteRect.maxX <= notesEnd + 8,
+                "New note \(newNoteRect) belongs inside the note-list column ending at \(notesEnd).")
         #expect(try toolbarRect("note-formatting").minX >= notesEnd)
         #expect(abs(try toolbarRect(searchIdentifier()).maxX - (width - 8)) <= 8,
                 "Search and sharing must remain at the right edge of the toolbar.")

@@ -115,7 +115,7 @@ struct ContentView: View {
                     .withoutSharedBackground
                 }
                 ToolbarItem(id: "note-list-title", placement: .navigation) {
-                    noteListTitle.frame(width: max(50, paneWidths.notes - 100), alignment: .leading)
+                    noteListTitle.frame(width: max(10, paneWidths.notes - 150), alignment: .leading)
                 }
                 .withoutSharedBackground
                 ToolbarItem(id: "note-list-options", placement: .navigation) {
@@ -123,9 +123,10 @@ struct ContentView: View {
                 }
             }
             ToolbarItem(id: "note-new", placement: .navigation) {
-                Button(action: store.createNote) { Image(systemName: "square.and.pencil") }
+                NoteToolbarButton(title: "New Note", action: store.createNote)
                     .help("New Note (Command-N)").accessibilityLabel("New note").disabled(!store.isLoaded)
             }
+
             if showNotebooks && showNotes && !showsNotebookButton {
                 ToolbarItem(id: "editor-column-spacing", placement: .navigation) {
                     Color.clear.frame(width: 16, height: 1)
@@ -717,6 +718,37 @@ struct ContentView: View {
         }
         Button("Export \(ids.count) Selected Notes...") { store.exportSelectedNotes(ids) }
             .disabled(store.isSyncing || store.isImportingJoplin || store.isProcessingEncryptedBackup)
+    }
+}
+
+struct NoteToolbarButton: NSViewRepresentable {
+    let title: String
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: title, target: context.coordinator, action: #selector(Coordinator.press))
+        button.bezelStyle = .texturedRounded
+        button.setAccessibilityLabel(title)
+        button.sizeToFit()
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.action = action
+        button.isEnabled = isEnabled
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSButton, context: Context) -> CGSize? {
+        nsView.intrinsicContentSize
+    }
+
+    @MainActor final class Coordinator: NSObject {
+        var action: () -> Void
+        init(action: @escaping () -> Void) { self.action = action }
+        @objc func press() { action() }
     }
 }
 

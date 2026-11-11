@@ -49,6 +49,86 @@ struct DocumentWorkspaceTests {
 @Suite(.serialized)
 @MainActor
 struct NavigationTests {
+    @Test(arguments: [NoteFormat.markdown, .html], [false, true])
+    func existingNoteEditingAndVisibleNewNoteActionsWork(format: NoteFormat, unsupported: Bool) async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "CeraltoEditing-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("Preview", forKey: "readingEditorMode")
+        let notebook = Notebook(name: "Existing notes")
+        let original = unsupported
+            ? (format.usesHTML ? "<details><summary>Keep this structure</summary><p>Hello world</p></details>" : "### Hello world")
+            : (format.usesHTML ? "<p>Hello world</p>" : "Hello world")
+        let note = Note(notebookID: notebook.id, title: "Existing note", body: original, format: format)
+        let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
+        try storage.save(Library(notebooks: [notebook], notes: [note]))
+        let store = NotesStore(storage: storage, preferences: defaults)
+        store.openNote(note.id)
+        let host = NSHostingView(rootView: LibraryWindowContent()
+            .environmentObject(store).defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
+                              styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: false)
+        window.toolbarStyle = .unified
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil }
+        func descendants(_ view: NSView) -> [NSView] {
+            [view] + view.subviews.flatMap(descendants)
+        }
+        func press(_ label: String, in identifier: String) throws {
+            let item = try #require(window.toolbar?.visibleItems?.first { $0.itemIdentifier.rawValue == identifier },
+                                    "\(label) must remain visible.")
+            let view = try #require(item.view)
+            let button = try #require(descendants(view).compactMap { $0 as? NSButton }.first { $0.title == label })
+            #expect(button.isEnabled)
+            #expect(NSApp.sendAction(try #require(button.action), to: button.target, from: button))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        host.layoutSubtreeIfNeeded()
+        #expect(!descendants(host).contains { $0 is PageTextView })
+        try press("Edit Note", in: "note-formatting")
+        try await Task.sleep(for: .milliseconds(160))
+        host.layoutSubtreeIfNeeded()
+        if unsupported {
+            #expect(store.errorMessage?.contains("source editing") == true)
+            #expect(store.library.notes.first == note)
+            #expect(try storage.load()?.notes.first == note)
+            #expect(descendants(host).contains { $0 is SourceTextView })
+            #expect(!descendants(host).contains { $0 is PageTextView })
+            store.errorMessage = nil
+            try await Task.sleep(for: .milliseconds(100))
+            return
+        }
+        let editor = try #require(descendants(host).compactMap { $0 as? PageTextView }.first)
+        #expect(editor.isEditable && editor.string == "Hello world")
+        #expect(window.firstResponder === editor)
+        #expect(store.library.notes.first?.body == original)
+        #expect(store.library.notes.first?.contentFormat == format)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.insertText(" again", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(80))
+        let changed = try #require(store.library.notes.first)
+        let page = try format.usesHTML ? FormattedPage(html: changed.body) : FormattedPage(markdown: changed.body)
+        #expect(page.blocks.first?.runs.map(\.text).joined() == "Hello world again")
+        #expect(changed.contentFormat == format)
+        #expect(try storage.load()?.notes.first?.body == changed.body)
+        try press("New Note", in: "note-new")
+        try await Task.sleep(for: .milliseconds(160))
+        #expect(store.library.notes.count == 2)
+        #expect(store.selectedNoteID != note.id)
+        let field = try #require(window.firstResponder as? NSTextView)
+        #expect(field.isFieldEditor, "New Note must focus its title for immediate typing.")
+        field.insertText("A new idea", replacementRange: field.selectedRange())
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(store.selectedNote?.title == "A new idea")
+        #expect(store.selectedNote?.body.isEmpty == true)
+        #expect(store.errorMessage == nil)
+    }
+
     @Test func nativeMultipleSelectionKeepsAPrimaryEditorAndDropsFilteredOutNotes() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -1081,11 +1081,13 @@ final class NotesStore: ObservableObject {
     func importComposeAttachments(_ files: [URL], to id: UUID) throws -> Attachments.Imported {
         guard isLoaded, !isReadOnly, !isSyncing,
               let index = library.notes.firstIndex(where: { $0.id == id }),
-              library.notes[index].deletedAt == nil, library.notes[index].contentFormat == .formatted else {
+              library.notes[index].deletedAt == nil else {
             throw JoplinImportError.invalid("Select an editable Compose note before adding attachments.")
         }
+        var insertionNote = library.notes[index]
+        insertionNote.format = .formatted
         let imported = try Attachments.importing(
-            files: files, for: library.notes[index],
+            files: files, for: insertionNote,
             directory: storage.url.deletingLastPathComponent().appendingPathComponent("Attachments", isDirectory: true)
         )
         var candidate = library

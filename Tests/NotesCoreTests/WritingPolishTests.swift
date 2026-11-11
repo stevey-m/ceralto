@@ -328,14 +328,16 @@ struct WritingPolishTests {
         #expect(markdown(editor) == "# Heading\n\nBody")
     }
 
-    @Test func composeResourceOwnershipIsPersistedBeforeInsertionAndFailedSavesRollBack() throws {
+    @Test(arguments: [NoteFormat.formatted, .markdown, .html])
+    func composeResourceOwnershipIsPersistedBeforeInsertionAndFailedSavesRollBack(format: NoteFormat) throws {
         let root = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: root) }
         let suite = "DeltosWriting-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let notebook = Notebook(name: "Writing")
-        let note = Note(notebookID: notebook.id, body: "Existing words", format: .formatted)
+        let body = format.usesHTML ? "<p>Existing words</p>" : "Existing words"
+        let note = Note(notebookID: notebook.id, body: body, format: format)
         let storage = LibraryStorage(url: root.appendingPathComponent("library.json"))
         try storage.save(Library(notebooks: [notebook], notes: [note]))
         let store = NotesStore(storage: storage, preferences: defaults)
@@ -343,7 +345,10 @@ struct WritingPolishTests {
         try imageBytes(.png).write(to: input)
         let imported = try store.importComposeAttachments([input], to: note.id)
         let persisted = try #require(storage.load()?.notes.first)
-        #expect(persisted.body == "Existing words")
+        #expect(persisted.body == body)
+        #expect(persisted.contentFormat == format)
+        let fragment = try FormattedPage(markdown: imported.fragment)
+        #expect(fragment.blocks.flatMap(\.runs).contains { $0.image != nil })
         #expect(persisted.importedRootURL == imported.resources.root)
         #expect(persisted.importedSourceURL == imported.resources.source)
         let before = store.library

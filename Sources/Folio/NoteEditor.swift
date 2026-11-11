@@ -25,12 +25,15 @@ struct NoteEditor: View {
     @ViewState private var showingHistory = false
     @ViewState private var showingTags = false
     @ViewState private var confirmingSource = false
+    @ViewState private var composingImportedNote = false
+    @FocusState private var titleFocused: Bool
     @ViewState private var showingBacklinks = false
     @ViewState private var imageURL: URL?
     @StateObject private var formatting = FormattingActions()
 
     private var isTrashed: Bool { note.deletedAt != nil }
     private var editorMode: EditorMode { EditorMode(rawValue: mode) ?? .preview }
+    private var usesCompose: Bool { note.contentFormat == .formatted || composingImportedNote }
 
     var body: some View {
         ZStack {
@@ -93,6 +96,10 @@ struct NoteEditor: View {
                 }
                 }
                 TextField("Untitled note", text: noteBinding(\.title))
+                    .focused($titleFocused)
+                    .onSubmit {
+                        if let editor = formatting.editor { editor.window?.makeFirstResponder(editor) }
+                    }
                     .textFieldStyle(.plain)
                     .font(.system(size: 24, weight: .semibold))
                     .disabled(isTrashed)
@@ -118,10 +125,11 @@ struct NoteEditor: View {
                 }
             }
             .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 4)
-            if note.contentFormat == .formatted && editorMode != .preview && !isTrashed {
+            if usesCompose && editorMode != .preview && !isTrashed {
                 FormattedEditor(note: note, fontSize: fontSize,
                                 family: ReadingFont(rawValue: readingFont) ?? .system,
-                                dracula: palette != nil, actions: formatting) { body in
+                                dracula: palette != nil, actions: formatting,
+                                focusOnAttach: composingImportedNote) { body in
                     store.update(note.id) { $0.body = body }
                 } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
                   currentSource: { noteBinding(\.body).wrappedValue }
@@ -166,6 +174,7 @@ struct NoteEditor: View {
             if note.contentFormat == .formatted || (note.body.isEmpty && note.title.isEmpty) {
                 mode = EditorMode.write.rawValue
             }
+            if note.body.isEmpty && note.title.isEmpty && isActive { titleFocused = true }
         }
         .onChange(of: mode) { _, value in preferredMode = value }
         .onChange(of: tagsFocused) { _, focused in
@@ -180,24 +189,31 @@ struct NoteEditor: View {
         .sheet(isPresented: $showingBacklinks) {
             LinkedMentionsView(note: note)
         }
-        .confirmationDialog("Switch to Markdown source?", isPresented: $confirmingSource, titleVisibility: .visible) {
+        .confirmationDialog("Switch to source editing?", isPresented: $confirmingSource, titleVisibility: .visible) {
             Button("Use Source Editor") {
-                store.update(note.id) { $0.format = .markdown }
+                if note.contentFormat == .formatted { store.update(note.id) { $0.format = .markdown } }
+                composingImportedNote = false
                 mode = EditorMode.write.rawValue
             }
         } message: {
-            Text("The note is already stored as readable Markdown. Source mode supports advanced Markdown such as tables and nested lists. The note will remain in source mode; its text and attachments will not be converted.")
+            Text("Source editing preserves the note's original Markdown or HTML. Its text and attachments will not be converted.")
         }
     }
 
     @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
         ToolbarItem(id: "note-formatting", placement: .automatic) {
-            NoteFormattingControls(actions: formatting)
-                .disabled(isTrashed || note.contentFormat != .formatted || editorMode != .write)
+            if usesCompose && editorMode != .preview {
+                NoteFormattingControls(actions: formatting).disabled(isTrashed)
+            } else {
+                NoteToolbarButton(title: "Edit Note", action: beginEditing)
+                    .help("Edit this existing note with formatting tools")
+                    .accessibilityIdentifier("note-edit")
+                    .disabled(isTrashed)
+            }
         }
         ToolbarItem(id: "note-attachments", placement: .automatic) {
                 Button {
-                    if note.contentFormat == .formatted && editorMode == .write {
+                    if usesCompose && editorMode != .preview {
                         formatting.chooseAttachments()
                     } else {
                         store.addAttachments()
@@ -229,8 +245,8 @@ struct NoteEditor: View {
                 Menu {
                     Picker("Editor Mode", selection: $mode) {
                         ForEach(EditorMode.allCases, id: \.rawValue) { mode in
-                            if note.contentFormat != .formatted || mode != .split {
-                                Text(note.contentFormat == .formatted && mode == .write ? "Compose" : mode.rawValue).tag(mode.rawValue)
+                            if !usesCompose || mode != .split {
+                                Text(usesCompose && mode == .write ? "Compose" : mode.rawValue).tag(mode.rawValue)
                             }
                         }
                     }.disabled(isTrashed)
@@ -247,8 +263,10 @@ struct NoteEditor: View {
                     Button("Note History...") { showingHistory = true }
                         .disabled(isTrashed || (note.history ?? []).isEmpty)
                     Button("Linked Mentions...") { showingBacklinks = true }
-                    if note.contentFormat == .formatted {
-                        Button("Use Markdown Source Editor...") { confirmingSource = true }
+                    if usesCompose {
+                        Button(note.contentFormat.usesHTML ? "Use HTML Source Editor..." : "Use Markdown Source Editor...") {
+                            confirmingSource = true
+                        }
                     }
                     Divider()
                     if isTrashed {
@@ -281,6 +299,19 @@ struct NoteEditor: View {
 
     private var searchField: some View {
         LibrarySearchField(focused: searchFocus)
+    }
+
+    private func beginEditing() {
+        do {
+            if note.contentFormat.usesHTML { _ = try FormattedPage(html: note.body) }
+            else { _ = try FormattedPage(markdown: note.body) }
+            composingImportedNote = true
+            mode = EditorMode.write.rawValue
+        } catch {
+            composingImportedNote = false
+            mode = EditorMode.write.rawValue
+            store.errorMessage = "This note needs source editing to preserve its structure. Its content has not been changed. \(error.localizedDescription)"
+        }
     }
 
     private var sourceEditor: some View {
