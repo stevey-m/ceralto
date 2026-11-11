@@ -102,4 +102,51 @@ struct SettingsTests {
             try png.write(to: destination.appendingPathComponent("Folio-settings-preview.png"))
         }
     }
+
+    @Test(arguments: ["System", "Light", "Dark", "Dracula"])
+    func closeButtonStaysVisibleInCompactSettingsAndClosesOnlyItsOwnWindow(theme: String) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "DeltosSettingsClose-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(theme, forKey: "folioTheme")
+        let store = NotesStore(storage: LibraryStorage(url: directory.appendingPathComponent("library.json")), preferences: defaults)
+        let host = NSHostingView(rootView: SettingsView(section: .files).environmentObject(store).defaultAppStorage(defaults))
+        let window = CloseTrackingWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+                                         styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        let other = CloseTrackingWindow(contentRect: .zero, styleMask: [.titled, .closable],
+                                        backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        host.frame = NSRect(x: 0, y: 0, width: 720, height: 480)
+        defer { window.contentView = nil }
+        for _ in 0..<100 {
+            host.layoutSubtreeIfNeeded()
+            if buttons(in: host).contains(where: { $0.accessibilityIdentifier() == "deltos-close-settings" }) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let button = try #require(buttons(in: host).first { $0.accessibilityIdentifier() == "deltos-close-settings" })
+        let frame = button.convert(button.bounds, to: host)
+        #expect(host.bounds.contains(frame))
+        #expect(frame.width >= 90 && frame.height >= 20)
+        #expect(!button.isHiddenOrHasHiddenAncestor)
+        #expect(button.isEnabled)
+        #expect(button.keyEquivalent == "\u{1b}")
+        button.performClick(nil)
+        #expect(window.closeRequests == 1)
+        #expect(other.closeRequests == 0)
+    }
+
+    private func buttons(in view: NSView) -> [NSButton] {
+        (view as? NSButton).map { [$0] } ?? view.subviews.flatMap { buttons(in: $0) }
+    }
+
+    @MainActor private final class CloseTrackingWindow: NSWindow {
+        var closeRequests = 0
+        override func performClose(_ sender: Any?) {
+            closeRequests += 1
+            super.performClose(sender)
+        }
+    }
 }

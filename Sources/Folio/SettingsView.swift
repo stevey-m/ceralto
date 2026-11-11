@@ -63,6 +63,24 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Deltos Settings").font(.headline)
+                Spacer()
+                SettingsCloseButton().frame(width: 118, height: 28)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            Divider()
+            settingsContent
+        }
+        .frame(minWidth: 720, idealWidth: 900, minHeight: 480, idealHeight: 680)
+        .onChange(of: query) { _, _ in
+            if selection.map({ !matches.contains($0) }) ?? true { selection = matches.first }
+        }
+        .folioAppearance()
+    }
+
+    private var settingsContent: some View {
         HStack(spacing: 0) {
             VStack(spacing: 12) {
                 TextField("Search settings", text: $query)
@@ -132,11 +150,25 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
         }
-        .frame(minWidth: 820, idealWidth: 900, minHeight: 620, idealHeight: 680)
-        .onChange(of: query) { _, _ in
-            if selection.map({ !matches.contains($0) }) ?? true { selection = matches.first }
+    }
+
+    struct SettingsCloseButton: NSViewRepresentable {
+        func makeNSView(context: Context) -> NSButton {
+            let button = CloseButton(title: "Close Settings", target: nil, action: nil)
+            button.target = button
+            button.action = #selector(CloseButton.closeSettings(_:))
+            button.bezelStyle = .rounded
+            button.keyEquivalent = "\u{1b}"
+            button.setAccessibilityLabel("Close Settings")
+            button.setAccessibilityIdentifier("deltos-close-settings")
+            return button
         }
-        .folioAppearance()
+
+        func updateNSView(_ button: NSButton, context: Context) {}
+
+        @MainActor private final class CloseButton: NSButton {
+            @objc func closeSettings(_ sender: Any?) { window?.performClose(sender) }
+        }
     }
 
     @ViewBuilder private func sectionContent(_ section: SettingsSection) -> some View {
