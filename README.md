@@ -15,7 +15,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## What is actually ready
 
-**0.18.0 is a development release, not a finished replacement for your library.**
+**0.19.0 is a development release, not a finished replacement for your library.**
 The Mac app is packaged as a DMG. The native iPhone/iPad reader builds as a
 device application but still requires your Apple signing and a real-device
 check before installation. Its interface is read-only by design.
@@ -29,7 +29,7 @@ Keep an independent backup and start with a small test notebook.
 ## Install on Mac
 
 Download the Apple Silicon DMG from [GitHub Releases](https://github.com/stevey-m/folio/releases).
-Open `Deltos-0.18.0-arm64.dmg`, drag **Deltos 0.18.0** to **Applications**, eject the
+Open `Deltos-0.19.0-arm64.dmg`, drag **Deltos 0.19.0** to **Applications**, eject the
 image and launch that versioned copy. An alternate ZIP contains the same app.
 The versioned filename avoids replacing an existing blocked installation;
 keep a known-working recovery app until you confirm the new app opens.
@@ -66,6 +66,21 @@ silently incomplete print. Command-P is reserved; a prior custom assignment
 using it must be reset in Keyboard Shortcuts (the saved configuration is kept).
 
 ### Write and format in Compose
+
+**Settings > Editor > Writing** now offers opt-in Markdown block shortcuts,
+bracket/quote pairing, source line numbers and Tab insertion, plus a full,
+720 pt or 900 pt writing column. Width applies to Compose and Markdown source,
+including live Markdown folders, but not Quick Capture. Narrow windows still
+fit the available space. Changing these preferences preserves native undo.
+
+With Markdown shortcuts enabled, type `#`, `##`, `>`, `-`, `*` or `1.` then
+Space in an otherwise empty plain paragraph. For a checklist, type `- [ ] `
+(the bullet becomes a checkbox). Code blocks and pasted text stay literal.
+Pairing wraps selected text, steps over an existing closing delimiter and
+deletes both characters of an empty pair. Source Tab can insert a native tab,
+two spaces or four spaces; Compose table Tab navigation is unchanged.
+Line numbers count logical source lines rather than wrapped screen lines.
+All new automatic editing behaviour is off by default.
 
 The Bold, Italic and Bullet controls reflect the current selection. A mixed
 selection is not highlighted; applying Bold or Italic formats the whole
@@ -115,6 +130,28 @@ locked notes or every Apple Notes clipboard representation.
 Rich paste and caret attachment insertion apply to Compose; source notes and
 the separate live Markdown window remain literal-text editors. In source or
 Preview mode, the paperclip still appends attachments to the note.
+
+### Sort and select multiple notes
+
+Use the sort menu at the bottom of the note list, or **Settings > General**,
+to order notes by last edited, creation date or natural title, ascending or
+descending. Pinned notes remain first; ties retain stable note-ID order.
+The setting is local to this Mac and applies inside notebook branches, search
+results and Trash without changing the saved notes.
+
+Command-click to select individual notes or Shift-click for a range. The
+**Actions** menu appears for multiple notes, and right-clicking a selected row
+offers the same bulk actions: move to a notebook, add comma-separated tags,
+export, or move to Trash after confirmation. Trash offers bulk restore instead;
+there is no bulk permanent-delete action. The editor keeps one primary note.
+Changing scope or search removes hidden notes from the selection.
+
+Bulk edits save the complete change before updating the displayed library, so
+a save failure does not leave a partially changed selection. Export creates
+a new folder containing only selected notes, metadata and linked attachments;
+existing folders are never overwritten. Links to unselected notes are not
+exported. This portable Markdown/HTML export is not a complete history backup;
+use Files & Backups for that.
 
 ### Choose an appearance
 

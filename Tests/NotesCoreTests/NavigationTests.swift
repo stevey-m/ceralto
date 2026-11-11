@@ -49,6 +49,58 @@ struct DocumentWorkspaceTests {
 @Suite(.serialized)
 @MainActor
 struct NavigationTests {
+    @Test func nativeMultipleSelectionKeepsAPrimaryEditorAndDropsFilteredOutNotes() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let suite = "DeltosMultipleSelection-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let storage = LibraryStorage(url: directory.appendingPathComponent("library.json"))
+        let notebook = Notebook(name: "Work")
+        let notes = ["Alpha", "Beta", "Gamma"].map { Note(notebookID: notebook.id, title: $0, body: "Body", format: .formatted) }
+        try storage.save(Library(notebooks: [notebook], notes: notes))
+        let store = NotesStore(storage: storage, preferences: defaults)
+        store.scope = .all
+        store.setNoteOrdering(NoteOrdering(field: .title, ascending: true))
+        let host = NSHostingView(rootView: ContentView().environmentObject(store).defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 750),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.frame = NSRect(x: 0, y: 0, width: 1200, height: 750)
+        func tables(in view: NSView) -> [NSTableView] {
+            if let table = view as? NSTableView { return [table] }
+            return view.subviews.flatMap { tables(in: $0) }
+        }
+        for _ in 0..<50 {
+            host.layoutSubtreeIfNeeded()
+            if tables(in: host).contains(where: { $0.allowsMultipleSelection && $0.numberOfRows == 3 }) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let list = try #require(tables(in: host).first { $0.allowsMultipleSelection && $0.numberOfRows == 3 })
+        list.selectRowIndexes(IndexSet([0, 1]), byExtendingSelection: false)
+        try await Task.sleep(for: .milliseconds(80))
+        host.layoutSubtreeIfNeeded()
+        #expect(list.selectedRowIndexes == IndexSet([0, 1]))
+        #expect(store.selectedNoteID == notes[0].id || store.selectedNoteID == notes[1].id)
+        store.setNoteOrdering(NoteOrdering(field: .title, ascending: false))
+        try await Task.sleep(for: .milliseconds(80))
+        host.layoutSubtreeIfNeeded()
+        #expect(list.selectedRowIndexes.count == 2)
+        store.query = "title:Alpha"
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        #expect(list.numberOfRows == 1)
+        #expect(list.selectedRowIndexes.count == 1)
+        #expect(store.selectedNoteID == notes[0].id)
+        store.scope = .trash
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        #expect(list.selectedRowIndexes.isEmpty)
+        #expect(store.selectedNoteID == nil)
+    }
+
     @Test func tabsRestoreAcrossLaunchesAndClosingNeverDeletesNotes() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

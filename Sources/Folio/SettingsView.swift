@@ -25,9 +25,9 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var keywords: String {
         switch self {
-        case .general: "version releases updates help github source license contributors note list preview dates"
+        case .general: "version releases updates help github source license contributors note list preview dates sort sorting title created updated ascending descending pinned"
         case .appearance: "theme system light dark dracula accent gold blue purple green rose font text size images width panes layout"
-        case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates"
+        case .editor: "new note default format compose markdown source spelling spellcheck daily journal today templates brackets quotes pairing shortcuts tab spaces line numbers writing column width"
         case .files: "library storage location import export print pdf joplin markdown html attachments backup restore recovery schedule scheduled interval retention history privacy encryption trash"
         case .sync: "icloud dropbox onedrive google drive cloud folder connect disconnect sync offline ipad refresh snapshots conflicts backup"
         case .extensions: "templates packs plugins api community reload install joplin obsidian compatibility inspect folders"
@@ -207,6 +207,16 @@ struct SettingsView: View {
                 Button("Contribute on GitHub") { openProject("blob/main/CONTRIBUTING.md") }
             }
             Section("Note list") {
+                Picker("Sort notes by", selection: Binding(
+                    get: { store.noteOrdering.field },
+                    set: { store.setNoteOrdering(NoteOrdering(field: $0, ascending: store.noteOrdering.ascending)) }
+                )) {
+                    ForEach(NoteSortField.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                Toggle("Ascending (pinned notes stay first)", isOn: Binding(
+                    get: { store.noteOrdering.ascending },
+                    set: { store.setNoteOrdering(NoteOrdering(field: store.noteOrdering.field, ascending: $0)) }
+                ))
                 Picker("Preview lines", selection: $previewLines) {
                     Text("Titles only").tag(0)
                     ForEach(1...3, id: \.self) { Text("\($0) \($0 == 1 ? "line" : "lines")").tag($0) }
@@ -223,6 +233,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Writing") {
+                EditorPreferenceControls()
                 Toggle("Check spelling in Compose", isOn: $spellChecking)
                 Text("Uses macOS spelling locally. Automatic spelling correction stays off. Use Appearance for font, text size and reading width.")
                     .font(.caption).foregroundStyle(.secondary)

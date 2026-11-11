@@ -543,6 +543,76 @@ final class FormattingActions: ObservableObject {
 
 @MainActor
 class DocumentTextView: NSTextView {
+    var pairDelimiters = false
+    var suppressAutomaticEditing = false
+    private var writingWidth: CGFloat = 0
+    private var writingInset: NSSize?
+    private let delimiterPairs = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
+
+    func configureWritingWidth(_ width: CGFloat, inset: NSSize) {
+        guard writingWidth != width || writingInset != inset else { return }
+        writingWidth = width
+        writingInset = inset
+        setFrameSize(frame.size)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        guard let writingInset else { return }
+        let horizontal = writingWidth > 0 ? max(writingInset.width, (newSize.width - writingWidth) / 2) : writingInset.width
+        let inset = NSSize(width: horizontal, height: writingInset.height)
+        if textContainerInset != inset { textContainerInset = inset }
+    }
+
+    override func insertText(_ value: Any, replacementRange: NSRange) {
+        guard isEditable else { return }
+        guard pairDelimiters, !suppressAutomaticEditing, !hasMarkedText(),
+              let typed = value as? String, typed.utf16.count == 1,
+              replacementRange.location == NSNotFound || replacementRange == selectedRange() else {
+            super.insertText(value, replacementRange: replacementRange)
+            return
+        }
+        let range = selectedRange()
+        let body = string as NSString
+        if range.length == 0, range.location < body.length,
+           delimiterPairs.values.contains(typed), body.substring(with: NSRange(location: range.location, length: 1)) == typed {
+            setSelectedRange(NSRange(location: range.location + 1, length: 0))
+            return
+        }
+        guard let closing = delimiterPairs[typed] else {
+            super.insertText(value, replacementRange: replacementRange)
+            return
+        }
+        let quote = typed == "\"" || typed == "'"
+        let before = range.location > 0 ? body.substring(with: NSRange(location: range.location - 1, length: 1)) : ""
+        let after = range.upperBound < body.length ? body.substring(with: NSRange(location: range.upperBound, length: 1)) : ""
+        let boundaryAfter = after.isEmpty || after.rangeOfCharacter(from: .whitespacesAndNewlines) != nil ||
+            delimiterPairs.values.contains(after)
+        let boundaryBefore = before.isEmpty || before.rangeOfCharacter(from: .whitespacesAndNewlines) != nil ||
+            delimiterPairs.keys.contains(before)
+        guard range.length > 0 || (boundaryAfter && (!quote || boundaryBefore)) else {
+            super.insertText(value, replacementRange: replacementRange)
+            return
+        }
+        let insertion = NSMutableAttributedString(string: typed, attributes: typingAttributes)
+        if range.length > 0, let textStorage { insertion.append(textStorage.attributedSubstring(from: range)) }
+        insertion.append(NSAttributedString(string: closing, attributes: typingAttributes))
+        super.insertText(insertion, replacementRange: range)
+        setSelectedRange(NSRange(location: range.location + 1, length: range.length))
+        undoManager?.setActionName("Pair Delimiters")
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        let range = selectedRange()
+        let body = string as NSString
+        if isEditable, pairDelimiters, !hasMarkedText(), range.length == 0,
+           range.location > 0, range.location < body.length,
+           let closing = delimiterPairs[body.substring(with: NSRange(location: range.location - 1, length: 1))],
+           body.substring(with: NSRange(location: range.location, length: 1)) == closing {
+            super.insertText("", replacementRange: NSRange(location: range.location - 1, length: 2))
+        } else { super.deleteBackward(sender) }
+    }
+
     private lazy var documentUndo: UndoManager = {
         let manager = UndoManager()
         NotificationCenter.default.addObserver(self, selector: #selector(publishUndo),
@@ -561,12 +631,73 @@ class DocumentTextView: NSTextView {
 
 @MainActor
 final class PageTextView: DocumentTextView {
+    var markdownShortcuts = false
     var resources: ImportedResources?
     var onImportFiles: (([URL]) throws -> Attachments.Imported)?
     var onError: ((String) -> Void)?
     var onImage: ((URL) -> Void)?
     var pageFontSize = 16.0
     var pageFont = ReadingFont.system
+
+    override func insertText(_ value: Any, replacementRange: NSRange) {
+        let selection = selectedRange()
+        if isEditable, markdownShortcuts, !suppressAutomaticEditing, !hasMarkedText(),
+           let typed = value as? String, typed == " ", selection.length == 0,
+           replacementRange.location == NSNotFound || replacementRange == selection,
+           typingAttributes[.folioTableRow] as? Bool != true,
+           typingAttributes[.folioCode] as? Bool != true {
+            let paragraph = (string as NSString).paragraphRange(for: selection)
+            let prefixRange = NSRange(location: paragraph.location, length: selection.location - paragraph.location)
+            let prefix = (string as NSString).substring(with: prefixRange)
+            let currentStyle = FormattedBlock.Style(rawValue: typingAttributes[.folioBlock] as? String ?? "") ?? .paragraph
+            let shortcuts: [String: FormattedBlock.Style] = [
+                "#": .heading1, "##": .heading2, ">": .quote, "-": .bullet, "*": .bullet,
+                "1.": .ordered, "- [ ]": .checklist
+            ]
+            let style = currentStyle == .paragraph ? shortcuts[prefix] :
+                (currentStyle == .bullet && prefix == NativePageCodec.listMarker(.bullet) + "[ ]" ? .checklist : nil)
+            let suffix = (string as NSString).substring(with: NSRange(location: selection.location,
+                                                                      length: paragraph.upperBound - selection.location))
+            if let style, suffix.trimmingCharacters(in: .newlines).isEmpty, let storage = textStorage {
+                let attrs = NativePageCodec.attributes(style: style, size: pageFontSize,
+                    family: pageFont, color: textColor ?? .textColor)
+                var markerAttributes = attrs
+                markerAttributes[.folioMarker] = true
+                let marker = NativePageCodec.isList(style) ? NativePageCodec.listMarker(style) : ""
+                breakUndoCoalescing()
+                // Snapshot undo also restores the typing style of an empty heading.
+                undoManager?.disableUndoRegistration()
+                let accepted = shouldChangeText(in: prefixRange, replacementString: marker)
+                undoManager?.enableUndoRegistration()
+                guard accepted else { return }
+                let transformed = NSMutableAttributedString(attributedString: storage)
+                transformed.replaceCharacters(in: prefixRange, with: NSAttributedString(string: marker, attributes: markerAttributes))
+                restoreShortcutBuffer(transformed, typing: attrs,
+                    selection: NSRange(location: prefixRange.location + marker.utf16.count, length: 0))
+                breakUndoCoalescing()
+                return
+            }
+        }
+        super.insertText(value, replacementRange: replacementRange)
+    }
+
+    private func restoreShortcutBuffer(_ value: NSAttributedString, typing: [NSAttributedString.Key: Any], selection: NSRange) {
+        guard let storage = textStorage else { return }
+        let previous = NSAttributedString(attributedString: storage)
+        let previousTyping = typingAttributes
+        let previousSelection = selectedRange()
+        let restore: @MainActor (PageTextView) -> Void = {
+            $0.restoreShortcutBuffer(previous, typing: previousTyping, selection: previousSelection)
+        }
+        undoManager?.registerUndo(withTarget: self) { target in
+            MainActor.assumeIsolated { restore(target) }
+        }
+        undoManager?.setActionName("Markdown Shortcut")
+        storage.setAttributedString(value)
+        setSelectedRange(selection)
+        typingAttributes = typing
+        didChangeText()
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
@@ -704,6 +835,8 @@ final class PageTextView: DocumentTextView {
             onError?("The clipboard has no plain-text representation.")
             return
         }
+        suppressAutomaticEditing = true
+        defer { suppressAutomaticEditing = false }
         insertText(value, replacementRange: selectedRange())
     }
 
@@ -1041,6 +1174,9 @@ private final class PageScrollView: NSScrollView {
 }
 
 struct NativePageView: NSViewRepresentable {
+    @AppStorage("editorPairDelimiters") private var pairDelimiters = false
+    @AppStorage("composeMarkdownShortcuts") private var markdownShortcuts = false
+    @AppStorage("writingColumnWidth") private var columnWidth = 0
     @AppStorage("composeSpellChecking") private var spellChecking = true
     @AppStorage("folioAccent") private var accent = FolioAccent.gold.rawValue
     @AppStorage("folioDraculaAccent") private var draculaAccent = "Theme default"
@@ -1103,6 +1239,9 @@ struct NativePageView: NSViewRepresentable {
         editor.onImportFiles = onImportFiles
         editor.onError = onError
         editor.onImage = onImage
+        editor.pairDelimiters = pairDelimiters
+        editor.markdownShortcuts = markdownShortcuts
+        editor.configureWritingWidth(CGFloat(columnWidth), inset: NSSize(width: 28, height: 28))
         editor.isContinuousSpellCheckingEnabled = spellChecking
         editor.isEditable = isEnabled && coordinator.loadedHTML == html
         editor.isSelectable = isEnabled

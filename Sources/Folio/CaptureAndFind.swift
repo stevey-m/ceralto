@@ -28,7 +28,7 @@ struct QuickCaptureView: View {
             SourceEditor(text: $bodyText, family: .system, size: 16,
                          dracula: theme == FolioTheme.dracula.rawValue, currentSource: { bodyText },
                          accessibilityLabel: "Quick capture text", textInset: NSSize(width: 5, height: 1),
-                         focusOnAttach: true)
+                         focusOnAttach: true, usesWritingPreferences: false)
                 .accessibilityLabel("Quick capture text")
                 .overlay(alignment: .topLeading) {
                     if bodyText.isEmpty {

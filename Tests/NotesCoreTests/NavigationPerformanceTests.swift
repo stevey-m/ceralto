@@ -4,6 +4,64 @@ import SwiftUI
 import Testing
 @testable import Folio
 
+@MainActor
+struct NoteOrderingTests {
+    @Test func fieldsDirectionsPinsNaturalTitlesAndTiesHaveDeterministicOrder() {
+        let notebook = UUID()
+        let old = Date(timeIntervalSince1970: 100), recent = Date(timeIntervalSince1970: 200)
+        let a = Note(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+                     notebookID: notebook, title: "Note 2", createdAt: old, updatedAt: recent)
+        let b = Note(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+                     notebookID: notebook, title: "Note 10", createdAt: recent, updatedAt: old)
+        let pinned = Note(notebookID: notebook, title: "Pinned", isPinned: true)
+        for field in NoteSortField.allCases {
+            let ascending = field == .updated ? [b.id, a.id] : [a.id, b.id]
+            for direction in [true, false] {
+                let expected = [pinned.id] + (direction ? ascending : ascending.reversed())
+                #expect([a, pinned, b].sorted(by: NoteOrdering(field: field, ascending: direction).precedes).map(\.id) == expected)
+            }
+        }
+        var tied = b
+        tied.title = a.title
+        tied.updatedAt = a.updatedAt
+        for direction in [true, false] {
+            #expect([tied, a].sorted(by: NoteOrdering(field: .title, ascending: direction).precedes).map(\.id) == [a.id, b.id])
+            #expect([tied, a].sorted(by: NoteOrdering(field: .updated, ascending: direction).precedes).map(\.id) == [a.id, b.id])
+        }
+    }
+
+    @Test func changingSortInvalidatesWarmedCachesAndSurvivesReloadWithoutWritingNotes() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "DeltosOrdering-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let storage = LibraryStorage(url: root.appendingPathComponent("library.json"))
+        let notebook = Notebook(name: "Work")
+        let a = Note(notebookID: notebook.id, title: "A", updatedAt: Date(timeIntervalSince1970: 100))
+        let b = Note(notebookID: notebook.id, title: "B", updatedAt: Date(timeIntervalSince1970: 200))
+        try storage.save(Library(notebooks: [notebook], notes: [a, b]))
+        let before = try Data(contentsOf: storage.url)
+        let store = NotesStore(storage: storage, preferences: defaults)
+        store.scope = .all
+        #expect(store.visibleNotes.map(\.id) == [b.id, a.id])
+        store.setNoteOrdering(NoteOrdering(field: .title, ascending: true))
+        #expect(store.visibleNotes.map(\.id) == [a.id, b.id])
+        store.scope = .folder("Work", [notebook.id])
+        #expect(store.outlineNotes.map(\.id) == [a.id, b.id])
+        let restarted = NotesStore(storage: storage, preferences: defaults)
+        restarted.scope = .all
+        #expect(restarted.noteOrdering == store.noteOrdering)
+        #expect(restarted.visibleNotes.map(\.id) == [a.id, b.id])
+        let after = try Data(contentsOf: storage.url)
+        #expect(after == before)
+        defaults.set(Data("invalid sort".utf8), forKey: "noteOrdering")
+        let invalid = NotesStore(storage: storage, preferences: defaults)
+        #expect(invalid.errorMessage != nil)
+        #expect(defaults.data(forKey: "noteOrdering") == Data("invalid sort".utf8))
+    }
+}
+
 @Suite(.serialized)
 @MainActor
 struct NavigationPerformanceTests {

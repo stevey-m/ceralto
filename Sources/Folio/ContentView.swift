@@ -11,6 +11,7 @@ struct ContentView: View {
     @ViewState private var pendingCommand: FolioCommand?
     @ViewState private var smartFolderToDelete: SmartFolder?
     @ViewState private var showingSearchHelp = false
+    @ViewState private var selectedNoteIDs: Set<UUID> = []
     @AppStorage("folioTheme") private var theme = FolioTheme.system.rawValue
     @AppStorage("showNotebookPane") private var showNotebooks = true
     @AppStorage("showNoteListPane") private var showNotes = true
@@ -89,7 +90,10 @@ struct ContentView: View {
             store.reconcileSelection()
             revealSelectedNotebook()
         }
-        .onAppear { revealSelectedNotebook() }
+        .onAppear {
+            revealSelectedNotebook()
+            if let id = store.selectedNoteID { selectedNoteIDs = [id] }
+        }
         .onChange(of: store.query) { _, _ in store.reconcileSelection() }
         .sheet(item: $store.notebookDraft) { draft in
             NotebookSheet(draft: draft)
@@ -471,27 +475,31 @@ struct ContentView: View {
     private func noteRow(_ note: Note) -> some View {
         NoteRow(note: note)
             .tag(note.id)
-            .folioListRow(selected: store.selectedNoteID == note.id)
+            .folioListRow(selected: selectedNoteIDs.contains(note.id))
             .draggable("deltos-note:" + note.id.uuidString)
             .contextMenu {
-                Button("Open in New Tab") { store.openNoteInNewTab(note.id) }
-                Button("Show as Reference") { store.showReference(note.id) }
-                Divider()
-                if note.deletedAt != nil {
-                    Button("Restore Note") { store.restore(note.id) }
-                    Button("Delete Forever...", role: .destructive) { noteToDelete = note }
+                if selectedNoteIDs.count > 1, selectedNoteIDs.contains(note.id) {
+                    bulkActions(selectedNoteIDs)
                 } else {
-                    Menu("Move to Notebook") {
-                        ForEach(store.library.notebooks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { notebook in
-                            Button(notebook.name) { store.moveNotes([note.id], to: notebook.name) }
-                                .disabled(notebook.id == note.notebookID)
+                    Button("Open in New Tab") { store.openNoteInNewTab(note.id) }
+                    Button("Show as Reference") { store.showReference(note.id) }
+                    Divider()
+                    if note.deletedAt != nil {
+                        Button("Restore Note") { store.restore(note.id) }
+                        Button("Delete Forever...", role: .destructive) { noteToDelete = note }
+                    } else {
+                        Menu("Move to Notebook") {
+                            ForEach(store.library.notebooks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { notebook in
+                                Button(notebook.name) { store.moveNotes([note.id], to: notebook.name) }
+                                    .disabled(notebook.id == note.notebookID)
+                            }
                         }
+                        Button(note.isPinned ? "Unpin Note" : "Pin Note") {
+                            store.update(note.id) { $0.isPinned.toggle() }
+                        }
+                        Button("Export Markdown...") { store.exportMarkdown(note) }
+                        Button("Move to Trash", role: .destructive) { store.trash(note.id) }
                     }
-                    Button(note.isPinned ? "Unpin Note" : "Pin Note") {
-                        store.update(note.id) { $0.isPinned.toggle() }
-                    }
-                    Button("Export Markdown...") { store.exportMarkdown(note) }
-                    Button("Move to Trash", role: .destructive) { store.trash(note.id) }
                 }
             }
     }
@@ -567,7 +575,7 @@ struct ContentView: View {
                     .padding(.horizontal, 12).padding(.bottom, 10)
             }
             Divider()
-            List(selection: $store.selectedNoteID) {
+            List(selection: noteSelection) {
                 if let folder = store.navigationFolder {
                     ForEach(store.outlineNotes.filter { note in folder.notebooks.contains { $0.id == note.notebookID } }) { note in
                         noteRow(note)
@@ -580,11 +588,18 @@ struct ContentView: View {
                 }
             }
             .onChange(of: store.selectedNoteID) { _, id in
+                if let id {
+                    if !selectedNoteIDs.contains(id) { selectedNoteIDs = [id] }
+                } else { selectedNoteIDs = [] }
                 guard let id, let note = store.outlineNotes.first(where: { $0.id == id }) else { return }
                 if let folder = store.navigationFolder {
                     let path = store.library.notebooks.first { $0.id == note.notebookID }?.name ?? folder.id
                     collapsedBranches = collapsedBranches.filter { !(path == $0 || path.hasPrefix($0 + "/")) }
                 }
+            }
+            .onChange(of: store.outlineNotes.map(\.id)) { _, ids in
+                selectedNoteIDs.formIntersection(Set(ids))
+                if selectedNoteIDs.isEmpty, let id = store.selectedNoteID, ids.contains(id) { selectedNoteIDs = [id] }
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
@@ -616,14 +631,72 @@ struct ContentView: View {
                 .disabled(!store.isLoaded)
                 if store.isImportingJoplin { ProgressView().controlSize(.small) }
                 Spacer()
-                Image(systemName: "arrow.down")
-                Text("Last edited")
+                Menu {
+                    noteOrderingControls
+                } label: {
+                    Label(store.noteOrdering.field.rawValue, systemImage: store.noteOrdering.ascending ? "arrow.up" : "arrow.down")
+                }.menuStyle(.borderlessButton).fixedSize()
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .padding(12)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if selectedNoteIDs.count > 1 {
+                HStack {
+                    Text("\(selectedNoteIDs.count) selected").font(.caption)
+                    Spacer()
+                    Menu("Actions") { bulkActions(selectedNoteIDs) }.menuStyle(.borderlessButton)
+                }
+                .padding(12)
+                .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.sidebar : Color(nsColor: .controlBackgroundColor))
+            }
+        }
         .background(theme == FolioTheme.dracula.rawValue ? FolioPalette.background : Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var noteSelection: Binding<Set<UUID>> {
+        Binding(get: { selectedNoteIDs }, set: { ids in
+            let added = ids.subtracting(selectedNoteIDs)
+            selectedNoteIDs = ids
+            if added.isEmpty, let primary = store.selectedNoteID, ids.contains(primary) { return }
+            let ordered = store.outlineNotes
+            if let note = ordered.first(where: { added.contains($0.id) }) ??
+                ordered.first(where: { ids.contains($0.id) }) {
+                store.selectedNoteID = note.id
+            } else { store.selectedNoteID = nil }
+        })
+    }
+
+    @ViewBuilder private var noteOrderingControls: some View {
+        Picker("Sort notes by", selection: Binding(
+            get: { store.noteOrdering.field },
+            set: { store.setNoteOrdering(NoteOrdering(field: $0, ascending: store.noteOrdering.ascending)) }
+        )) {
+            ForEach(NoteSortField.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }
+        Toggle("Ascending", isOn: Binding(
+            get: { store.noteOrdering.ascending },
+            set: { store.setNoteOrdering(NoteOrdering(field: store.noteOrdering.field, ascending: $0)) }
+        ))
+        Text("Pinned notes stay first")
+    }
+
+    @ViewBuilder private func bulkActions(_ ids: Set<UUID>) -> some View {
+        let busy = store.isReadOnly || store.isSyncing || store.isImportingJoplin || store.isProcessingEncryptedBackup
+        if store.scope == .trash {
+            Button("Restore \(ids.count) Notes") { store.runBulkAction(.restore, ids: ids) }.disabled(busy)
+        } else {
+            Menu("Move \(ids.count) Notes to Notebook") {
+                ForEach(store.library.notebooks.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { notebook in
+                    Button(notebook.name) { store.runBulkAction(.move(notebook.id), ids: ids) }
+                }
+            }.disabled(busy)
+            Button("Add Tags to \(ids.count) Notes...") { store.addTagsToNotes(ids) }.disabled(busy)
+            Button("Move \(ids.count) Notes to Trash...", role: .destructive) { store.confirmBulkTrash(ids) }.disabled(busy)
+        }
+        Button("Export \(ids.count) Selected Notes...") { store.exportSelectedNotes(ids) }
+            .disabled(store.isSyncing || store.isImportingJoplin || store.isProcessingEncryptedBackup)
     }
 }
 

@@ -8,6 +8,8 @@ import Testing
 struct SettingsTests {
     @Test func settingsSearchMatchesControlsAndDoesNotInventUnsupportedOptions() {
         #expect(SettingsSection.matching("spelling") == [.editor])
+        #expect(SettingsSection.matching("line numbers") == [.editor])
+        #expect(SettingsSection.matching("sorting ascending") == [.general])
         #expect(SettingsSection.matching("accent gold") == [.appearance])
         #expect(SettingsSection.matching("backup restore") == [.files])
         #expect(SettingsSection.matching("offline ipad") == [.sync])
@@ -48,8 +50,10 @@ struct SettingsTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(false, forKey: "composeSpellChecking")
         let actions = FormattingActions()
-        let view = NativePageView(html: "Words", resources: nil, size: 17, family: .system, dracula: false,
-                                  actions: actions, onChange: { _ in }, onError: { Issue.record("\($0)") })
+        var saved = "Words"
+        let view = NativePageView(html: saved, resources: nil, size: 17, family: .system, dracula: false,
+                                  actions: actions, onChange: { saved = $0 }, onError: { Issue.record("\($0)") },
+                                  currentSource: { saved })
         let host = NSHostingView(rootView: view.defaultAppStorage(defaults))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
                               styleMask: [.titled], backing: .buffered, defer: false)
@@ -63,12 +67,84 @@ struct SettingsTests {
         }
         let editor = try #require(actions.editor)
         #expect(!editor.isContinuousSpellCheckingEnabled)
+        #expect(!editor.pairDelimiters && !editor.markdownShortcuts)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.insertText(" more", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(20))
         defaults.set(true, forKey: "composeSpellChecking")
+        defaults.set(true, forKey: "composeMarkdownShortcuts")
+        defaults.set(true, forKey: "editorPairDelimiters")
+        defaults.set(720, forKey: "writingColumnWidth")
         for _ in 0..<50 where !editor.isContinuousSpellCheckingEnabled {
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(editor.isContinuousSpellCheckingEnabled)
         #expect(!editor.isAutomaticSpellingCorrectionEnabled)
+        #expect(editor.pairDelimiters && editor.markdownShortcuts)
+        #expect(editor.textContainerInset.width > 28)
+        #expect(editor.string == "Words more")
+        #expect(actions.editor === editor)
+        #expect(editor.undoManager?.canUndo == true)
+    }
+
+    @Test func sourcePreferencesUpdateWithoutResettingNativeUndoAndExcludeQuickCapture() async throws {
+        let suite = "DeltosSourcePreferences-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var saved = "One\nTwo\n"
+        let view = SourceEditor(text: Binding(get: { saved }, set: { saved = $0 }),
+                                family: .monospace, size: 15, dracula: false, currentSource: { saved })
+        let host = NSHostingView(rootView: view.defaultAppStorage(defaults))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 450),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.frame = NSRect(x: 0, y: 0, width: 1100, height: 450)
+        host.layoutSubtreeIfNeeded()
+        func source(in view: NSView) -> SourceTextView? {
+            if let editor = view as? SourceTextView { return editor }
+            return view.subviews.lazy.compactMap { source(in: $0) }.first
+        }
+        let editor = try #require(source(in: host))
+        #expect(!editor.pairDelimiters)
+        #expect(editor.tabStyle == .native)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.insertText("Edit", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(30))
+        defaults.set(true, forKey: "editorPairDelimiters")
+        defaults.set(true, forKey: "sourceLineNumbers")
+        defaults.set(SourceTabStyle.fourSpaces.rawValue, forKey: "sourceTabStyle")
+        defaults.set(720, forKey: "writingColumnWidth")
+        for _ in 0..<50 where !editor.pairDelimiters {
+            try await Task.sleep(for: .milliseconds(20))
+            host.layoutSubtreeIfNeeded()
+        }
+        let scroll = try #require(editor.enclosingScrollView)
+        let ruler = try #require(scroll.verticalRulerView as? SourceLineRuler)
+        #expect(scroll.rulersVisible)
+        #expect(ruler.lineStarts == [0, 4, 8])
+        #expect(editor.textContainerInset.width > 100)
+        #expect(editor.string == "One\nTwo\nEdit")
+        #expect(editor.undoManager?.canUndo == true)
+        editor.undoManager?.undo()
+        #expect(saved == "One\nTwo\n")
+        #expect(ruler.lineStarts == [0, 4, 8])
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.insertTab(nil)
+        #expect(saved.hasSuffix("\n    "))
+        editor.insertText("\n", replacementRange: editor.selectedRange())
+        #expect(ruler.lineStarts.count == 4)
+        editor.setFrameSize(NSSize(width: 500, height: editor.frame.height))
+        #expect(editor.textContainerInset.width == 20)
+        let captureHost = NSHostingView(rootView: SourceEditor(text: .constant("Capture"), family: .system, size: 15,
+            dracula: false, currentSource: { "Capture" }, usesWritingPreferences: false).defaultAppStorage(defaults))
+        captureHost.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        captureHost.layoutSubtreeIfNeeded()
+        let capture = try #require(source(in: captureHost))
+        #expect(!capture.pairDelimiters)
+        #expect(capture.tabStyle == .native)
+        #expect(capture.enclosingScrollView?.rulersVisible == false)
+        #expect(capture.textContainerInset.width == 20)
     }
 
     @Test(arguments: SettingsSection.allCases)

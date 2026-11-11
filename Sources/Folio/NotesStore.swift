@@ -48,6 +48,7 @@ private struct CachedNoteText {
 @MainActor
 private final class LibraryNavigationIndex {
     private let library: Library
+    private let ordering: NoteOrdering
     private var results: [Request: [Note]] = [:]
     private var queryCounts: [String: Int] = [:]
     lazy var notebookNames = Dictionary(uniqueKeysWithValues: library.notebooks.map { ($0.id, $0.name) })
@@ -73,11 +74,7 @@ private final class LibraryNavigationIndex {
         }
         return result
     }()
-    private lazy var sortedNotes = library.notes.sorted {
-        if $0.isPinned != $1.isPinned { return $0.isPinned }
-        if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-        return $0.id.uuidString < $1.id.uuidString
-    }
+    private lazy var sortedNotes = library.notes.sorted(by: ordering.precedes)
 
     struct Counts {
         var active = 0
@@ -93,7 +90,7 @@ private final class LibraryNavigationIndex {
         let savedQuery: String?
     }
 
-    init(library: Library) { self.library = library }
+    init(library: Library, ordering: NoteOrdering) { self.library = library; self.ordering = ordering }
 
     func notes(matching scope: NoteScope, query: String, savedQuery: String? = nil) -> [Note] {
         let request = Request(scope: scope, query: query, savedQuery: savedQuery)
@@ -173,6 +170,9 @@ final class NotesStore: ObservableObject {
     @Published private(set) var importReportURL: URL?
     @Published private(set) var isLoaded = false
     @Published private(set) var hasUnsavedChanges = false
+    @Published private(set) var noteOrdering = NoteOrdering() {
+        didSet { cachedNavigation = nil }
+    }
     @Published private(set) var historyPolicy = HistoryPolicy.standard
     @Published private(set) var historyPolicyAvailable = true
     @Published private(set) var isProcessingEncryptedBackup = false
@@ -202,6 +202,16 @@ final class NotesStore: ObservableObject {
         self.preferences = preferences
         isReadOnly = readOnly
         load()
+        if let stored = preferences.object(forKey: "noteOrdering") {
+            do {
+                guard let data = stored as? Data else { throw LibraryError.invalidLibrary }
+                let ordering = try JSONDecoder().decode(NoteOrdering.self, from: data)
+                try ordering.validate()
+                noteOrdering = ordering
+            } catch {
+                errorMessage = "Saved note sorting could not be read; showing last edited first. The saved setting is preserved until you choose a new order. \(error.localizedDescription)"
+            }
+        }
         if let stored = preferences.object(forKey: HistoryPolicy.preferenceKey) {
             do {
                 guard let data = stored as? Data else { throw LibraryError.invalidLibrary }
@@ -292,9 +302,17 @@ final class NotesStore: ObservableObject {
 
     private var navigationIndex: LibraryNavigationIndex {
         if let cachedNavigation { return cachedNavigation }
-        let index = LibraryNavigationIndex(library: library)
+        let index = LibraryNavigationIndex(library: library, ordering: noteOrdering)
         cachedNavigation = index
         return index
+    }
+
+    func setNoteOrdering(_ ordering: NoteOrdering) {
+        do {
+            try ordering.validate()
+            preferences.set(try JSONEncoder().encode(ordering), forKey: "noteOrdering")
+            noteOrdering = ordering
+        } catch { errorMessage = "Could not change note sorting: \(error.localizedDescription)" }
     }
 
     var scopeTitle: String {
@@ -889,6 +907,56 @@ final class NotesStore: ObservableObject {
         workspace.retainNotes(Set(library.notes.map(\.id)))
         persistWorkspace()
         reconcileSelection()
+    }
+
+    func applyBulkAction(_ action: BulkNoteAction, to ids: Set<UUID>) throws {
+        guard isLoaded, !isReadOnly, !isSyncing, !isImportingJoplin, !isProcessingEncryptedBackup, !ids.isEmpty else {
+            throw NoteWorkflowError("Select notes in an editable library and finish sync or import first.")
+        }
+        guard ids.isSubset(of: Set(library.notes.map(\.id))) else {
+            throw NoteWorkflowError("Some selected notes no longer exist. Select them again.")
+        }
+        let selected = library.notes.filter { ids.contains($0.id) }
+        if case .restore = action {
+            guard selected.allSatisfy({ $0.deletedAt != nil }) else {
+                throw NoteWorkflowError("Select only notes in Trash to restore them.")
+            }
+        } else {
+            guard selected.allSatisfy({ $0.deletedAt == nil }) else {
+                throw NoteWorkflowError("Restore notes from Trash before moving, tagging or trashing them.")
+            }
+        }
+        if case .move(let notebookID) = action,
+           !library.notebooks.contains(where: { $0.id == notebookID }) {
+            throw NoteWorkflowError("The destination notebook no longer exists.")
+        }
+        if case .addTags(let tags) = action, Note.normalizedTags(tags).isEmpty {
+            throw NoteWorkflowError("Enter at least one tag.")
+        }
+        var candidate = library
+        let now = Date()
+        for index in candidate.notes.indices where ids.contains(candidate.notes[index].id) {
+            switch action {
+            case .move(let notebookID): candidate.notes[index].notebookID = notebookID
+            case .addTags(let tags): candidate.notes[index].tags = Note.normalizedTags(candidate.notes[index].tags + tags)
+            case .trash: candidate.notes[index].deletedAt = now
+            case .restore: candidate.notes[index].deletedAt = nil
+            }
+            if candidate.notes[index] != library.notes[index] { candidate.notes[index].updatedAt = now }
+        }
+        try commitNotebookChange(candidate)
+        reconcileSelection()
+    }
+
+    func exportSelectedNotes(_ ids: Set<UUID>, to destination: URL) throws {
+        guard isLoaded, !isSyncing, !isImportingJoplin, !isProcessingEncryptedBackup,
+              !ids.isEmpty, ids.isSubset(of: Set(library.notes.map(\.id))) else {
+            throw NoteWorkflowError("Select existing notes before exporting.")
+        }
+        let notes = library.notes.filter { ids.contains($0.id) }
+        let notebooks = Set(notes.map(\.notebookID))
+        try MarkdownVault.export(Library(notebooks: library.notebooks.filter { notebooks.contains($0.id) }, notes: notes),
+                                 to: destination)
     }
 
     @discardableResult func addNotebook(name: String) -> Bool {

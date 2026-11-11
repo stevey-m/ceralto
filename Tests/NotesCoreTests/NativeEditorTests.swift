@@ -7,6 +7,109 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct NativeEditorTests {
+    @Test func shortcutUndoRedoRestoresTypingStyleAndMarkedTextIsNeverPaired() async throws {
+        _ = NSApplication.shared
+        let editor = PageTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
+        editor.allowsUndo = true
+        editor.isRichText = true
+        editor.markdownShortcuts = true
+        editor.typingAttributes = NativePageCodec.attributes(style: .paragraph, size: 16, family: .system, color: .textColor)
+        editor.insertText("#", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(20))
+        editor.insertText(" ", replacementRange: editor.selectedRange())
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(editor.string.isEmpty)
+        editor.undoManager?.undo()
+        #expect(editor.string == "#")
+        #expect(editor.typingAttributes[.folioBlock] as? String == FormattedBlock.Style.paragraph.rawValue)
+        editor.undoManager?.redo()
+        editor.insertText("Heading", replacementRange: editor.selectedRange())
+        #expect(NativePageCodec.encode(try #require(editor.textStorage), markdown: true) == "# Heading")
+
+        let source = SourceTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
+        source.pairDelimiters = true
+        source.setMarkedText("(", selectedRange: NSRange(location: 1, length: 0), replacementRange: source.selectedRange())
+        #expect(source.hasMarkedText())
+        source.insertText("(", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(source.string == "(")
+        #expect(!source.hasMarkedText())
+    }
+
+    @Test func delimiterPairingIsOptInUndoableAndPreservesUnicodeSelections() async throws {
+        _ = NSApplication.shared
+        let editor = SourceTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
+        editor.allowsUndo = true
+        editor.isRichText = false
+        editor.insertText("(", replacementRange: editor.selectedRange())
+        #expect(editor.string == "(")
+        editor.string = ""
+        editor.undoManager?.removeAllActions()
+        editor.pairDelimiters = true
+        editor.setSelectedRange(NSRange(location: 0, length: 0))
+        editor.insertText("(", replacementRange: editor.selectedRange())
+        #expect(editor.string == "()")
+        #expect(editor.selectedRange() == NSRange(location: 1, length: 0))
+        try await Task.sleep(for: .milliseconds(20))
+        editor.undoManager?.undo()
+        #expect(editor.string.isEmpty)
+        editor.undoManager?.redo()
+        #expect(editor.string == "()")
+        editor.setSelectedRange(NSRange(location: 1, length: 0))
+        editor.deleteBackward(nil)
+        #expect(editor.string.isEmpty)
+        editor.string = "a😀b"
+        editor.setSelectedRange(NSRange(location: 1, length: 2))
+        editor.insertText("[", replacementRange: editor.selectedRange())
+        #expect(editor.string == "a[😀]b")
+        #expect(editor.selectedRange() == NSRange(location: 2, length: 2))
+        editor.setSelectedRange(NSRange(location: 4, length: 0))
+        editor.insertText("]", replacementRange: editor.selectedRange())
+        #expect(editor.string == "a[😀]b")
+        #expect(editor.selectedRange().location == 5)
+        editor.string = "can"
+        editor.setSelectedRange(NSRange(location: 3, length: 0))
+        editor.insertText("'", replacementRange: editor.selectedRange())
+        #expect(editor.string == "can'")
+        editor.isEditable = false
+        editor.insertText("(", replacementRange: editor.selectedRange())
+        #expect(editor.string == "can'")
+    }
+
+    @Test func markdownShortcutsAreOptInPersistFormattingAndLeaveCodeAndPasteLiteral() throws {
+        _ = NSApplication.shared
+        let editor = PageTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
+        editor.isRichText = true
+        editor.allowsUndo = true
+        func reset(_ style: FormattedBlock.Style = .paragraph) {
+            editor.string = ""
+            editor.setSelectedRange(NSRange(location: 0, length: 0))
+            editor.typingAttributes = NativePageCodec.attributes(style: style, size: 16, family: .system, color: .textColor)
+            editor.undoManager?.removeAllActions()
+        }
+        reset()
+        editor.insertText("#", replacementRange: editor.selectedRange())
+        editor.insertText(" ", replacementRange: editor.selectedRange())
+        #expect(editor.string == "# ")
+        editor.markdownShortcuts = true
+        reset()
+        for value in ["#", " ", "Heading"] { editor.insertText(value, replacementRange: editor.selectedRange()) }
+        #expect(NativePageCodec.encode(try #require(editor.textStorage), markdown: true) == "# Heading")
+        reset()
+        for value in ["-", " ", "[ ]", " ", "Task"] { editor.insertText(value, replacementRange: editor.selectedRange()) }
+        #expect(NativePageCodec.encode(try #require(editor.textStorage), markdown: true) == "- [ ] Task")
+        reset(.code)
+        for value in ["#", " ", "literal"] { editor.insertText(value, replacementRange: editor.selectedRange()) }
+        #expect(editor.string == "# literal")
+        #expect(editor.typingAttributes[.folioBlock] as? String == FormattedBlock.Style.code.rawValue)
+        reset()
+        let board = NSPasteboard(name: .init("DeltosEditorPreferences-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("# literal\n- literal", forType: .string)
+        editor.pastePlain(from: board)
+        #expect(editor.string == "# literal\n- literal")
+        #expect(editor.typingAttributes[.folioBlock] as? String == FormattedBlock.Style.paragraph.rawValue)
+    }
+
     @Test func nativeTypingFormattingAndUndoSaveRealMarkdown() async throws {
         _ = NSApplication.shared
         let actions = FormattingActions()

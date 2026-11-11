@@ -42,6 +42,90 @@ struct NotebookManagementTests {
 
 @MainActor
 struct NotebookManagementStoreTests {
+    @Test func bulkMoveTagTrashAndRestorePersistOnlySelectedNotes() throws {
+        try fixture { store, storage in
+            let first = try #require(store.library.notes.first)
+            let destination = try #require(store.library.notebooks.first { $0.name == "Work" })
+            let second = Note(notebookID: first.notebookID, title: "Second", body: "Body", tags: ["keep"])
+            let untouched = Note(notebookID: first.notebookID, title: "Untouched")
+            var seed = store.library
+            seed.notes += [second, untouched]
+            try storage.save(seed)
+            store.load()
+            let ids: Set<UUID> = [first.id, second.id]
+            try store.applyBulkAction(.move(destination.id), to: ids)
+            try store.applyBulkAction(.addTags(["new", " NEW ", "idea"]), to: ids)
+            let moved = store.library.notes.filter { ids.contains($0.id) }
+            #expect(moved.allSatisfy { $0.notebookID == destination.id })
+            #expect(moved.allSatisfy { $0.tags.contains("new") && $0.tags.contains("idea") })
+            #expect(moved.first { $0.id == second.id }?.tags.contains("keep") == true)
+            #expect(moved.first { $0.id == second.id }?.body == "Body")
+            #expect(store.library.notes.first { $0.id == untouched.id } == untouched)
+            try store.applyBulkAction(.trash, to: ids)
+            #expect(store.library.notes.filter { ids.contains($0.id) }.allSatisfy { $0.deletedAt != nil })
+            try store.applyBulkAction(.restore, to: ids)
+            #expect(store.library.notes.allSatisfy { $0.deletedAt == nil })
+            let persisted = try storage.load()
+            #expect(persisted == store.library)
+        }
+    }
+
+    @Test func staleMixedTrashAndReadOnlyBulkRequestsCannotPartiallyChangeNotes() throws {
+        try fixture { store, storage in
+            let note = try #require(store.library.notes.first)
+            let before = store.library
+            for action: BulkNoteAction in [.trash, .addTags(["tag"]), .move(UUID()), .restore] {
+                #expect(throws: (any Error).self) { try store.applyBulkAction(action, to: [note.id, UUID()]) }
+                #expect(store.library == before)
+            }
+            #expect(throws: (any Error).self) { try store.applyBulkAction(.move(UUID()), to: [note.id]) }
+            #expect(throws: (any Error).self) { try store.applyBulkAction(.addTags([" "]), to: [note.id]) }
+            let readOnly = NotesStore(storage: storage, readOnly: true)
+            #expect(throws: (any Error).self) { try readOnly.applyBulkAction(.trash, to: [note.id]) }
+            #expect(readOnly.library == before)
+            store.trash(note.id)
+            let trashed = store.library
+            #expect(throws: (any Error).self) { try store.applyBulkAction(.addTags(["tag"]), to: [note.id]) }
+            #expect(store.library == trashed)
+        }
+    }
+
+    @Test func selectedExportCopiesAttachmentsAndLeavesUnselectedNotesAndExistingFoldersAlone() throws {
+        try fixture { store, storage in
+            let note = try #require(store.library.notes.first)
+            let root = storage.url.deletingLastPathComponent()
+            let resources = root.appendingPathComponent("resources")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: false)
+            let image = resources.appendingPathComponent("image.png")
+            try Data([1, 2, 3]).write(to: image)
+            var seed = store.library
+            seed.notes[0].body = "![Picture](image.png)"
+            seed.notes[0].importedRootURL = resources
+            seed.notes[0].importedSourceURL = resources.appendingPathComponent("source.md")
+            seed.notes.append(Note(notebookID: note.notebookID, title: "Do not export", body: "UNSELECTED"))
+            try storage.save(seed)
+            store.load()
+            let destination = root.appendingPathComponent("selected")
+            try store.exportSelectedNotes([note.id], to: destination)
+            let enumerator = try #require(FileManager.default.enumerator(at: destination, includingPropertiesForKeys: nil))
+            let files = enumerator.compactMap { $0 as? URL }
+            let images = files.filter { $0.lastPathComponent == "image.png" }
+            #expect(images.count == 1)
+            let exportedImage = try Data(contentsOf: #require(images.first))
+            #expect(exportedImage == Data([1, 2, 3]))
+            let markdown = files.filter { $0.pathExtension == "md" }
+            #expect(markdown.count == 1)
+            let content = try String(contentsOf: #require(markdown.first), encoding: .utf8)
+            #expect(content.contains("![Picture](image.png)"))
+            #expect(!content.contains("UNSELECTED"))
+            #expect(throws: (any Error).self) { try store.exportSelectedNotes([note.id], to: destination) }
+            #expect(FileManager.default.fileExists(atPath: destination.path))
+            #expect(throws: (any Error).self) { try store.exportSelectedNotes([note.id, UUID()], to: root.appendingPathComponent("stale")) }
+            #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("stale").path))
+            #expect(store.library == seed)
+        }
+    }
+
     @Test func duplicateImportedNotebookCanBeRenamedIndividuallyBeforePathBasedMoves() throws {
         try fixture { store, storage in
             let duplicate = Notebook(name: "Work")
@@ -84,6 +168,10 @@ struct NotebookManagementStoreTests {
             #expect(store.library == before)
             #expect(!store.addNotebook(name: "New"))
             #expect(store.library == before)
+            for action: BulkNoteAction in [.trash, .addTags(["new"]), .move(before.notebooks[1].id)] {
+                #expect(throws: (any Error).self) { try store.applyBulkAction(action, to: [before.notes[0].id]) }
+                #expect(store.library == before)
+            }
         }
     }
 
