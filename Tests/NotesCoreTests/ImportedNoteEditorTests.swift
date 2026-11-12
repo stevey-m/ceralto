@@ -194,6 +194,27 @@ struct ImportedNoteEditorTests {
         #expect(store.errorMessage == nil)
     }
 
+    @Test(arguments: [false, true])
+    func dismantlingDefersPublishedUpdatesAndDoesNotDisableAReplacementEditor(replaced: Bool) async throws {
+        let actions = ImportedTextActions()
+        let web = NoteDocumentWebView()
+        let replacement = NoteDocumentWebView()
+        actions.webView = web
+        actions.ready = true
+        let view = PreservedDocumentView(source: "<p>Body</p>", format: .html, resources: nil,
+            options: PreviewOptions(), actions: actions, currentSource: { "<p>Body</p>" },
+            onChange: { _ in }, onError: { Issue.record("\($0)") }, onImage: { _ in })
+        let coordinator = view.makeCoordinator()
+        PreservedDocumentView.dismantleNSView(web, coordinator: coordinator)
+        #expect(!coordinator.active)
+        #expect(actions.webView == nil)
+        #expect(actions.ready)
+        if replaced { actions.webView = replacement }
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(actions.ready == replaced)
+        #expect(actions.webView === (replaced ? replacement : nil))
+    }
+
     private func select(_ text: String, in web: WKWebView) async throws {
         _ = try await web.callAsyncJavaScript("""
         const node = [...document.querySelectorAll('[data-ceralto-edit]')].find(item => item.textContent === text);

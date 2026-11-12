@@ -172,8 +172,11 @@ struct PreservedDocumentView: NSViewRepresentable {
                 coordinator.format = format
                 coordinator.resources = resources
                 coordinator.options = options
-                actions.ready = false
                 web.loadHTMLString(html, baseURL: URL(string: "about:blank"))
+                Task { @MainActor [weak web, weak coordinator] in
+                    guard let web, coordinator?.active == true, actions.webView === web, web.isLoading else { return }
+                    actions.ready = false
+                }
             } else if coordinator.options != options {
                 coordinator.options = options
                 if let model = coordinator.model {
@@ -188,17 +191,33 @@ struct PreservedDocumentView: NSViewRepresentable {
                 coordinator.enabled = enabled
                 coordinator.run(web, script: "window.ceraltoEditor?.setEnabled(enabled);", arguments: ["enabled": enabled])
             }
-        } catch { onError("Could not open this imported note for editing: \(error.localizedDescription)") }
+        } catch {
+            let message = "Could not open this imported note for editing: \(error.localizedDescription)"
+            Task { @MainActor [weak coordinator] in
+                guard coordinator?.active == true else { return }
+                coordinator?.parent.onError(message)
+            }
+        }
     }
 
     static func dismantleNSView(_ web: WKWebView, coordinator: Coordinator) {
+        coordinator.active = false
         web.stopLoading()
         web.navigationDelegate = nil
         for name in ["folioImage", "ceraltoEdit"] {
             web.configuration.userContentController.removeScriptMessageHandler(forName: name, contentWorld: .defaultClient)
         }
-        coordinator.parent.actions.ready = false
-        coordinator.parent.actions.webView = nil
+        let actions = coordinator.parent.actions
+        if actions.webView === web {
+            actions.webView = nil
+            // Publishing during SwiftUI graph destruction can crash older macOS releases.
+            Task { @MainActor [weak actions] in
+                guard let actions, actions.webView == nil else { return }
+                actions.ready = false
+                actions.selectedSize = ""
+            }
+        }
+        (web as? NoteDocumentWebView)?.importedActions = nil
     }
 
     @MainActor
@@ -210,12 +229,13 @@ struct PreservedDocumentView: NSViewRepresentable {
         var resources: ImportedResources?
         var options: PreviewOptions?
         var enabled = true
+        var active = true
         lazy var resourceCoordinator = DocumentWebView.Coordinator(parent: documentParent)
 
         var documentParent: DocumentWebView {
             DocumentWebView(html: "", resources: parent.resources, onImage: parent.onImage,
                 onError: parent.onError, onNote: parent.onNote, onLoaded: { [weak self] web in
-                    guard let self else { return }
+                    guard let self, self.active, self.parent.actions.webView === web else { return }
                     self.parent.actions.ready = true
                     self.run(web, script: "window.ceraltoEditor?.setEnabled(enabled);",
                              arguments: ["enabled": self.parent.enabled])
@@ -226,6 +246,7 @@ struct PreservedDocumentView: NSViewRepresentable {
 
         func run(_ web: WKWebView, script: String, arguments: [String: Any] = [:]) {
             Task { @MainActor in
+                guard active, parent.actions.webView === web else { return }
                 do {
                     _ = try await web.callAsyncJavaScript(script, arguments: arguments, in: nil, contentWorld: .defaultClient)
                 } catch { parent.onError("The imported editor could not update: \(error.localizedDescription)") }
@@ -233,7 +254,7 @@ struct PreservedDocumentView: NSViewRepresentable {
         }
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.frameInfo.isMainFrame, let data = message.body as? [String: Any] else { return }
+            guard active, message.frameInfo.isMainFrame, let data = message.body as? [String: Any] else { return }
             if let error = data["error"] as? String { parent.onError(error); return }
             if let size = data["size"] as? String { parent.actions.selectedSize = size }
             guard let changes = data["changes"] as? [String: String], let sequence = data["sequence"] as? Int,
