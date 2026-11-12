@@ -9,6 +9,8 @@ final class ImportedTextActions: ObservableObject {
     weak var webView: WKWebView?
     @Published var ready = false
     @Published var selectedSize = ""
+    @Published var canUndo = false
+    @Published var canRedo = false
     var onError: (String) -> Void = { _ in }
 
     func perform(_ command: String, value: Double? = nil) {
@@ -215,6 +217,8 @@ struct PreservedDocumentView: NSViewRepresentable {
                 guard let actions, actions.webView == nil else { return }
                 actions.ready = false
                 actions.selectedSize = ""
+                actions.canUndo = false
+                actions.canRedo = false
             }
         }
         (web as? NoteDocumentWebView)?.importedActions = nil
@@ -257,6 +261,8 @@ struct PreservedDocumentView: NSViewRepresentable {
             guard active, message.frameInfo.isMainFrame, let data = message.body as? [String: Any] else { return }
             if let error = data["error"] as? String { parent.onError(error); return }
             if let size = data["size"] as? String { parent.actions.selectedSize = size }
+            if let value = data["canUndo"] as? Bool { parent.actions.canUndo = value }
+            if let value = data["canRedo"] as? Bool { parent.actions.canRedo = value }
             guard let changes = data["changes"] as? [String: String], let sequence = data["sequence"] as? Int,
                   let model, parent.enabled else { return }
             do {
@@ -289,10 +295,106 @@ struct PreservedDocumentView: NSViewRepresentable {
       let accepted = new Map(originals), savedRange = null, suppress = false, enabled = true;
       let pending = new Map();
       let sequence = 0, acknowledged = 0;
+      let observed = new Map(originals), undo = [], redo = [], beforeSelection = null, composing = false;
       const post = data => window.webkit.messageHandlers.ceraltoEdit.postMessage(data);
       const markerFor = node => (node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement)?.closest(selector);
       const selection = () => window.getSelection();
       const error = text => post({error: text});
+      const snapshot = () => new Map(markers.map(node => [node.dataset.ceraltoEdit, node.innerHTML]));
+      const inlineText = node => node.nodeType === Node.TEXT_NODE ? node.data :
+        node.nodeName === 'BR' ? '\n' : [...node.childNodes].map(inlineText).join('');
+      const length = node => (node.textContent || '').length +
+        (node.querySelectorAll ? node.querySelectorAll('br').length : 0);
+      function bookmark() {
+        const current = selection();
+        const point = (node, offset) => {
+          const host = markerFor(node);
+          if (!host) return null;
+          const prefix = document.createRange(); prefix.selectNodeContents(host); prefix.setEnd(node, offset);
+          return {id: host.dataset.ceraltoEdit, offset: length(prefix.cloneContents())};
+        };
+        if (!current.rangeCount) return null;
+        const range = current.getRangeAt(0);
+        const start = point(range.startContainer, range.startOffset), end = point(range.endContainer, range.endOffset);
+        const backward = current.anchorNode === range.endContainer && current.anchorOffset === range.endOffset;
+        return start && end ? {anchor: backward ? end : start, focus: backward ? start : end} : null;
+      }
+      function restoreBookmark(value) {
+        if (!value) return;
+        const point = target => {
+          const host = markers.find(node => node.dataset.ceraltoEdit === target.id);
+          if (!host) return null;
+          const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+          let remaining = target.offset, node;
+          while ((node = walker.nextNode())) {
+            if (node.nodeType === Node.TEXT_NODE) {
+              if (remaining <= node.length) return [node, remaining];
+              remaining -= node.length;
+            } else if (node.nodeName === 'BR') {
+              if (remaining === 0) return [node.parentNode, [...node.parentNode.childNodes].indexOf(node)];
+              remaining -= 1;
+              if (remaining === 0) return [node.parentNode, [...node.parentNode.childNodes].indexOf(node) + 1];
+            }
+          }
+          return [host, host.childNodes.length];
+        };
+        const anchor = point(value.anchor), focus = point(value.focus);
+        if (!anchor || !focus) return;
+        markerFor(anchor[0]).focus({preventScroll: true});
+        const range = document.createRange();
+        range.setStart(...anchor); range.setEnd(...focus);
+        const backward = range.collapsed && JSON.stringify(value.anchor) !== JSON.stringify(value.focus);
+        if (backward) { range.setStart(...focus); range.setEnd(...anchor); }
+        selection().removeAllRanges(); selection().addRange(range);
+        // WebKit clips setBaseAndExtent at editing-host boundaries.
+        if (backward && value.anchor.id === value.focus.id) selection().setBaseAndExtent(...anchor, ...focus);
+        savedRange = range.cloneRange();
+      }
+      let lastSelection = null;
+      function remember(kind) {
+        const current = snapshot(), patches = [];
+        current.forEach((html, id) => {
+          if (html !== observed.get(id)) patches.push({id, before: observed.get(id), after: html});
+        });
+        if (patches.length) {
+          const after = bookmark(), before = beforeSelection || lastSelection;
+          const previous = undo.at(-1), now = performance.now();
+          const typing = ['insertText', 'deleteContentBackward', 'deleteContentForward'].includes(kind);
+          const merged = typing && previous?.kind === kind && now - previous.time < 1000 &&
+            JSON.stringify(previous.afterSelection) === JSON.stringify(before) &&
+            previous.patches.length === 1 && patches.length === 1 && previous.patches[0].id === patches[0].id;
+          if (merged) {
+            previous.patches[0].after = patches[0].after;
+            previous.afterSelection = after; previous.time = now;
+          } else undo.push({patches, beforeSelection: before, afterSelection: after, kind, time: now});
+          redo = [];
+          let bytes = undo.reduce((total, entry) => total + entry.patches.reduce(
+            (size, patch) => size + (patch.before.length + patch.after.length) * 2, 0), 0);
+          while (undo.length > 1 && (undo.length > 100 || bytes > 16 * 1024 * 1024)) {
+            bytes -= undo.shift().patches.reduce((size, patch) => size + (patch.before.length + patch.after.length) * 2, 0);
+          }
+        }
+        observed = current; beforeSelection = null; lastSelection = bookmark();
+      }
+      function travel(backward) {
+        if (!enabled) return false;
+        const source = backward ? undo : redo, destination = backward ? redo : undo;
+        const entry = source.pop();
+        if (!entry) return false;
+        if (undo.length) undo.at(-1).time = -Infinity;
+        entry.time = -Infinity;
+        suppress = true;
+        try {
+          entry.patches.forEach(patch => {
+            markers.find(node => node.dataset.ceraltoEdit === patch.id).innerHTML = backward ? patch.before : patch.after;
+          });
+          restoreBookmark(backward ? entry.beforeSelection : entry.afterSelection);
+          observed = snapshot(); lastSelection = bookmark(); beforeSelection = null;
+          destination.push(entry);
+        } finally { suppress = false; }
+        notify('', false);
+        return true;
+      }
       const normalize = node => {
         const clone = node.cloneNode(true);
         clone.querySelectorAll('[class]').forEach(item => item.removeAttribute('class'));
@@ -300,8 +402,9 @@ struct PreservedDocumentView: NSViewRepresentable {
         if (clone.lastChild?.nodeName === 'BR') clone.lastChild.remove();
         return clone.innerHTML;
       };
-      function notify() {
+      function notify(kind = 'edit', record = true) {
         if (suppress) return;
+        if (record) remember(kind);
         const changes = {};
         markers.forEach(node => {
           if (node.innerHTML !== originals.get(node.dataset.ceraltoEdit)) {
@@ -310,7 +413,7 @@ struct PreservedDocumentView: NSViewRepresentable {
         });
         sequence += 1;
         pending.set(sequence, new Map(markers.map(node => [node.dataset.ceraltoEdit, node.innerHTML])));
-        post({changes, sequence});
+        post({changes, sequence, canUndo: undo.length > 0, canRedo: redo.length > 0});
       }
       function restoreRange() {
         if (!savedRange || !savedRange.commonAncestorContainer.isConnected) return false;
@@ -318,6 +421,7 @@ struct PreservedDocumentView: NSViewRepresentable {
         return true;
       }
       function replaceSections(range, text) {
+        beforeSelection = bookmark();
         const first = markerFor(range.startContainer), last = markerFor(range.endContainer);
         if (!first || !last) { error('Keep the selection inside editable text. Use Source to restructure the layout.'); return; }
         const parts = markers.filter(node => range.intersectsNode(node)).map(node => {
@@ -326,15 +430,32 @@ struct PreservedDocumentView: NSViewRepresentable {
           if (node === last) part.setEnd(range.endContainer, range.endOffset);
           return part;
         });
+        const prefix = document.createRange(); prefix.selectNodeContents(first);
+        prefix.setEnd(parts[0].startContainer, parts[0].startOffset);
+        const prefixContent = prefix.cloneContents();
+        if (parts[0].startContainer === first && parts[0].startOffset === first.childNodes.length &&
+            prefixContent.lastChild?.nodeName === 'BR') prefixContent.lastChild.remove();
+        const suffix = document.createRange(); suffix.selectNodeContents(first);
+        suffix.setStart(parts[0].endContainer, parts[0].endOffset);
+        const suffixContent = suffix.cloneContents();
+        if (suffixContent.lastChild?.nodeName === 'BR') suffixContent.lastChild.remove();
+        const expectedText = inlineText(prefixContent) + text.replace(/\r\n?/g, '\n') + inlineText(suffixContent);
         const previous = new Map(markers.map(node => [node, node.innerHTML]));
         suppress = true;
         try {
           for (let index = parts.length - 1; index >= 0; index--) {
             selection().removeAllRanges(); selection().addRange(parts[index]);
             const inserted = index === 0 ? text : '';
-            if (!document.execCommand(inserted ? 'insertText' : 'delete', false, inserted)) {
+            const html = inserted.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+              .replace(/\r\n?/g, '\n').replaceAll('\n', '<br>');
+            if (!document.execCommand(inserted ? 'insertHTML' : 'delete', false, html)) {
               throw new Error('The selected text could not be replaced.');
             }
+          }
+          const breaks = expectedText.match(/\n+$/)?.[0].length || 0;
+          if (breaks) {
+            let current = inlineText(first).match(/\n+$/)?.[0].length || 0;
+            while (current++ < breaks + 1) first.append(document.createElement('br'));
           }
           if (selection().rangeCount) savedRange = selection().getRangeAt(0).cloneRange();
         } catch (failure) {
@@ -342,7 +463,7 @@ struct PreservedDocumentView: NSViewRepresentable {
           savedRange = null;
           error(failure.message);
         } finally { suppress = false; }
-        notify();
+        notify('Replace Text');
       }
       document.addEventListener('selectionchange', () => {
         const current = selection();
@@ -350,6 +471,7 @@ struct PreservedDocumentView: NSViewRepresentable {
         const range = current.getRangeAt(0);
         if (!markerFor(range.startContainer) || !markerFor(range.endContainer)) return;
         savedRange = range.cloneRange();
+        if (!suppress && !composing) lastSelection = bookmark();
         const sizes = new Set();
         markers.filter(node => range.intersectsNode(node)).forEach(node => {
           const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -364,7 +486,10 @@ struct PreservedDocumentView: NSViewRepresentable {
       document.addEventListener('beforeinput', event => {
         if (!enabled) { event.preventDefault(); return; }
         if (suppress) return;
-        if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') return;
+        if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+          event.preventDefault(); travel(event.inputType === 'historyUndo'); return;
+        }
+        if (!composing) beforeSelection = bookmark();
         const current = selection();
         if (!current.rangeCount) return;
         const range = current.getRangeAt(0);
@@ -382,20 +507,48 @@ struct PreservedDocumentView: NSViewRepresentable {
           return;
         }
         if (event.inputType === 'insertParagraph') {
-          event.preventDefault(); document.execCommand('insertLineBreak'); notify();
+          event.preventDefault(); document.execCommand('insertLineBreak');
         }
       }, true);
-      document.addEventListener('input', notify);
+      document.addEventListener('input', event => {
+        if (suppress || composing) return;
+        if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+          queueMicrotask(() => {
+            observed.forEach((html, id) => { markers.find(node => node.dataset.ceraltoEdit === id).innerHTML = html; });
+            travel(event.inputType === 'historyUndo');
+          });
+        } else notify(event.inputType || 'edit');
+      });
+      document.addEventListener('compositionstart', () => { beforeSelection = bookmark(); composing = true; });
+      document.addEventListener('compositionend', () => {
+        queueMicrotask(() => { composing = false; notify('Composition'); });
+      });
+      document.addEventListener('keydown', event => {
+        if (enabled && event.metaKey && !event.altKey && !event.ctrlKey && event.key.toLowerCase() === 'z') {
+          event.preventDefault(); travel(!event.shiftKey);
+        }
+      }, true);
+      for (const type of ['copy', 'cut']) document.addEventListener(type, event => {
+        const range = selection().rangeCount ? selection().getRangeAt(0) : null;
+        if (!range || !markerFor(range.startContainer) || !markerFor(range.endContainer) ||
+            markerFor(range.startContainer) === markerFor(range.endContainer)) return;
+        event.preventDefault();
+        const contents = document.createElement('div'); contents.append(range.cloneContents());
+        contents.querySelectorAll(selector).forEach(node => node.replaceWith(...node.childNodes));
+        event.clipboardData.setData('text/html', contents.innerHTML);
+        contents.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,blockquote,tr,pre').forEach(node => node.append(document.createTextNode('\n')));
+        const plain = inlineText(contents);
+        event.clipboardData.setData('text/plain', ['P','DIV','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','TR','PRE'].includes(contents.lastChild?.nodeName) ?
+          plain.replace(/\n$/, '') : plain);
+        if (type === 'cut' && enabled) replaceSections(range.cloneRange(), '');
+      }, true);
       document.addEventListener('paste', event => {
         if (!markerFor(event.target)) return;
         event.preventDefault();
         const data = event.clipboardData;
         if (data.files.length) { error('Use Add Attachments to insert files or images.'); return; }
         const range = selection().rangeCount ? selection().getRangeAt(0) : null;
-        if (range && markerFor(range.startContainer) !== markerFor(range.endContainer)) {
-          replaceSections(range.cloneRange(), data.getData('text/plain')); return;
-        }
-        document.execCommand('insertText', false, data.getData('text/plain'));
+        if (range && enabled && data.getData('text/plain')) replaceSections(range.cloneRange(), data.getData('text/plain'));
       }, true);
       document.addEventListener('drop', event => {
         event.preventDefault(); error('Use Add Attachments to insert files or images into imported notes.');
@@ -418,11 +571,16 @@ struct PreservedDocumentView: NSViewRepresentable {
           markers.forEach(node => { node.innerHTML = accepted.get(node.dataset.ceraltoEdit); });
           [...pending.keys()].forEach(key => { if (key >= value) pending.delete(key); });
           savedRange = null;
+          observed = snapshot(); undo = []; redo = []; beforeSelection = null; lastSelection = null;
+          post({canUndo: false, canRedo: false});
           suppress = false;
         },
         command(command, value) {
+          if (command === 'undo' || command === 'redo') return travel(command === 'undo');
           if (!enabled || !restoreRange()) { error('Select text in the note before formatting it.'); return false; }
           const range = selection().getRangeAt(0);
+          const previousSelection = bookmark();
+          beforeSelection = previousSelection;
           const sizing = command === 'size' || command === 'adjustSize';
           const applyTrait = !sizing && !document.queryCommandState(command);
           if (range.collapsed) {
@@ -433,13 +591,6 @@ struct PreservedDocumentView: NSViewRepresentable {
           if (!sizing && !['bold','italic','underline','strikeThrough'].includes(command)) {
             error('This formatting command is unavailable for imported layouts.'); return false;
           }
-          const first = markerFor(range.startContainer), last = markerFor(range.endContainer);
-          const offset = (host, node, position) => {
-            const prefix = document.createRange(); prefix.selectNodeContents(host); prefix.setEnd(node, position);
-            return prefix.toString().length;
-          };
-          const startOffset = offset(first, range.startContainer, range.startOffset);
-          const endOffset = offset(last, range.endContainer, range.endOffset);
           const parts = markers.filter(node => range.intersectsNode(node)).flatMap(node => {
             const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
             const pieces = [];
@@ -457,6 +608,7 @@ struct PreservedDocumentView: NSViewRepresentable {
           if (sizing && parts.some(item => !Number.isFinite(item.size) || item.size < 1 || item.size > 512)) {
             error('Choose text sizes between 1 and 512 points.'); return false;
           }
+          const previousContent = snapshot();
           suppress = true;
           try {
             for (const {part, size} of parts.reverse()) {
@@ -464,33 +616,37 @@ struct PreservedDocumentView: NSViewRepresentable {
               if (sizing) {
                 const wrapper = document.createElement('span'); wrapper.style.fontSize = size + 'px';
                 wrapper.append(part.cloneContents());
-                document.execCommand('insertHTML', false, wrapper.outerHTML);
-              } else if (document.queryCommandState(command) !== applyTrait) document.execCommand(command);
+                if (!document.execCommand('insertHTML', false, wrapper.outerHTML)) throw new Error('The selected text could not be formatted.');
+              } else if (document.queryCommandState(command) !== applyTrait && !document.execCommand(command)) {
+                throw new Error('The selected text could not be formatted.');
+              }
             }
+          } catch (failure) {
+            previousContent.forEach((html, id) => { markers.find(node => node.dataset.ceraltoEdit === id).innerHTML = html; });
+            error(failure.message);
           } finally { suppress = false; }
-          const position = (host, count) => {
-            const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-            let text;
-            while ((text = walker.nextNode())) {
-              if (count <= text.length) return [text, count];
-              count -= text.length;
-            }
-            return [host, host.childNodes.length];
-          };
-          const restored = document.createRange();
-          restored.setStart(...position(first, startOffset)); restored.setEnd(...position(last, endOffset));
-          selection().removeAllRanges(); selection().addRange(restored); savedRange = restored.cloneRange();
-          notify();
+          restoreBookmark(previousSelection);
+          notify('Format Text');
           return true;
         }
       };
       window.ceraltoEditor.setEnabled(true);
+      post({canUndo: false, canRedo: false, size: ''});
     })();
     """#
 }
 
 final class NoteDocumentWebView: WKWebView {
     weak var importedActions: ImportedTextActions?
+
+    @objc func undo(_ sender: Any?) { importedActions?.perform("undo") }
+    @objc func redo(_ sender: Any?) { importedActions?.perform("redo") }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(undo(_:)) { return importedActions?.ready == true && importedActions?.canUndo == true }
+        if item.action == #selector(redo(_:)) { return importedActions?.ready == true && importedActions?.canRedo == true }
+        return super.validateUserInterfaceItem(item)
+    }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard let actions = importedActions, actions.ready, let focused = window?.firstResponder as? NSView,
@@ -500,6 +656,7 @@ final class NoteDocumentWebView: WKWebView {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option])
         if modifiers == [.command, .shift] {
             switch event.charactersIgnoringModifiers {
+            case "z", "Z": actions.perform("redo")
             case ".", ">": actions.perform("adjustSize", value: 1)
             case ",", "<": actions.perform("adjustSize", value: -1)
             default: return super.performKeyEquivalent(with: event)
@@ -508,6 +665,7 @@ final class NoteDocumentWebView: WKWebView {
         }
         if modifiers == .command {
             switch event.charactersIgnoringModifiers?.lowercased() {
+            case "z": actions.perform("undo")
             case "b": actions.perform("bold")
             case "i": actions.perform("italic")
             case "u": actions.perform("underline")

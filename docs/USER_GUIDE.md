@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.9.
+their original names; the instructions below describe Ceralto 0.23.10.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -141,9 +141,13 @@ advanced headings and mixed HTML/Markdown notes. Type, select words and use **Aa
 without converting the note. Unchanged source, enclosing layout and attachment
 references are retained. Selected text sizes are saved with the note; size changes
 in imported layouts require a selection, not a global preference.
-Selections can cross inline formatting boundaries. Undo/Redo may step through
-individual text sections when a change spans several sections. Paste inserts plain
-text; use the paperclip for files. Adding attachments or changing the source outside
+Selections can cross inline formatting boundaries. Each formatting, replacement,
+paste or cut is one Undo/Redo step, including changes spanning several text sections.
+Undo restores the selection as well as the text. Consecutive typing is grouped;
+composed text is kept together. Making a new edit after Undo clears Redo.
+Copying across inline styles retains all selected words without internal edit markers.
+Paste inserts plain text with its line breaks, not incoming HTML formatting;
+use the paperclip for files. Adding attachments or changing the source outside
 the editor reloads the rendered layout and starts a new visual Undo history.
 Code blocks, images and structural layout changes still use **Note actions >
 Use Markdown/HTML Source Editor...**. If there is no safely editable text, **Edit

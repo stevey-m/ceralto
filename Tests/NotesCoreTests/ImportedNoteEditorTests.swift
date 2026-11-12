@@ -85,14 +85,31 @@ struct ImportedNoteEditorTests {
         window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
         """)
         try await Task.sleep(for: .milliseconds(30))
+        let beforeMixedSizeChange = store.library.notes.first?.body
         actions.perform("adjustSize", value: 1)
         try await waitFor { store.library.notes.first?.body.contains("font-size:13") == true }
+        let afterMixedSizeChange = store.library.notes.first?.body
         #expect(try await web.evaluateJavaScript("""
         [...document.querySelectorAll('[data-ceralto-edit]')]
           .filter(node => ['Before', 'bold words', 'after'].includes(node.textContent.trim()))
           .map(node => getComputedStyle(document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode().parentElement).fontSize)
           .join(',')
         """) as? String == "13px,22px,35px")
+        #expect(window.firstResponder?.tryToPerform(Selector(("undo:")), with: nil) == true)
+        try await waitFor { store.library.notes.first?.body == beforeMixedSizeChange }
+        #expect(window.firstResponder?.tryToPerform(Selector(("redo:")), with: nil) == true)
+        try await waitFor { store.library.notes.first?.body == afterMixedSizeChange }
+        let selectionAfterRedo = try await web.evaluateJavaScript("window.getSelection().getRangeAt(0).toString().replaceAll(String.fromCharCode(160), ' ')") as? String
+        #expect(selectionAfterRedo == "Before bold words after")
+        let copied = try await web.evaluateJavaScript("""
+        (() => {
+          const data = new DataTransfer();
+          document.activeElement.dispatchEvent(new ClipboardEvent('copy', {bubbles:true, cancelable:true, clipboardData:data}));
+          if (data.getData('text/html').includes('data-ceralto-edit')) throw new Error('Internal edit markers leaked into the clipboard');
+          return data.getData('text/plain').replaceAll(String.fromCharCode(160), ' ');
+        })()
+        """) as? String
+        #expect(copied == "Before bold words after")
         actions.perform("size", value: 28)
         try await waitFor { store.library.notes.first?.body.contains("font-size:28") == true }
         let multi = try SwiftSoup.parse(try #require(store.library.notes.first?.body))
@@ -131,12 +148,83 @@ struct ImportedNoteEditorTests {
         try await waitFor { store.library.notes.first?.body.contains("Replacement across styles") == true }
         #expect(error == nil)
         #expect(store.library.notes.first?.body.contains("<img src='../_resources/original.png'>") == true)
-        for _ in 0..<3 where store.library.notes.first?.body != beforeReplacement {
-            let previous = store.library.notes.first?.body
-            _ = try await web.evaluateJavaScript("document.execCommand('undo')")
-            try await waitFor { store.library.notes.first?.body != previous }
-        }
+        let replacedBody = store.library.notes.first?.body
+        let undoKey = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+            modifierFlags: [.command], timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, characters: "z", charactersIgnoringModifiers: "z", isARepeat: false, keyCode: 6))
+        #expect(web.performKeyEquivalent(with: undoKey))
+        try await waitFor { store.library.notes.first?.body == beforeReplacement }
         #expect(store.library.notes.first?.body == beforeReplacement)
+        #expect(window.firstResponder?.tryToPerform(Selector(("redo:")), with: nil) == true)
+        try await waitFor { store.library.notes.first?.body == replacedBody }
+        #expect(window.firstResponder?.tryToPerform(Selector(("undo:")), with: nil) == true)
+        try await waitFor { store.library.notes.first?.body == beforeReplacement }
+        try await select("Revised words", in: web)
+        let beforePaste = store.library.notes.first?.body
+        _ = try await web.evaluateJavaScript("""
+        (() => {
+          const data = new DataTransfer();
+          data.setData('text/plain', 'One <literal>\\nTwo & caf\\u00e9\\n');
+          data.setData('text/html', '<b>Unwanted rich content</b>');
+          document.activeElement.dispatchEvent(new ClipboardEvent('paste', {bubbles:true, cancelable:true, clipboardData:data}));
+        })()
+        """)
+        try await waitFor { store.library.notes.first?.body.contains("One &lt;literal&gt;<br>Two &amp; caf") == true }
+        let pasted = store.library.notes.first?.body
+        let pastedSource = try #require(pasted)
+        let pastedParagraph = try #require(SwiftSoup.parse(pastedSource).select("p").first {
+            try $0.text().contains("One <literal>")
+        })
+        func inlineText(_ node: Node) -> String {
+            if let text = node as? TextNode { return text.getWholeText() }
+            if (node as? Element)?.tagName() == "br" { return "\n" }
+            return node.getChildNodes().map(inlineText).joined()
+        }
+        let pastedText = inlineText(pastedParagraph)
+        #expect(pastedText == "One <literal>\nTwo & caf\u{e9}\n")
+        #expect(!((pasted ?? "").contains("Unwanted rich content")))
+        #expect(try storage.load()?.notes.first?.body == pasted)
+        #expect(window.firstResponder?.tryToPerform(Selector(("undo:")), with: nil) == true)
+        try await waitFor { store.library.notes.first?.body == beforePaste }
+        #expect(actions.canRedo)
+        _ = try await web.evaluateJavaScript("document.execCommand('insertText', false, 'A new branch')")
+        try await waitFor { store.library.notes.first?.body.contains("A new branch") == true }
+        #expect(!actions.canRedo)
+        let branched = store.library.notes.first?.body
+        actions.perform("redo")
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(store.library.notes.first?.body == branched)
+        #expect(window.firstResponder?.tryToPerform(Selector(("undo:")), with: nil) == true)
+        try await waitFor { store.library.notes.first?.body == beforePaste }
+        try await select("Revised words", in: web)
+        _ = try await web.evaluateJavaScript("""
+        (() => {
+          for (const text of ['a', 'b']) {
+            const node = document.activeElement;
+            if (node.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, cancelable:true, inputType:'insertText', data:text}))) {
+              document.execCommand('insertText', false, text);
+            }
+          }
+        })()
+        """)
+        try await waitFor { store.library.notes.first?.body.contains(">ab") == true }
+        actions.perform("undo")
+        try await waitFor { store.library.notes.first?.body == beforePaste }
+        try await select("Revised words", in: web)
+        _ = try await web.evaluateJavaScript("""
+        (() => {
+          const node = document.activeElement;
+          node.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+          for (const text of ['n', 'ni', String.fromCharCode(0x4f60)]) {
+            node.textContent = text;
+            node.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertCompositionText', data:text, isComposing:true}));
+          }
+          node.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+        })()
+        """)
+        try await waitFor { store.library.notes.first?.body.contains("\u{4f60}") == true }
+        actions.perform("undo")
+        try await waitFor { store.library.notes.first?.body == beforePaste }
         let accepted = store.library.notes.first?.body
         _ = try await web.evaluateJavaScript("""
         const damaged = document.querySelector('[data-ceralto-edit]');
