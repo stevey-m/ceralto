@@ -576,6 +576,7 @@ struct ContentView: View {
                         ForEach(NoteListSpacing.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) }
                     }
                 }
+                Menu("Preview Lines") { NoteListPreviewLinesPicker() }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -766,7 +767,7 @@ struct NoteToolbarButton: NSViewRepresentable {
     }
 }
 
-private struct NoteRow: View {
+struct NoteRow: View {
     @EnvironmentObject private var store: NotesStore
     let note: Note
     var gallery = false
@@ -788,7 +789,7 @@ private struct NoteRow: View {
             }
             if previewLines > 0 {
                 Text(note.body.isEmpty ? "No additional text" : store.textSummary(for: note).excerpt)
-                    .font(.system(size: fontSize)).foregroundStyle(.secondary).lineLimit(min(previewLines, 3))
+                    .font(.system(size: fontSize)).foregroundStyle(.secondary).lineLimit(min(previewLines, 5))
             }
             if showDates || !note.tags.isEmpty {
                 HStack {

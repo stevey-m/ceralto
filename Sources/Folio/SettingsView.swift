@@ -50,7 +50,6 @@ struct SettingsView: View {
     @ViewState private var query = ""
     @AppStorage("defaultNoteFormat") private var defaultFormat = NoteFormat.formatted.rawValue
     @AppStorage("composeSpellChecking") private var spellChecking = true
-    @AppStorage("noteListPreviewLines") private var previewLines = 2
     @AppStorage("noteListShowDates") private var showDates = true
     @AppStorage("dailyNotebook") private var dailyNotebook = "Journal"
     @AppStorage("dailyTemplate") private var dailyTemplate = TemplateChoice.daily.id
@@ -196,10 +195,7 @@ struct SettingsView: View {
                     get: { store.noteOrdering.ascending },
                     set: { store.setNoteOrdering(NoteOrdering(field: store.noteOrdering.field, ascending: $0)) }
                 ))
-                Picker("Preview lines", selection: $previewLines) {
-                    Text("Titles only").tag(0)
-                    ForEach(1...3, id: \.self) { Text("\($0) \($0 == 1 ? "line" : "lines")").tag($0) }
-                }
+                NoteListPreviewLinesPicker()
                 Toggle("Show dates in the note list", isOn: $showDates)
             }
         case .editor:

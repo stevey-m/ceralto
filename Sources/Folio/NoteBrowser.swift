@@ -57,6 +57,17 @@ enum NoteListSpacing: String, CaseIterable {
     }
 }
 
+struct NoteListPreviewLinesPicker: View {
+    @AppStorage("noteListPreviewLines") private var previewLines = 2
+
+    var body: some View {
+        Picker("Preview lines", selection: $previewLines) {
+            Text("Titles only").tag(0)
+            ForEach(1...5, id: \.self) { Text("\($0) \($0 == 1 ? "line" : "lines")").tag($0) }
+        }
+    }
+}
+
 enum GallerySelection {
     static func selecting(_ id: UUID, in ordered: [UUID], current: Set<UUID>, anchor: UUID?,
                           extending: Bool, toggling: Bool) -> Set<UUID> {

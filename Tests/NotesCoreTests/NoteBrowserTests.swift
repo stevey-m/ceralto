@@ -5,6 +5,54 @@ import Testing
 @testable import Folio
 
 struct NoteBrowserTests {
+    @MainActor
+    @Test(arguments: [false, true])
+    func previewLineCountChangesVisibleRowHeightAndSurvivesReopeningWithoutChangingNotes(gallery: Bool) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "CeraltoPreviewLines-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "noteListShowDates")
+        let notebook = Notebook(name: "Preview test")
+        let note = Note(notebookID: notebook.id, title: "Synthetic preview",
+                        body: String(repeating: "Readable words that wrap across several lines. ", count: 30),
+                        format: .formatted)
+        let storage = LibraryStorage(url: root.appendingPathComponent("library.json"))
+        try storage.save(Library(notebooks: [notebook], notes: [note]))
+        let saved = try Data(contentsOf: storage.url)
+        let store = NotesStore(storage: storage, preferences: defaults)
+        func row() -> some View {
+            NoteRow(note: note, gallery: gallery).frame(width: 260)
+                .environmentObject(store).defaultAppStorage(defaults)
+        }
+        let host = NSHostingView(rootView: row())
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 260, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        @MainActor func height() async throws -> CGFloat {
+            try await Task.sleep(for: .milliseconds(100))
+            host.layoutSubtreeIfNeeded()
+            return host.fittingSize.height
+        }
+        let defaultHeight = try await height()
+        var heights: [Int: CGFloat] = [:]
+        for lines in [0, 1, 2, 3, 5] {
+            defaults.set(lines, forKey: "noteListPreviewLines")
+            heights[lines] = try await height()
+        }
+        #expect(defaultHeight == heights[2])
+        #expect(try #require(heights[0]) < #require(heights[1]))
+        #expect(try #require(heights[1]) < #require(heights[2]))
+        #expect(try #require(heights[3]) < #require(heights[5]))
+        host.rootView = row()
+        #expect(try await height() == heights[5])
+        #expect(UserDefaults(suiteName: suite)?.integer(forKey: "noteListPreviewLines") == 5)
+        #expect(store.library.notes == [note])
+        #expect(try Data(contentsOf: storage.url) == saved)
+    }
+
     @Test func dateGroupsUseCalendarDaysAcrossDaylightSavingAndKeepPinnedNotesFirst() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(identifier: "America/New_York"))

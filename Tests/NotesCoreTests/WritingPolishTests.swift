@@ -7,6 +7,50 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct WritingPolishTests {
+    @Test func relativeTextSizesPreserveMixedRunsAndUndoWithoutChangingOtherText() async throws {
+        let (editor, actions) = try editor("Small **large** outside")
+        editor.setSelectedRange(NSRange(location: 0, length: 5))
+        actions.setFontSize(12)
+        editor.setSelectedRange(NSRange(location: 6, length: 5))
+        actions.setFontSize(24)
+        let original = markdown(editor)
+        let selection = NSRange(location: 0, length: 11)
+        editor.setSelectedRange(selection)
+        actions.refresh()
+        #expect(actions.selectedFontSize == nil)
+        try await Task.sleep(for: .milliseconds(20))
+        actions.adjustFontSize(by: 1)
+        let page = try FormattedPage(markdown: markdown(editor))
+        let runs = page.blocks[0].runs
+        #expect(runs.contains { $0.text == "Small" && $0.fontSize == 13 })
+        #expect(runs.contains { $0.text == "large" && $0.fontSize == 25 && $0.bold })
+        #expect(runs.contains { $0.text.contains("outside") && $0.fontSize == nil })
+        #expect(editor.selectedRange() == selection)
+        try #require(editor.undoManager).undo()
+        #expect(markdown(editor) == original)
+        try #require(editor.undoManager).redo()
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks[0].runs.contains { $0.fontSize == 25 })
+    }
+
+    @Test func relativeTextSizesAtCaretAffectOnlyNewTypingAndRejectOutOfRangeSelection() throws {
+        let (editor, actions) = try editor("Keep")
+        editor.setSelectedRange(NSRange(location: 4, length: 0))
+        actions.setFontSize(19.5)
+        actions.adjustFontSize(by: -1)
+        #expect(actions.selectedFontSize == 18.5)
+        #expect(markdown(editor) == "Keep")
+        editor.insertText(" new", replacementRange: editor.selectedRange())
+        #expect(try FormattedPage(markdown: markdown(editor)).blocks[0].runs.contains { $0.fontSize == 18.5 })
+        editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
+        actions.setFontSize(512)
+        let before = markdown(editor)
+        var error: String?
+        editor.onError = { error = $0 }
+        actions.adjustFontSize(by: 1)
+        #expect(error != nil)
+        #expect(markdown(editor) == before)
+    }
+
     @Test func mixedFormattingUsesTheWholeSelectionAndReflectsCaretChanges() throws {
         let (editor, actions) = try editor("**Bold** plain")
         editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))

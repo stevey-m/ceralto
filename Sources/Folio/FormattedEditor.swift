@@ -233,7 +233,7 @@ enum NativePageCodec {
 
 @MainActor
 final class FormattingActions: ObservableObject {
-    static let fontSizes = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72]
+    static let fontSizes = [8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 48, 56, 64, 72, 80, 96]
     weak var editor: PageTextView?
     @Published var style = FormattedBlock.Style.paragraph
     @Published var bold = false
@@ -243,6 +243,7 @@ final class FormattingActions: ObservableObject {
     @Published var code = false
     @Published var linked = false
     @Published var inTable = false
+    @Published var selectedFontSize: Double?
 
     func refresh() {
         guard let editor else { return }
@@ -255,6 +256,8 @@ final class FormattingActions: ObservableObject {
             }
         }
         if attributes.isEmpty { attributes = [editor.typingAttributes] }
+        let sizes = attributes.compactMap { ($0[.font] as? NSFont).map { Double($0.pointSize) } }
+        selectedFontSize = sizes.first.flatMap { first in sizes.allSatisfy { abs($0 - first) < 0.001 } ? first : nil }
         style = FormattedBlock.Style(rawValue: attributes[0][.folioBlock] as? String ?? "") ?? .paragraph
         bold = attributes.allSatisfy { $0[.folioBold] as? Bool == true }
         italic = attributes.allSatisfy {
@@ -340,6 +343,38 @@ final class FormattingActions: ObservableObject {
                     guard attrs[.folioMarker] as? Bool != true, attrs[.attachment] == nil else { return }
                     storage.setAttributes(formatted(attrs), range: subrange)
                 }
+            }
+        }
+        refresh()
+        editor.window?.makeFirstResponder(editor)
+    }
+
+    func adjustFontSize(by amount: Double) {
+        guard let editor, editor.isEditable, let storage = editor.textStorage else { return }
+        let selection = editor.selectedRange()
+        var changes: [(NSRange, [NSAttributedString.Key: Any])] = []
+        var invalid = false
+        func resized(_ attributes: [NSAttributedString.Key: Any], range: NSRange) {
+            guard attributes[.folioMarker] as? Bool != true, attributes[.attachment] == nil else { return }
+            let current = (attributes[.font] as? NSFont).map { Double($0.pointSize) } ?? editor.pageFontSize
+            let size = current + amount
+            guard size.isFinite, (1...512).contains(size) else { invalid = true; return }
+            var updated = attributes
+            updated[.folioFontSize] = size
+            updated[.font] = Self.face(for: updated, editor: editor)
+            changes.append((range, updated))
+        }
+        if selection.length == 0 { resized(editor.typingAttributes, range: selection) }
+        else { storage.enumerateAttributes(in: selection) { attrs, range, _ in resized(attrs, range: range) } }
+        guard !invalid else {
+            editor.onError?("Selected text sizes must stay between 1 and 512 points.")
+            return
+        }
+        if selection.length == 0 {
+            if let attributes = changes.first?.1 { editor.typingAttributes = attributes }
+        } else if !changes.isEmpty {
+            editor.editAttributes(name: amount > 0 ? "Make Text Larger" : "Make Text Smaller") { text in
+                for (range, attributes) in changes { text.setAttributes(attributes, range: range) }
             }
         }
         refresh()
@@ -747,6 +782,16 @@ final class PageTextView: DocumentTextView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if isEditable, window?.firstResponder === self,
+           event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command, .shift],
+           let actions = formattingActions {
+            switch event.charactersIgnoringModifiers {
+            case ".", ">": actions.adjustFontSize(by: 1)
+            case ",", "<": actions.adjustFontSize(by: -1)
+            default: return super.performKeyEquivalent(with: event)
+            }
+            return true
+        }
+        if isEditable, window?.firstResponder === self,
            event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command,
            let actions = formattingActions {
             switch event.charactersIgnoringModifiers?.lowercased() {
@@ -802,6 +847,15 @@ final class PageTextView: DocumentTextView {
             item.isEnabled = isEditable
         }
         let sizes = NSMenu(title: "Text Size")
+        for (title, action, key) in [
+            ("Make Text Larger", #selector(largerSelection), "."),
+            ("Make Text Smaller", #selector(smallerSelection), ",")
+        ] {
+            let item = sizes.addItem(withTitle: title, action: action, keyEquivalent: key)
+            item.target = self
+            item.keyEquivalentModifierMask = [.command, .shift]
+        }
+        sizes.addItem(.separator())
         for size in FormattingActions.fontSizes {
             let item = sizes.addItem(withTitle: "\(size) pt", action: #selector(sizeSelection(_:)), keyEquivalent: "")
             item.tag = size
@@ -852,6 +906,8 @@ final class PageTextView: DocumentTextView {
     @objc private func italicSelection() { formattingActions?.toggle(.italicFontMask) }
     @objc private func underlineSelection() { formattingActions?.toggleInline(.underlineStyle) }
     @objc private func customSizeSelection() { formattingActions?.chooseFontSize() }
+    @objc private func largerSelection() { formattingActions?.adjustFontSize(by: 1) }
+    @objc private func smallerSelection() { formattingActions?.adjustFontSize(by: -1) }
     @objc private func sizeSelection(_ sender: NSMenuItem) {
         formattingActions?.setFontSize(sender.tag == 0 ? nil : Double(sender.tag))
     }
@@ -1517,7 +1573,20 @@ struct NoteFormattingControls: View {
                             .buttonStyle(.plain)
                         }
                         Divider()
+                        HStack(spacing: 6) {
+                            NoteToolbarButton(title: "Smaller Text", symbol: "textformat.size.smaller") {
+                                actions.adjustFontSize(by: -1)
+                            }.help("Make selected text smaller (Command-Shift-,)")
+                            SelectedTextSizeField(actions: actions).frame(width: 60, height: 24)
+                            Text("pt").font(.caption).foregroundStyle(.secondary)
+                            NoteToolbarButton(title: "Larger Text", symbol: "textformat.size.larger") {
+                                actions.adjustFontSize(by: 1)
+                            }.help("Make selected text larger (Command-Shift-.)")
+                        }
                         Menu("Selected Text Size") {
+                            Button("Make Text Larger") { actions.adjustFontSize(by: 1) }
+                            Button("Make Text Smaller") { actions.adjustFontSize(by: -1) }
+                            Divider()
                             ForEach(FormattingActions.fontSizes, id: \.self) { size in
                                 Button("\(size) pt") { actions.setFontSize(Double(size)) }
                             }
@@ -1583,6 +1652,46 @@ struct NoteFormattingControls: View {
         }
         .onChange(of: actions.inTable) { _, active in
             if !active { showingTable = false }
+        }
+    }
+}
+
+private struct SelectedTextSizeField: NSViewRepresentable {
+    @ObservedObject var actions: FormattingActions
+
+    func makeCoordinator() -> Coordinator { Coordinator(actions: actions) }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(string: "")
+        field.bezelStyle = .roundedBezel
+        field.alignment = .center
+        field.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        field.placeholderString = "Mixed"
+        field.setAccessibilityLabel("Selected text size in points")
+        field.toolTip = "Type a size from 1 to 512 points, then press Return."
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.actions = actions
+        if field.currentEditor() == nil {
+            field.stringValue = actions.selectedFontSize.map { String(format: "%g", $0) } ?? ""
+        }
+    }
+
+    @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
+        var actions: FormattingActions
+        init(actions: FormattingActions) { self.actions = actions }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+            guard command == #selector(NSResponder.insertNewline(_:)), let field = control as? NSTextField else { return false }
+            guard let size = Double(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                actions.editor?.onError?("Enter a numeric text size from 1 to 512 points.")
+                return true
+            }
+            actions.setFontSize(size)
+            return true
         }
     }
 }

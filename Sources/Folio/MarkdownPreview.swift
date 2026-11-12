@@ -144,7 +144,7 @@ struct DocumentWebView: NSViewRepresentable {
             source: Self.imageInteractionScript, injectionTime: .atDocumentEnd,
             forMainFrameOnly: true, in: .defaultClient
         ))
-        let view = WKWebView(frame: .zero, configuration: configuration)
+        let view = NoteDocumentWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = coordinator
         view.allowsBackForwardNavigationGestures = false
         return view

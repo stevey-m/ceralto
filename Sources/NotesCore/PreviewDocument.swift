@@ -106,6 +106,11 @@ public struct ImportedResources: Equatable, Sendable {
 
 public enum PreviewDocument {
     public static func markdownHTML(_ source: String, hardLineBreaks: Bool = false) throws -> String {
+        try renderMarkdown(source, hardLineBreaks: hardLineBreaks) { _ in }
+    }
+
+    static func renderMarkdown(_ source: String, hardLineBreaks: Bool,
+                               prepare: (UnsafeMutablePointer<cmark_node>) throws -> Void) throws -> String {
         // The extension registry is process-global. Serializing registration and rendering
         // keeps concurrent preview requests from racing cmark's registry.
         registryLock.lock()
@@ -126,6 +131,7 @@ public enum PreviewDocument {
             throw JoplinImportError.invalid("Markdown could not be parsed.")
         }
         defer { cmark_node_free(document) }
+        try prepare(document)
         let renderOptions = CMARK_OPT_UNSAFE | (hardLineBreaks ? CMARK_OPT_HARDBREAKS : 0)
         guard let rendered = cmark_render_html(document, renderOptions, cmark_parser_get_syntax_extensions(parser)) else {
             throw JoplinImportError.invalid("Markdown could not be rendered.")
@@ -137,10 +143,11 @@ public enum PreviewDocument {
     private static let registryLock = NSLock()
 
     public static func html(source: String, format: NoteFormat, resources: ImportedResources?,
-                            options: PreviewOptions = PreviewOptions(), noteLinks: [String: UUID] = [:]) throws -> String {
+                            options: PreviewOptions = PreviewOptions(), noteLinks: [String: UUID] = [:],
+                            editableIDs: Set<String> = []) throws -> String {
         try options.palette?.validate()
         let input = format.usesHTML ? source : try markdownHTML(source, hardLineBreaks: format == .markdown)
-        let linked = try NoteLinks.linkedBody(sanitizedBody(input, resources: resources), targets: noteLinks)
+        let linked = try NoteLinks.linkedBody(sanitizedBody(input, resources: resources, editableIDs: editableIDs), targets: noteLinks)
         let document = try SwiftSoup.parseBodyFragment(linked)
         for table in try document.select("table") {
             if try !["none", "presentation"].contains(table.attr("role")) {
@@ -210,7 +217,8 @@ public enum PreviewDocument {
         """
     }
 
-    public static func sanitizedBody(_ html: String, resources: ImportedResources?) throws -> String {
+    public static func sanitizedBody(_ html: String, resources: ImportedResources?,
+                                     editableIDs: Set<String> = []) throws -> String {
         let document = try SwiftSoup.parse(html)
         // Remove active content before cleaning, rather than retaining script text.
         try document.select("script,style,iframe,object,embed,form,base,link,meta,svg,math").remove()
@@ -226,8 +234,9 @@ public enum PreviewDocument {
             else { try table.removeAttr("role") }
         }
         for element in try document.select("[style]") {
-            if let size = FormattedPage.fontSize(in: try element.attr("style")) {
-                try element.attr("style", "font-size:\(size)px")
+            let safeStyle = FormattedPage.safeInlineStyle(try element.attr("style"))
+            if !safeStyle.isEmpty {
+                try element.attr("style", safeStyle)
             } else {
                 try element.removeAttr("style")
             }
@@ -241,11 +250,17 @@ public enum PreviewDocument {
             .addAttributes("td", "align").addAttributes("th", "align")
             .addAttributes("table", "role")
             .removeProtocols("a", "href", "ftp")
+        if !editableIDs.isEmpty { try whitelist.addAttributes("span", "data-ceralto-edit") }
         // URLs are explicitly resolved and allowlisted below, including relative paths.
         try whitelist.removeProtocols("img", "src", "http", "https")
         try whitelist.removeProtocols("a", "href", "http", "https", "mailto")
         let cleaned = try SwiftSoup.clean(try document.body()?.html() ?? "", whitelist)
         let body = try SwiftSoup.parseBodyFragment(cleaned ?? "")
+        for marker in try body.select("[data-ceralto-edit]") {
+            if !editableIDs.contains(try marker.attr("data-ceralto-edit")) {
+                try marker.removeAttr("data-ceralto-edit")
+            }
+        }
         for image in try body.select("img") {
             let source = try image.attr("src")
             let alt = try image.attr("alt")

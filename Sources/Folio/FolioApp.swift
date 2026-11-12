@@ -221,18 +221,59 @@ struct FolioApp: App {
 }
 
 @MainActor
+final class ApplicationMenuPolicy: NSObject {
+    func start() {
+        stop()
+        NotificationCenter.default.addObserver(self, selector: #selector(updateMenu(_:)),
+                                               name: NSMenu.didBeginTrackingNotification, object: nil)
+        if let menu = NSApp.mainMenu { removeSiriItems(from: menu) }
+    }
+
+    func stop() {
+        NotificationCenter.default.removeObserver(self, name: NSMenu.didBeginTrackingNotification, object: nil)
+    }
+
+    @objc private func updateMenu(_ notification: Notification) {
+        guard let menu = notification.object as? NSMenu else { return }
+        removeSiriItems(from: menu)
+    }
+
+    private func removeSiriItems(from menu: NSMenu) {
+        let localizedTitle = Bundle(for: NSTextView.self).localizedString(
+            forKey: "Ask Siri", value: "Ask Siri", table: nil
+        )
+        for item in menu.items {
+            let identifier = item.identifier?.rawValue.lowercased() ?? ""
+            let action = item.action.map(NSStringFromSelector)?.lowercased() ?? ""
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".\u{2026}"))
+            if identifier.contains("siri") || action.contains("siri") ||
+                title.caseInsensitiveCompare("Ask Siri") == .orderedSame ||
+                title.caseInsensitiveCompare(localizedTitle) == .orderedSame {
+                menu.removeItem(item)
+            } else if let submenu = item.submenu {
+                removeSiriItems(from: submenu)
+            }
+        }
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var store: NotesStore?
     weak var markdown: LiveMarkdownStore?
     private let appearance = ApplicationAppearance()
+    private let menuPolicy = ApplicationMenuPolicy()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         appearance.start()
+        menuPolicy.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         store?.syncManager.stop()
         appearance.stop()
+        menuPolicy.stop()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

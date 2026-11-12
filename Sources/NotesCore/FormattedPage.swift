@@ -428,6 +428,23 @@ public struct FormattedPage: Equatable, Sendable {
         }.last
     }
 
+    public static func safeInlineStyle(_ style: String) -> String {
+        style.split(separator: ";").compactMap { part -> String? in
+            let pair = part.split(separator: ":", maxSplits: 1)
+            guard pair.count == 2 else { return nil }
+            let name = pair[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let value = pair[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if name == "font-size", let size = fontSize(in: String(part)) { return "font-size:\(size)px" }
+            let allowed = [
+                "font-weight": ["normal", "bold", "400", "700"],
+                "font-style": ["normal", "italic"],
+                "text-decoration": ["none", "underline", "line-through", "underline line-through"]
+            ]
+            guard allowed[name]?.contains(value) == true else { return nil }
+            return "\(name):\(value)"
+        }.joined(separator: ";")
+    }
+
     public static func fontSize(in style: String) -> Double? {
         guard let value = fontSizeDeclaration(in: style),
               value.hasSuffix("px") || value.hasSuffix("pt"),
@@ -458,7 +475,7 @@ public struct FormattedPage: Equatable, Sendable {
         case "strong", "b": run.bold = true
         case "em", "i": run.italic = true
         case "u": run.underline = true
-        case "s", "del": run.struck = true
+        case "s", "del", "strike": run.struck = true
         case "code": run.code = true
         case "a":
             let href = try element.attr("href")
@@ -471,6 +488,17 @@ public struct FormattedPage: Equatable, Sendable {
             run.text = "\n"
             return [run]
         default: break
+        }
+        for declaration in safeInlineStyle(style).split(separator: ";") {
+            let pair = declaration.split(separator: ":", maxSplits: 1)
+            switch pair[0] {
+            case "font-weight": run.bold = pair[1] == "bold" || pair[1] == "700"
+            case "font-style": run.italic = pair[1] == "italic"
+            case "text-decoration":
+                run.underline = pair[1].contains("underline")
+                run.struck = pair[1].contains("line-through")
+            default: break
+            }
         }
         return try element.getChildNodes().flatMap { try runs(in: $0, inheriting: run) }
     }

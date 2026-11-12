@@ -86,19 +86,11 @@ public struct Note: Identifiable, Codable, Equatable, Sendable {
     }
 
     public var textContent: String {
-        guard contentFormat != .markdown else { return body }
         do {
-            if contentFormat == .formatted {
-                return try FormattedPage(markdown: body).blocks.map {
-                    $0.runs.map(\.text).joined()
-                }.joined(separator: "\n")
-            }
-            let document = try SwiftSoup.parse(body)
-            try document.select("script,style").remove()
-            return try document.text()
+            return try NoteExportFormat.plainText.contents(of: self)
         } catch {
             NSLog("Could not extract note text: %@", error.localizedDescription)
-            return body
+            return ""
         }
     }
 

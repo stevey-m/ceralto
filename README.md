@@ -18,6 +18,7 @@ Markdown. No account, subscription or runtime server.
 - Organise notebooks, tags and smart folders; browse notes or attachments.
 - Search offline, link notes and keep reference notes beside your writing.
 - Import Joplin exports, Markdown and HTML, or edit an existing Markdown folder.
+- Edit imported text in place while preserving its enclosing HTML layout and attachments.
 - Export PDF, Markdown, HTML or plain text; print notes and keep complete backups.
 - Choose native themes, adjustable text sizes and keyboard shortcuts.
 

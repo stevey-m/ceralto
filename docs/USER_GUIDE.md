@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.8.
+their original names; the instructions below describe Ceralto 0.23.9.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -122,15 +122,33 @@ and click **Aa**. Its popover puts Bold, Italic, Underline and Strikethrough
 above the paragraph styles. There is no **Edit Note** step or remembered
 read-only mode. **Note actions > Preview** is an explicit, per-tab choice;
 returning to editing retains the editor's undo history.
+In **Aa**, use **Smaller Text** or **Larger Text**, type a point size and press
+Return, or choose a preset under **Selected Text Size**. Custom sizes support
+1–512 points, including decimals. **Command-Shift-,** makes selected text
+smaller and **Command-Shift-.** makes it larger by one point. Mixed-size
+selections retain their size differences. These are saved text formatting,
+not global preferences: only the selected words change, or the next text
+you type when nothing is selected. Undo restores the previous sizes.
+**Ask Siri** is hidden from Ceralto's menus, including text-selection menus.
+This does not change Siri settings elsewhere on your Mac.
 Use **Edit > Undo** or **Command-Z** to restore deleted text, and
 **Command-Shift-Z** to redo it. Restored text is saved automatically.
 Merely opening the editor does not rewrite the saved source or
 change its format: Markdown stays Markdown, and HTML stays HTML when edited.
-If Compose cannot represent the note's structure, the note opens rendered with
-its supported formatting instead of exposing raw HTML or Markdown. **Edit
-Source** in the **Rendered note** notice opens its unchanged source for editing; **Show Note**
-returns to the rendered view. Advanced headings (H3-H6), horizontal rules and
-complex HTML still require source editing, not visual editing.
+If Compose cannot represent the note's structure, editable text opens directly
+inside its rendered layout. This includes text in imported presentation tables,
+advanced headings and mixed HTML/Markdown notes. Type, select words and use **Aa**
+without converting the note. Unchanged source, enclosing layout and attachment
+references are retained. Selected text sizes are saved with the note; size changes
+in imported layouts require a selection, not a global preference.
+Selections can cross inline formatting boundaries. Undo/Redo may step through
+individual text sections when a change spans several sections. Paste inserts plain
+text; use the paperclip for files. Adding attachments or changing the source outside
+the editor reloads the rendered layout and starts a new visual Undo history.
+Code blocks, images and structural layout changes still use **Note actions >
+Use Markdown/HTML Source Editor...**. If there is no safely editable text, **Edit
+Source** in the **Rendered note** notice opens the unchanged source; **Show Note**
+returns to the rendered view.
 Imported HTML presentation tables retain their borderless layout rather than
 being styled as data grids. One-pixel tracking images are omitted from display,
 and local raster images are identified by their contents, including Joplin's
@@ -345,6 +363,16 @@ Use **Command-Plus (+)** for larger note text and **Command-Minus (-)** for
 smaller text, or choose **View > Larger Text / Smaller Text**. This adjusts the
 shared editor/preview text size (11–28 pt), remembers your choice, and does not
 change the note's content.
+
+Choose **Preview Lines** in the note list's **ellipsis (...) menu** for
+**Titles only** or **1-5 lines** of preview text. The same choice is available
+under **Settings > General > Note list > Preview lines**. Changes apply
+immediately to list rows and gallery cards, are remembered, and do not alter
+your notes. Two preview lines remain the default.
+List previews and word counts use readable note text, including HTML notes and
+mixed Markdown/HTML imports. Formatting tags, image resource paths and Markdown
+syntax are omitted; image descriptions, table text and literal code remain.
+This does not rewrite the stored note.
 
 - **Start with today.** Open **Today's Note** from the sidebar, Navigate menu,
   command palette or Command-Shift-D. Ceralto reuses today's dated note without

@@ -95,28 +95,36 @@ struct NavigationTests {
             #expect(store.errorMessage == nil)
             #expect(store.library.notes.first == note)
             #expect(try storage.load()?.notes.first == note)
-            let source = try #require(descendants(host).compactMap { $0 as? SourceTextView }.first)
-            #expect(!source.isEditable)
+            var imported: NoteDocumentWebView?
+            for _ in 0..<120 {
+                imported = descendants(host).compactMap { $0 as? NoteDocumentWebView }.first {
+                    $0.importedActions?.ready == true
+                }
+                if imported != nil { break }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            let editor = try #require(imported)
             #expect(!descendants(host).contains { $0 is PageTextView })
-            #expect(descendants(host).contains { $0 is WKWebView })
-            let editSource = try #require(descendants(host).compactMap { $0 as? NSButton }.first { $0.title == "Edit Source" })
-            #expect(NSApp.sendAction(try #require(editSource.action), to: editSource.target, from: editSource))
-            try await Task.sleep(for: .milliseconds(80))
-            #expect(source.isEditable)
-            window.makeFirstResponder(source)
-            source.setSelectedRange(NSRange(location: source.string.utf16.count, length: 0))
-            source.insertText(" updated", replacementRange: source.selectedRange())
-            try await Task.sleep(for: .milliseconds(80))
-            #expect(try storage.load()?.notes.first?.body == original + " updated")
-            source.breakUndoCoalescing()
-            source.setSelectedRange(NSRange(location: 0, length: source.string.utf16.count))
-            source.deleteBackward(nil)
-            try await Task.sleep(for: .milliseconds(80))
-            #expect(source.string.isEmpty)
-            #expect(window.firstResponder?.tryToPerform(Selector(("undo:")), with: nil) == true)
-            try await Task.sleep(for: .milliseconds(80))
-            #expect(source.string == original + " updated")
-            #expect(try storage.load()?.notes.first?.body == original + " updated")
+            #expect(!descendants(host).contains { $0 is SourceTextView })
+            #expect(!descendants(host).compactMap { $0 as? NSButton }.contains { $0.title == "Edit Source" })
+            _ = try await editor.evaluateJavaScript("""
+            document.querySelectorAll('details').forEach(node => { node.open = true; });
+            const node = [...document.querySelectorAll('[data-ceralto-edit]')].find(item => item.textContent === 'Hello world');
+            node.focus();
+            const range = document.createRange(); range.selectNodeContents(node);
+            window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+            document.execCommand('insertText', false, 'Directly edited');
+            """)
+            for _ in 0..<100 where store.selectedNote?.body == original {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            let changed = original.replacingOccurrences(of: "Hello world", with: "Directly edited")
+            #expect(try storage.load()?.notes.first?.body == changed)
+            _ = try await editor.evaluateJavaScript("document.execCommand('undo')")
+            for _ in 0..<100 where store.selectedNote?.body != original {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(try storage.load()?.notes.first?.body == original)
             #expect(store.selectedNote?.contentFormat == format)
             return
         }
@@ -169,8 +177,33 @@ struct NavigationTests {
         let boldPage = try format.usesHTML ? FormattedPage(html: boldNote.body) : FormattedPage(markdown: boldNote.body)
         #expect(boldPage.blocks.first?.runs.first?.bold == true)
         #expect(boldPage.blocks.first?.runs.last?.bold == false)
-        try press("Aa", in: "note-formatting")
-        try await Task.sleep(for: .milliseconds(100))
+        let sizeField = try #require(NSApp.windows.filter(\.isVisible).flatMap {
+            $0.contentView.map(descendants) ?? []
+        }.compactMap { $0 as? NSTextField }.first {
+            $0.accessibilityLabel() == "Selected text size in points"
+        })
+        sizeField.selectText(nil)
+        let fieldEditor = try #require(sizeField.currentEditor() as? NSTextView)
+        fieldEditor.string = "19.5"
+        #expect(sizeField.delegate?.control?(sizeField, textView: fieldEditor,
+            doCommandBy: #selector(NSResponder.insertNewline(_:))) == true)
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(editor.selectedRange() == NSRange(location: 0, length: 5))
+        #expect(window.firstResponder === editor)
+        let sizedNote = try #require(store.selectedNote)
+        let sizedPage = try format.usesHTML ? FormattedPage(html: sizedNote.body) : FormattedPage(markdown: sizedNote.body)
+        #expect(sizedPage.blocks.first?.runs.first?.fontSize == 19.5)
+        #expect(sizedPage.blocks.first?.runs.last?.fontSize == nil)
+        for (key, delta) in [(".", 1.0), (",", 0.0)] {
+            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+                modifierFlags: [.command, .shift], timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: 0))
+            #expect(editor.performKeyEquivalent(with: event))
+            let adjusted = try #require(store.selectedNote)
+            let adjustedPage = try format.usesHTML ? FormattedPage(html: adjusted.body) : FormattedPage(markdown: adjusted.body)
+            #expect(adjustedPage.blocks.first?.runs.first?.fontSize == 19.5 + delta)
+            #expect(try storage.load()?.notes.first?.body == adjusted.body)
+        }
         let menu = editor.selectionFormattingMenu()
         let sizes = try #require(menu.item(withTitle: "Text Size")?.submenu)
         func invoke(_ item: NSMenuItem) throws {

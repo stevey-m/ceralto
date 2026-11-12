@@ -297,7 +297,13 @@ final class NotesStore: ObservableObject {
         if let cached = cachedText[note.id], cached.source == note.body, cached.format == note.contentFormat {
             return cached.summary
         }
-        let text = note.textContent
+        let text: String
+        do {
+            text = try NoteExportFormat.plainText.contents(of: note)
+        } catch {
+            NSLog("Could not generate note preview: %@", error.localizedDescription)
+            return NoteTextSummary(excerpt: "Text preview unavailable", wordCount: 0)
+        }
         let summary = NoteTextSummary(excerpt: text.split(whereSeparator: \.isNewline).joined(separator: " "),
                                       wordCount: text.split(whereSeparator: \.isWhitespace).count)
         cachedText[note.id] = CachedNoteText(source: note.body, format: note.contentFormat, summary: summary)

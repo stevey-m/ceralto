@@ -21,10 +21,12 @@ struct NoteEditor: View {
     @ViewState private var showingTags = false
     @ViewState private var confirmingSource = false
     @ViewState private var usesCompose = false
+    @ViewState private var usesImportedEditor = false
     @ViewState private var sourceEditingReason: String?
     @ViewState private var showingBacklinks = false
     @ViewState private var imageURL: URL?
     @StateObject private var formatting = FormattingActions()
+    @StateObject private var importedFormatting = ImportedTextActions()
 
     private var isTrashed: Bool { note.deletedAt != nil }
 
@@ -146,6 +148,8 @@ struct NoteEditor: View {
                             } onError: { store.errorMessage = $0 } onImage: { imageURL = $0 }
                               currentSource: { noteBinding(\.body).wrappedValue }
                               onImportFiles: { try store.importComposeAttachments($0, to: note.id) }
+                        } else if usesImportedEditor {
+                            ImportedNoteEditor(note: note, actions: importedFormatting) { imageURL = $0 }
                         } else {
                             sourceEditor
                         }
@@ -206,6 +210,7 @@ struct NoteEditor: View {
         .confirmationDialog("Switch to source editing?", isPresented: $confirmingSource, titleVisibility: .visible) {
             Button("Use Source Editor") {
                 usesCompose = false
+                usesImportedEditor = false
                 sourceEditingReason = nil
                 isPreviewing = false
             }
@@ -216,9 +221,16 @@ struct NoteEditor: View {
 
     @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
         ToolbarItem(id: "note-formatting", placement: .automatic) {
-            NoteFormattingControls(actions: formatting)
-                .disabled(isTrashed || !usesCompose || isPreviewing || formatting.editor == nil)
-                .help(usesCompose ? "Format selected text" : "Visual formatting is unavailable in source editing")
+            Group {
+                if usesImportedEditor {
+                    ImportedTextFormattingControls(actions: importedFormatting)
+                } else {
+                    NoteFormattingControls(actions: formatting)
+                        .disabled(!usesCompose || formatting.editor == nil)
+                }
+            }
+            .disabled(isTrashed || isPreviewing)
+            .help(usesCompose || usesImportedEditor ? "Format selected text" : "Visual formatting is unavailable in source editing")
         }
         ToolbarItem(id: "note-attachments", placement: .automatic) {
                 Button {
@@ -266,7 +278,7 @@ struct NoteEditor: View {
                     Button("Note History...") { showingHistory = true }
                         .disabled(isTrashed || (note.history ?? []).isEmpty)
                     Button("Linked Mentions...") { showingBacklinks = true }
-                    if usesCompose {
+                    if usesCompose || usesImportedEditor {
                         Button(note.contentFormat.usesHTML ? "Use HTML Source Editor..." : "Use Markdown Source Editor...") {
                             confirmingSource = true
                         }
@@ -311,12 +323,22 @@ struct NoteEditor: View {
             if note.contentFormat.usesHTML { _ = try FormattedPage(html: note.body) }
             else { _ = try FormattedPage(markdown: note.body) }
             usesCompose = true
+            usesImportedEditor = false
             sourceEditingReason = nil
             isPreviewing = false
         } catch {
-            usesCompose = false
-            isPreviewing = true
-            sourceEditingReason = error.localizedDescription
+            do {
+                _ = try PreservedNoteDocument(source: note.body, format: note.contentFormat)
+                usesCompose = false
+                usesImportedEditor = true
+                sourceEditingReason = nil
+                isPreviewing = false
+            } catch {
+                usesCompose = false
+                usesImportedEditor = false
+                isPreviewing = true
+                sourceEditingReason = error.localizedDescription
+            }
         }
     }
 

@@ -7,6 +7,35 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct NativeEditorTests {
+    @Test func siriIsRemovedFromAppMenusIncludingLateServicesWithoutRemovingEditingActions() throws {
+        _ = NSApplication.shared
+        let policy = ApplicationMenuPolicy()
+        policy.start()
+        defer { policy.stop() }
+        let menu = NSMenu()
+        let copy = menu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "")
+        let services = NSMenu()
+        let servicesItem = menu.addItem(withTitle: "Services", action: nil, keyEquivalent: "")
+        servicesItem.submenu = services
+        let lookup = services.addItem(withTitle: "Look Up", action: nil, keyEquivalent: "")
+        services.addItem(withTitle: "Ask Siri", action: nil, keyEquivalent: "")
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: menu)
+        #expect(services.items == [lookup])
+        let translated = NSMenuItem(title: "Localized service", action: nil, keyEquivalent: "")
+        services.addItem(translated)
+        translated.identifier = NSUserInterfaceItemIdentifier("system.askSiri")
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: menu)
+        #expect(menu.items == [copy, servicesItem])
+        #expect(services.items == [lookup])
+        policy.stop()
+        let unfiltered = services.addItem(withTitle: "Ask Siri", action: nil, keyEquivalent: "")
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: menu)
+        #expect(services.items.contains(unfiltered))
+        policy.start()
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: menu)
+        #expect(services.items == [lookup])
+    }
+
     @Test func shortcutUndoRedoRestoresTypingStyleAndMarkedTextIsNeverPaired() async throws {
         _ = NSApplication.shared
         let editor = PageTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 300))
