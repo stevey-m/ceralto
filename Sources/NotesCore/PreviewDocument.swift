@@ -245,6 +245,7 @@ public enum PreviewDocument {
             .addTags("input", "details", "summary", "figure", "figcaption", "del", "s", "kbd", "hr", "span")
             .addAttributes(":all", "style")
             .addAttributes("input", "type", "checked", "disabled")
+            .addAttributes("details", "open")
             .addAttributes("a", "id", "name")
             .addAttributes("h1", "id").addAttributes("h2", "id").addAttributes("h3", "id")
             .addAttributes("td", "align").addAttributes("th", "align")

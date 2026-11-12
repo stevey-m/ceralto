@@ -203,6 +203,8 @@ struct ImportedNoteEditorTests {
         window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
         """, arguments: ["text": text], in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(30))
+        let selected = try await web.evaluateJavaScript("window.getSelection().toString()") as? String
+        #expect(selected?.trimmingCharacters(in: .newlines) == text)
     }
 
     private func waitFor(sourceLocation: SourceLocation = #_sourceLocation, _ predicate: () -> Bool) async throws {

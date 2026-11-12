@@ -30,6 +30,8 @@ struct PreservedNoteTests {
         #expect(try restored.select("img").attr("src") == "../_resources/original.png")
         #expect(try restored.select("details").hasAttr("open"))
         #expect(sized.contains("<!--original-->"))
+        let preview = try PreviewDocument.html(source: sized, format: .html, resources: nil)
+        #expect(try SwiftSoup.parse(preview).select("details").hasAttr("open"))
     }
 
     @Test func mixedMarkdownEditsTouchOnlyTheirSourceFragmentsAndKeepCodeLiteral() throws {
