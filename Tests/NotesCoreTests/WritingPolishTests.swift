@@ -170,6 +170,163 @@ struct WritingPolishTests {
         #expect(try FormattedPage(markdown: markdown(editor)).blocks.last?.tableRows.first?.first?.runs.map(\.text).joined() == "Column 1")
     }
 
+    @Test func nativeTablesLayOutAsARealGridAndPreserveRichCells() throws {
+        let source = """
+        Before
+
+        | Task | Owner |
+        | --- | --- |
+        | **Review**<br>日本語 | [Team](https://example.com) |
+        | | |
+
+        After
+        """
+        let (editor, _) = try editor(source)
+        let start = (editor.string as NSString).range(of: "Task").location
+        let grid = try #require(NativeTableLayout.grid(in: editor.attributedString(), at: start))
+        #expect(grid.cells.count == 6)
+        #expect(grid.rows.count == 3 && grid.rows[0].count == 2)
+        #expect(try FormattedPage(markdown: markdown(editor)).html() == FormattedPage(markdown: source).html())
+        let layout = try #require(editor.layoutManager)
+        let container = try #require(editor.textContainer)
+        editor.isVerticallyResizable = true
+        container.widthTracksTextView = true
+        for width in [340.0, 800.0] {
+            editor.setFrameSize(NSSize(width: width, height: 600))
+            container.containerSize = NSSize(width: width - 20, height: .greatestFiniteMagnitude)
+            layout.ensureLayout(for: container)
+            let boxes = grid.cells.prefix(4).map { cell in
+                layout.boundingRect(forGlyphRange: layout.glyphRange(forCharacterRange: cell.body,
+                    actualCharacterRange: nil), in: container)
+            }
+            #expect(boxes[1].minX > boxes[0].maxX + 30)
+            #expect(abs(boxes[0].minY - boxes[1].minY) < 1)
+            #expect(boxes[2].minY > boxes[0].maxY)
+            #expect(abs(boxes[2].minY - boxes[3].minY) < 1)
+            #expect(boxes.allSatisfy { $0.maxX <= width && $0.width > 0 })
+        }
+        let window = NSWindow(contentRect: editor.frame, styleMask: [.titled],
+            backing: .buffered, defer: false)
+        window.contentView = editor
+        defer { window.contentView = nil }
+        let bitmap = try #require(editor.bitmapImageRepForCachingDisplay(in: editor.bounds))
+        editor.cacheDisplay(in: editor.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        try png.write(to: package.appendingPathComponent("dist/Ceralto-table-grid-preview.png"))
+    }
+
+    @Test func tableRowAndColumnChangesAndDeletionUndoWithoutLosingAdjacentWriting() async throws {
+        let (editor, actions) = try editor("Before\n\n| Name | State |\n| --- | --- |\n| Sample | Ready |\n\nAfter")
+        for action in [TableAction.rowAbove, .rowBelow, .deleteRow, .columnBefore, .columnAfter, .deleteColumn, .deleteTable] {
+            let before = markdown(editor)
+            editor.setSelectedRange((editor.string as NSString).range(of: "Sample"))
+            let original = try #require(actions.tableGrid)
+            try await Task.sleep(for: .milliseconds(20))
+            actions.performTableAction(action)
+            let after = markdown(editor)
+            #expect(after != before)
+            let page = try FormattedPage(markdown: after)
+            #expect(page.blocks.first?.runs.map(\.text).joined() == "Before")
+            #expect(page.blocks.last?.runs.map(\.text).joined() == "After")
+            if action != .deleteTable {
+                let changed = try #require(actions.tableGrid)
+                let rowDelta = action == .rowAbove || action == .rowBelow ? 1 : action == .deleteRow ? -1 : 0
+                let columnDelta = action == .columnBefore || action == .columnAfter ? 1 : action == .deleteColumn ? -1 : 0
+                #expect(changed.rows.count == original.rows.count + rowDelta)
+                #expect(changed.rows[0].count == original.rows[0].count + columnDelta)
+            } else { #expect(!page.blocks.contains { $0.style == .table }) }
+            try await Task.sleep(for: .milliseconds(20))
+            let undo = try #require(editor.undoManager)
+            undo.undo()
+            #expect(markdown(editor) == before)
+            undo.redo()
+            #expect(markdown(editor) == after)
+            undo.undo()
+        }
+    }
+
+    @Test func tableKeyboardNavigationMultilineCellsAndWritingAroundTheGrid() throws {
+        let (editor, actions) = try editor("")
+        actions.insertTable()
+        editor.insertText("Project", replacementRange: editor.selectedRange())
+        editor.insertTab(nil)
+        #expect((editor.string as NSString).substring(with: editor.selectedRange()) == "Column 2")
+        editor.insertText("Status", replacementRange: editor.selectedRange())
+        editor.insertTab(nil)
+        editor.insertText("Release", replacementRange: editor.selectedRange())
+        editor.insertNewline(nil)
+        editor.insertText("日本語", replacementRange: editor.selectedRange())
+        editor.insertTab(nil)
+        editor.insertText("Ready\r\nNow", replacementRange: editor.selectedRange())
+        editor.insertTab(nil)
+        let grid = try #require(actions.tableGrid)
+        #expect(grid.rows.count == 3)
+        #expect(grid.current.block.startingRow == 2 && grid.current.block.startingColumn == 0)
+        #expect(grid.rows[1][0].runs.map(\.text).joined() == "Release\n日本語")
+        #expect(grid.rows[1][1].runs.map(\.text).joined() == "Ready\nNow")
+        editor.insertBacktab(nil)
+        #expect(actions.tableGrid?.current.block.startingRow == 1)
+        #expect(actions.tableGrid?.current.block.startingColumn == 1)
+        let reopened = try NativePageCodec.decode(FormattedPage(markdown: markdown(editor)).html(), resources: nil)
+        #expect(NativeTableLayout.grid(in: reopened, at: 0)?.rows == grid.rows)
+        actions.performTableAction(.writeAbove)
+        editor.insertText("Before", replacementRange: editor.selectedRange())
+        editor.setSelectedRange((editor.string as NSString).range(of: "Project"))
+        editor.cancelOperation(nil)
+        #expect(actions.tableGrid == nil)
+        editor.insertText("After", replacementRange: editor.selectedRange())
+        let page = try FormattedPage(markdown: markdown(editor))
+        #expect(page.blocks.map(\.style) == [.paragraph, .table, .paragraph])
+        #expect(page.blocks.first?.runs.map(\.text).joined() == "Before")
+        #expect(page.blocks.last?.runs.map(\.text).joined() == "After")
+    }
+
+    @Test func tableCopyPasteAndCellBoundaryProtectionPreserveTheGrid() throws {
+        let (editor, actions) = try editor("| Name | State |\n| --- | --- |\n| Sample | Ready |")
+        editor.setSelectedRange((editor.string as NSString).range(of: "Sample"))
+        let grid = try #require(actions.tableGrid)
+        let before = markdown(editor)
+        var error: String?
+        editor.onError = { error = $0 }
+        editor.setSelectedRange(NSRange(location: grid.current.body.location, length: grid.current.paragraph.length + 2))
+        editor.insertText("", replacementRange: editor.selectedRange())
+        #expect(markdown(editor) == before)
+        #expect(error != nil)
+        editor.setSelectedRange(NSRange(location: grid.current.body.location, length: 0))
+        editor.deleteBackward(nil)
+        #expect(markdown(editor) == before)
+        editor.setSelectedRange(grid.range)
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        #expect(editor.copy(to: board))
+        let (destination, destinationActions) = try self.editor("LeadTail")
+        destination.setSelectedRange(NSRange(location: 4, length: 0))
+        destination.paste(from: board)
+        let pasted = try FormattedPage(markdown: markdown(destination))
+        #expect(pasted.blocks.map(\.style) == [.paragraph, .table, .paragraph])
+        #expect(pasted.blocks[1].tableRows == grid.rows)
+        destination.setSelectedRange((destination.string as NSString).range(of: "Sample"))
+        try destination.insertRich(RichClipboard.fromHTML("<p><strong>Updated</strong><br>Next</p>"))
+        let changed = try #require(destinationActions.tableGrid)
+        #expect(changed.rows[1][0].runs.map(\.text).joined() == "Updated\nNext")
+        #expect(changed.rows[1][0].runs.first?.bold == true)
+        let saved = markdown(destination)
+        #expect(throws: NoteWorkflowError.self) {
+            try destination.insertRich(RichClipboard.fromHTML("<table><tr><th>Nested</th></tr></table>"))
+        }
+        #expect(markdown(destination) == saved)
+        let persisted = try FormattedPage(markdown: saved).blocks[1].tableRows
+        func tableHTML(_ rows: [[FormattedTableCell]]) -> String {
+            FormattedPage(blocks: [FormattedBlock(style: .table, runs: [], tableRows: rows)]).html()
+        }
+        #expect(tableHTML(persisted) == tableHTML(changed.rows))
+        destination.setSelectedRange((destination.string as NSString).range(of: "Updated"))
+        #expect(destination.copy(to: board))
+        #expect(try RichClipboard.read(board)?.page.blocks.map(\.style) == [.paragraph])
+    }
+
     @Test func clipboardPNGIsCopiedAtTheCaretAndUndoKeepsTheOriginalFile() throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -433,6 +590,7 @@ struct WritingPolishTests {
         editor.typingAttributes = NativePageCodec.attributes(style: .paragraph, size: 16, family: .system, color: .textColor)
         let actions = FormattingActions()
         actions.editor = editor
+        editor.formattingActions = actions
         return (editor, actions)
     }
 

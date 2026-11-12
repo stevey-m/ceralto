@@ -747,6 +747,10 @@ struct NoteToolbarButton: NSViewRepresentable {
 
     func updateNSView(_ button: NSButton, context: Context) {
         context.coordinator.action = action
+        if button.title != title {
+            button.title = title
+            button.setAccessibilityLabel(title)
+        }
         button.isEnabled = isEnabled
         if let selected { button.state = selected ? .on : .off }
     }

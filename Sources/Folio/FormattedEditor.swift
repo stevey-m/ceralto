@@ -14,6 +14,7 @@ extension NSAttributedString.Key {
     static let folioChecked = Self("FolioChecked")
     static let folioOrderedNumber = Self("FolioOrderedNumber")
     static let folioTableRow = Self("FolioTableRow")
+    static let folioTableExit = Self("FolioTableExit")
 }
 
 @MainActor
@@ -80,73 +81,14 @@ enum NativePageCodec {
                 result.append(NSAttributedString(string: markerText, attributes: marker))
             }
             if block.style == .table {
-                for (rowIndex, row) in block.tableRows.enumerated() {
-                    if rowIndex > 0 { result.append(NSAttributedString(string: "\n", attributes: base)) }
-                    var rowAttributes = base
-                    rowAttributes[.folioTableRow] = true
-                    for (column, cell) in row.enumerated() {
-                        if column > 0 { result.append(NSAttributedString(string: "\t", attributes: rowAttributes)) }
-                        for run in cell.runs {
-                            var attrs = rowAttributes
-                            var face = attrs[.font] as? NSFont ?? font(family, size: size)
-                            if let size = run.fontSize {
-                                face = NSFontManager.shared.convert(face, toSize: size)
-                                attrs[.folioFontSize] = size
-                            }
-                            if run.code { face = font(.monospace, size: face.pointSize) }
-                            if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
-                            if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
-                            attrs[.font] = face
-                            attrs[.folioBold] = run.bold
-                            if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
-                            if run.struck { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-                            if run.code { attrs[.folioCode] = true }
-                            if let link = run.link { attrs[.link] = link }
-                            result.append(NSAttributedString(string: run.text, attributes: attrs))
-                        }
-                    }
-                }
-            } else {
-            for run in block.runs {
-                var attrs = base
-                if let image = run.image {
-                    let attachment = NSTextAttachment()
-                    let local = resources?.localURL(for: image)
-                    let picture = local.flatMap { url -> NSImage? in
-                        guard RasterImageContent.mimeType(at: url) != nil else { return nil }
-                        return NSImage(contentsOf: url)
-                    }
-                    attachment.image = picture ?? NSImage(systemSymbolName: "photo", accessibilityDescription: "Image unavailable")
-                    let original = picture?.size ?? NSSize(width: 120, height: 80)
-                    let width = min(max(original.width, 1), 640)
-                    attachment.bounds = NSRect(x: 0, y: 0, width: width,
-                                               height: width * max(original.height, 1) / max(original.width, 1))
-                    attrs[.attachment] = attachment
-                    attrs[.folioImage] = image
-                    attrs[.folioAlt] = run.text
-                    result.append(NSAttributedString(string: "\u{fffc}", attributes: attrs))
-                    continue
-                }
-                var face = attrs[.font] as? NSFont ?? font(family, size: size)
-                if let size = run.fontSize {
-                    face = NSFontManager.shared.convert(face, toSize: size)
-                    attrs[.folioFontSize] = size
-                }
-                if run.code { face = font(.monospace, size: face.pointSize) }
-                if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
-                if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
-                attrs[.font] = face
-                attrs[.folioBold] = run.bold
-                if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
-                if run.struck { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-                if run.code {
-                    attrs[.backgroundColor] = NSColor.secondaryLabelColor.withAlphaComponent(0.1)
-                    attrs[.folioCode] = true
-                }
-                if let link = run.link { attrs[.link] = link }
-                result.append(NSAttributedString(string: run.text, attributes: attrs))
+                result.append(NativeTableLayout.decode(block.tableRows, size: size, family: family, color: color))
+                var exit = attributes(style: .paragraph, size: size, family: family, color: color)
+                // A real, editable paragraph lets the caret leave the final table cell.
+                exit[.folioTableExit] = true
+                result.append(NSAttributedString(string: "\n", attributes: exit))
+                continue
             }
-            }
+            result.append(attributedRuns(block.runs, base: base, resources: resources, size: size, family: family))
             if index < page.blocks.count - 1 {
                 result.append(NSAttributedString(string: "\n", attributes: base))
             }
@@ -154,35 +96,85 @@ enum NativePageCodec {
         return result
     }
 
+    static func attributedRuns(_ runs: [FormattedRun], base: [NSAttributedString.Key: Any],
+                               resources: ImportedResources?, size: Double, family: ReadingFont,
+                               tableCell: Bool = false) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: "")
+        for run in runs {
+            var attrs = base
+            if let image = run.image {
+                let attachment = NSTextAttachment()
+                let local = resources?.localURL(for: image)
+                let picture = local.flatMap { url -> NSImage? in
+                    guard RasterImageContent.mimeType(at: url) != nil else { return nil }
+                    return NSImage(contentsOf: url)
+                }
+                attachment.image = picture ?? NSImage(systemSymbolName: "photo", accessibilityDescription: "Image unavailable")
+                let original = picture?.size ?? NSSize(width: 120, height: 80)
+                let width = min(max(original.width, 1), 640)
+                attachment.bounds = NSRect(x: 0, y: 0, width: width,
+                                          height: width * max(original.height, 1) / max(original.width, 1))
+                attrs[.attachment] = attachment
+                attrs[.folioImage] = image
+                attrs[.folioAlt] = run.text
+                result.append(NSAttributedString(string: "\u{fffc}", attributes: attrs))
+                continue
+            }
+            var face = attrs[.font] as? NSFont ?? font(family, size: size)
+            if let size = run.fontSize {
+                face = NSFontManager.shared.convert(face, toSize: size)
+                attrs[.folioFontSize] = size
+            }
+            if run.code { face = font(.monospace, size: face.pointSize) }
+            if run.bold { face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask) }
+            if run.italic { face = NSFontManager.shared.convert(face, toHaveTrait: .italicFontMask) }
+            attrs[.font] = face
+            attrs[.folioBold] = run.bold
+            if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+            if run.struck { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+            if run.code {
+                attrs[.backgroundColor] = NSColor.secondaryLabelColor.withAlphaComponent(0.1)
+                attrs[.folioCode] = true
+            }
+            if let link = run.link { attrs[.link] = link }
+            let text = tableCell ? run.text.replacingOccurrences(of: "\n", with: "\u{2028}") : run.text
+            result.append(NSAttributedString(string: text, attributes: attrs))
+        }
+        return result
+    }
+
+    static func runs(in text: NSAttributedString, range: NSRange, tableCell: Bool = false) -> [FormattedRun] {
+        let string = text.string as NSString
+        var runs: [FormattedRun] = []
+        text.enumerateAttributes(in: range) { attrs, subrange, _ in
+            if attrs[.folioMarker] as? Bool == true { return }
+            var run = FormattedRun(text: string.substring(with: subrange))
+            if tableCell { run.text = run.text.replacingOccurrences(of: "\u{2028}", with: "\n") }
+            if let image = attrs[.folioImage] as? String {
+                run.image = image
+                run.text = attrs[.folioAlt] as? String ?? ""
+            } else {
+                if let face = attrs[.font] as? NSFont {
+                    let traits = NSFontManager.shared.traits(of: face)
+                    run.bold = attrs[.folioBold] as? Bool ?? traits.contains(.boldFontMask)
+                    run.italic = traits.contains(.italicFontMask)
+                }
+                run.code = attrs[.folioCode] as? Bool == true
+                run.fontSize = attrs[.folioFontSize] as? Double
+                run.underline = (attrs[.underlineStyle] as? Int ?? 0) != 0
+                run.struck = (attrs[.strikethroughStyle] as? Int ?? 0) != 0
+                if let url = attrs[.link] as? URL { run.link = url.absoluteString }
+                else { run.link = attrs[.link] as? String }
+            }
+            runs.append(run)
+        }
+        return runs
+    }
+
     static func encode(_ text: NSAttributedString, markdown: Bool = false) -> String {
         let string = text.string as NSString
         var blocks: [FormattedBlock] = []
         var tableRows: [[FormattedTableCell]] = []
-        func appendRuns(_ range: NSRange) -> [FormattedRun] {
-            var runs: [FormattedRun] = []
-            text.enumerateAttributes(in: range) { attrs, subrange, _ in
-                if attrs[.folioMarker] as? Bool == true { return }
-                var run = FormattedRun(text: string.substring(with: subrange))
-                if let image = attrs[.folioImage] as? String {
-                    run.image = image
-                    run.text = attrs[.folioAlt] as? String ?? ""
-                } else {
-                    if let face = attrs[.font] as? NSFont {
-                        let traits = NSFontManager.shared.traits(of: face)
-                        run.bold = attrs[.folioBold] as? Bool ?? traits.contains(.boldFontMask)
-                        run.italic = traits.contains(.italicFontMask)
-                    }
-                    run.code = attrs[.folioCode] as? Bool == true
-                    run.fontSize = attrs[.folioFontSize] as? Double
-                    run.underline = (attrs[.underlineStyle] as? Int ?? 0) != 0
-                    run.struck = (attrs[.strikethroughStyle] as? Int ?? 0) != 0
-                    if let url = attrs[.link] as? URL { run.link = url.absoluteString }
-                    else { run.link = attrs[.link] as? String }
-                }
-                runs.append(run)
-            }
-            return runs
-        }
         var start = 0
         while start < text.length {
             let paragraph = string.paragraphRange(for: NSRange(location: start, length: 0))
@@ -193,17 +185,26 @@ enum NativePageCodec {
             let kind = text.attribute(.folioBlock, at: start, effectiveRange: nil) as? String
             let style = FormattedBlock.Style(rawValue: kind ?? "") ?? .paragraph
             let paragraphRange = NSRange(location: start, length: length)
+            if let grid = NativeTableLayout.grid(in: text, at: start) {
+                blocks.append(FormattedBlock(style: .table, runs: [], tableRows: grid.rows))
+                start = grid.range.upperBound
+                continue
+            }
+            if length == 0, text.attribute(.folioTableExit, at: start, effectiveRange: nil) as? Bool == true {
+                start = paragraph.upperBound
+                continue
+            }
             if text.attribute(.folioTableRow, at: start, effectiveRange: nil) as? Bool == true {
                 var cells: [FormattedTableCell] = []
                 var cellStart = paragraphRange.location
                 for offset in 0..<paragraphRange.length {
                     let location = paragraphRange.location + offset
                     if string.substring(with: NSRange(location: location, length: 1)) == "\t" {
-                        cells.append(FormattedTableCell(runs: appendRuns(NSRange(location: cellStart, length: location - cellStart))))
+                        cells.append(FormattedTableCell(runs: runs(in: text, range: NSRange(location: cellStart, length: location - cellStart))))
                         cellStart = location + 1
                     }
                 }
-                cells.append(FormattedTableCell(runs: appendRuns(NSRange(location: cellStart,
+                cells.append(FormattedTableCell(runs: runs(in: text, range: NSRange(location: cellStart,
                     length: paragraphRange.upperBound - cellStart))))
                 tableRows.append(cells)
             } else {
@@ -211,7 +212,7 @@ enum NativePageCodec {
                     blocks.append(FormattedBlock(style: .table, runs: [], tableRows: tableRows))
                     tableRows = []
                 }
-                let runs = appendRuns(paragraphRange)
+                let runs = runs(in: text, range: paragraphRange)
                 let checked = text.attribute(.folioChecked, at: start, effectiveRange: nil) as? Bool ?? false
                 let depth = text.attribute(.folioListDepth, at: start, effectiveRange: nil) as? Int ?? 0
                 let number = text.attribute(.folioOrderedNumber, at: start, effectiveRange: nil) as? Int ?? 1
@@ -221,7 +222,10 @@ enum NativePageCodec {
             start = paragraph.location + paragraph.length
         }
         if !tableRows.isEmpty { blocks.append(FormattedBlock(style: .table, runs: [], tableRows: tableRows)) }
-        if text.length > 0 && text.string.hasSuffix("\n") { blocks.append(FormattedBlock(runs: [])) }
+        if text.length > 0 && text.string.hasSuffix("\n"),
+           text.attribute(.folioTableExit, at: text.length - 1, effectiveRange: nil) as? Bool != true {
+            blocks.append(FormattedBlock(runs: []))
+        }
         let page = FormattedPage(blocks: blocks)
         return markdown ? page.markdown() : page.html()
     }
@@ -238,9 +242,11 @@ final class FormattingActions: ObservableObject {
     @Published var struck = false
     @Published var code = false
     @Published var linked = false
+    @Published var inTable = false
 
     func refresh() {
         guard let editor else { return }
+        inTable = tableGrid != nil
         let selection = editor.selectedRange()
         var attributes: [[NSAttributedString.Key: Any]] = []
         if selection.length > 0 {
@@ -269,7 +275,8 @@ final class FormattingActions: ObservableObject {
             var attrs = current
             let face = current[.font] as? NSFont ?? .systemFont(ofSize: 16)
             let heading = [FormattedBlock.Style.heading1.rawValue, FormattedBlock.Style.heading2.rawValue]
-                .contains(current[.folioBlock] as? String ?? "")
+                .contains(current[.folioBlock] as? String ?? "") ||
+                ((current[.paragraphStyle] as? NSParagraphStyle)?.textBlocks.last as? NSTextTableBlock)?.startingRow == 0
             attrs[.font] = removing && !(trait == .boldFontMask && heading)
                 ? NSFontManager.shared.convert(face, toNotHaveTrait: trait)
                 : NSFontManager.shared.convert(face, toHaveTrait: trait)
@@ -343,6 +350,14 @@ final class FormattingActions: ObservableObject {
         guard let editor, editor.isEditable, let storage = editor.textStorage else { return }
         let selection = editor.selectedRange()
         let range = (storage.string as NSString).paragraphRange(for: selection)
+        var containsTable = false
+        storage.enumerateAttribute(.paragraphStyle, in: range) { value, _, _ in
+            if (value as? NSParagraphStyle)?.textBlocks.isEmpty == false { containsTable = true }
+        }
+        guard !containsTable else {
+            editor.onError?("Use text formatting inside table cells. To add a heading or list, write above or below the table.")
+            return
+        }
         let attrs = NativePageCodec.attributes(style: style, size: editor.pageFontSize,
                                                family: editor.pageFont, color: editor.textColor ?? .textColor)
         if range.length == 0 {
@@ -439,7 +454,8 @@ final class FormattingActions: ObservableObject {
             family: attrs[.folioCode] as? Bool == true ? .monospace : editor.pageFont,
             color: editor.textColor ?? .textColor)[.font] as? NSFont ?? .systemFont(ofSize: editor.pageFontSize)
         if let size = attrs[.folioFontSize] as? Double { face = NSFontManager.shared.convert(face, toSize: size) }
-        if attrs[.folioBold] as? Bool == true {
+        if attrs[.folioBold] as? Bool == true ||
+            ((attrs[.paragraphStyle] as? NSParagraphStyle)?.textBlocks.last as? NSTextTableBlock)?.startingRow == 0 {
             face = NSFontManager.shared.convert(face, toHaveTrait: .boldFontMask)
         }
         if let original = attrs[.font] as? NSFont,
@@ -572,6 +588,10 @@ final class FormattingActions: ObservableObject {
 
     func insertTable() {
         guard let editor, editor.isEditable else { return }
+        guard tableGrid == nil else {
+            editor.onError?("Write above or below this table before inserting another table.")
+            return
+        }
         let cell = { FormattedTableCell(runs: []) }
         let table = FormattedBlock(style: .table, runs: [], tableRows: [
             [FormattedTableCell(runs: [FormattedRun(text: "Column 1")]),
@@ -583,6 +603,7 @@ final class FormattingActions: ObservableObject {
                 resources: editor.resources, size: editor.pageFontSize, family: editor.pageFont,
                 color: editor.textColor ?? .textColor)
             let selection = editor.selectedRange()
+            guard editor.preservesTableBoundaries(in: selection) else { return }
             let source = editor.string as NSString
             let paragraph = NativePageCodec.attributes(style: .paragraph, size: editor.pageFontSize,
                 family: editor.pageFont, color: editor.textColor ?? .textColor)
@@ -599,6 +620,9 @@ final class FormattingActions: ObservableObject {
             let header = NSRange(location: firstCell, length: "Column 1".utf16.count)
             editor.window?.makeFirstResponder(editor)
             editor.setSelectedRange(header)
+            if let storage = editor.textStorage {
+                editor.typingAttributes = storage.attributes(at: header.location, effectiveRange: nil)
+            }
             editor.scrollRangeToVisible(header)
             refresh()
         } catch { editor.onError?("Could not insert table: \(error.localizedDescription)") }
@@ -794,11 +818,34 @@ final class PageTextView: DocumentTextView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        if let storage = textStorage, NativeTableLayout.cell(in: storage, at: index) != nil,
+           !NSLocationInRange(index, selectedRange()) {
+            setSelectedRange(NSRange(location: index, length: 0))
+        }
         let menu = super.menu(for: event) ?? NSMenu()
         let item = NSMenuItem(title: "Format Selected Text", action: nil, keyEquivalent: "")
         item.submenu = selectionFormattingMenu()
         menu.insertItem(item, at: 0)
+        if formattingActions?.tableGrid != nil {
+            let table = NSMenu(title: "Table")
+            table.autoenablesItems = false
+            for action in TableAction.allCases {
+                let entry = table.addItem(withTitle: action.title, action: #selector(tableAction(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.tag = action.rawValue
+                entry.isEnabled = isEditable && formattingActions?.tableActionEnabled(action) == true
+            }
+            let entry = NSMenuItem(title: "Table", action: nil, keyEquivalent: "")
+            entry.submenu = table
+            menu.insertItem(entry, at: 0)
+        }
         return menu
+    }
+
+    @objc private func tableAction(_ sender: NSMenuItem) {
+        guard let action = TableAction(rawValue: sender.tag) else { return }
+        formattingActions?.performTableAction(action)
     }
 
     @objc private func boldSelection() { formattingActions?.toggle(.boldFontMask) }
@@ -820,6 +867,39 @@ final class PageTextView: DocumentTextView {
 
     override func insertText(_ value: Any, replacementRange: NSRange) {
         let selection = selectedRange()
+        let range = replacementRange.location == NSNotFound ? selection : replacementRange
+        if let storage = textStorage, let grid = NativeTableLayout.grid(in: storage, at: range.location) {
+            if range.location <= grid.range.location && range.upperBound >= grid.range.upperBound {
+                typingAttributes = NativePageCodec.attributes(style: .paragraph, size: pageFontSize,
+                    family: pageFont, color: textColor ?? .textColor)
+            } else if range.upperBound <= grid.current.body.upperBound {
+                let raw = (value as? String) ?? (value as? NSAttributedString)?.string
+                if let raw, raw.rangeOfCharacter(from: .newlines) != nil || value is NSAttributedString {
+                    let normalized = raw.replacingOccurrences(of: "\r\n", with: "\n")
+                        .replacingOccurrences(of: "\r", with: "\n").replacingOccurrences(of: "\n", with: "\u{2028}")
+                    if let attributed = value as? NSAttributedString {
+                        let converted = NSMutableAttributedString(attributedString: attributed)
+                        // Preserve pasted runs while replacing paragraph breaks with cell-local line breaks.
+                        for position in (0..<converted.length).reversed() where position < converted.length {
+                            let character = (converted.string as NSString).substring(with: NSRange(location: position, length: 1))
+                            if character == "\n", position > 0,
+                               (converted.string as NSString).substring(with: NSRange(location: position - 1, length: 1)) == "\r" {
+                                converted.replaceCharacters(in: NSRange(location: position - 1, length: 2), with: "\u{2028}")
+                            } else if character == "\n" || character == "\r" {
+                                converted.replaceCharacters(in: NSRange(location: position, length: 1), with: "\u{2028}")
+                            }
+                        }
+                        let structural = storage.attributes(at: grid.current.paragraph.location, effectiveRange: nil)
+                        converted.addAttributes([.paragraphStyle: structural[.paragraphStyle] ?? NSParagraphStyle.default,
+                            .folioBlock: FormattedBlock.Style.table.rawValue, .folioTableRow: true,
+                            .folioTableExit: false, .folioMarker: false],
+                            range: NSRange(location: 0, length: converted.length))
+                        super.insertText(converted, replacementRange: range)
+                    } else { super.insertText(normalized, replacementRange: range) }
+                    return
+                }
+            }
+        }
         if isEditable, markdownShortcuts, !suppressAutomaticEditing, !hasMarkedText(),
            let typed = value as? String, typed == " ", selection.length == 0,
            replacementRange.location == NSNotFound || replacementRange == selection,
@@ -858,6 +938,71 @@ final class PageTextView: DocumentTextView {
             }
         }
         super.insertText(value, replacementRange: replacementRange)
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        guard preservesTableBoundaries(in: affectedCharRange) else { return false }
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+
+    func preservesTableBoundaries(in affectedCharRange: NSRange) -> Bool {
+        if let storage = textStorage, affectedCharRange.length > 0 {
+            var position = affectedCharRange.location
+            while position < affectedCharRange.upperBound && position < storage.length {
+                if let grid = NativeTableLayout.grid(in: storage, at: position) {
+                    let entireTable = affectedCharRange.location <= grid.range.location &&
+                        affectedCharRange.upperBound >= grid.range.upperBound
+                    if !entireTable, grid.cells.contains(where: {
+                        $0.paragraph.upperBound > $0.body.upperBound &&
+                        NSLocationInRange($0.body.upperBound, affectedCharRange)
+                    }) {
+                        onError?("Use the Table menu to delete rows, columns or the whole table. Cell boundaries cannot be deleted as text.")
+                        return false
+                    }
+                    position = grid.range.upperBound
+                } else {
+                    let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: position, length: 0))
+                    if paragraph.upperBound < storage.length,
+                       NSLocationInRange(paragraph.upperBound - 1, affectedCharRange),
+                       let next = NativeTableLayout.grid(in: storage, at: paragraph.upperBound),
+                       affectedCharRange.upperBound < next.range.upperBound {
+                        onError?("Use Write Above Table or Write Below Table to keep this paragraph separate from the cells.")
+                        return false
+                    }
+                    position = paragraph.upperBound
+                }
+            }
+        }
+        return true
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        let selection = selectedRange()
+        if isEditable, selection.length == 0, selection.location > 0, let storage = textStorage,
+           let previous = NativeTableLayout.grid(in: storage, at: selection.location - 1),
+           previous.current.paragraph.upperBound == selection.location {
+            setSelectedRange(NSRange(location: previous.current.body.upperBound, length: 0))
+            return
+        }
+        if isEditable, selection.length == 0, let storage = textStorage,
+           let grid = NativeTableLayout.grid(in: storage, at: selection.location),
+           grid.current.body.location == selection.location {
+            setSelectedRange(NSRange(location: max(0, selection.location - 1), length: 0))
+            return
+        }
+        super.deleteBackward(sender)
+    }
+
+    override func deleteForward(_ sender: Any?) {
+        let selection = selectedRange()
+        if isEditable, selection.length == 0, let storage = textStorage,
+           selection.location < storage.length,
+           let next = NativeTableLayout.cell(in: storage, at: selection.location + 1),
+           NativeTableLayout.cell(in: storage, at: selection.location) !== next {
+            setSelectedRange(NSRange(location: selection.location + 1, length: 0))
+            return
+        }
+        super.deleteForward(sender)
     }
 
     private func restoreShortcutBuffer(_ value: NSAttributedString, typing: [NSAttributedString.Key: Any], selection: NSRange) {
@@ -916,28 +1061,18 @@ final class PageTextView: DocumentTextView {
     }
 
     override func insertTab(_ sender: Any?) {
-        guard let storage = textStorage, storage.length > 0 else { super.insertTab(sender); return }
-        let selection = selectedRange()
-        let paragraph = (storage.string as NSString).paragraphRange(for: selection)
-        guard storage.attribute(.folioTableRow, at: paragraph.location, effectiveRange: nil) as? Bool == true else {
-            super.insertTab(sender)
-            return
-        }
-        let body = storage.string as NSString
-        var next = NSNotFound
-        if selection.location < paragraph.upperBound {
-            let search = NSRange(location: selection.location, length: paragraph.upperBound - selection.location)
-            next = body.range(of: "\t", options: [], range: search).location
-        }
-        if next != NSNotFound {
-            setSelectedRange(NSRange(location: next + 1, length: 0))
-        } else {
-            let row = body.substring(with: NSRange(location: paragraph.location, length: paragraph.length))
-            let columns = max(2, row.filter { $0 == "\t" }.count + 1)
-            let attributes = storage.attributes(at: paragraph.location, effectiveRange: nil)
-            insertText(NSAttributedString(string: "\n" + String(repeating: "\t", count: columns - 1),
-                                          attributes: attributes), replacementRange: selection)
-        }
+        guard isEditable else { return }
+        if formattingActions?.moveTableCell(backwards: false) != true { super.insertTab(sender) }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        guard isEditable else { return }
+        if formattingActions?.moveTableCell(backwards: true) != true { super.insertBacktab(sender) }
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if formattingActions?.tableGrid != nil { formattingActions?.performTableAction(.writeBelow) }
+        else { super.cancelOperation(sender) }
     }
 
     @discardableResult
@@ -960,6 +1095,10 @@ final class PageTextView: DocumentTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
+        if let storage = textStorage, NativeTableLayout.cell(in: storage, at: selectedRange().location) != nil {
+            insertText("\u{2028}", replacementRange: selectedRange())
+            return
+        }
         let style = FormattedBlock.Style(rawValue: typingAttributes[.folioBlock] as? String ?? "") ?? .paragraph
         if NativePageCodec.isList(style), let storage = textStorage, storage.length > 0 {
             let range = (storage.string as NSString).paragraphRange(for: selectedRange())
@@ -1036,7 +1175,24 @@ final class PageTextView: DocumentTextView {
     func copy(to board: NSPasteboard) -> Bool {
         guard selectedRange().length > 0 else { return false }
         do {
-            try RichClipboard.write(attributedString().attributedSubstring(from: selectedRange()), resources: resources, to: board)
+            let selection = selectedRange()
+            let fragment = NSMutableAttributedString(attributedString: attributedString().attributedSubstring(from: selection))
+            if let storage = textStorage {
+                fragment.enumerateAttributes(in: NSRange(location: 0, length: fragment.length)) { attributes, range, _ in
+                    guard let grid = NativeTableLayout.grid(in: storage, at: selection.location + range.location),
+                          !(selection.location <= grid.range.location && selection.upperBound >= grid.range.upperBound),
+                          let paragraph = (attributes[.paragraphStyle] as? NSParagraphStyle)?
+                            .mutableCopy() as? NSMutableParagraphStyle else { return }
+                    paragraph.textBlocks = []
+                    var plain = attributes
+                    plain[.paragraphStyle] = paragraph
+                    plain[.folioBlock] = FormattedBlock.Style.paragraph.rawValue
+                    plain[.folioTableRow] = false
+                    plain.removeValue(forKey: .folioBold)
+                    fragment.setAttributes(plain, range: range)
+                }
+            }
+            try RichClipboard.write(fragment, resources: resources, to: board)
             return true
         } catch {
             onError?("Could not copy formatted content: \(error.localizedDescription)")
@@ -1090,6 +1246,34 @@ final class PageTextView: DocumentTextView {
 
     func insertRich(_ content: RichClipboard.Content) throws {
         guard isEditable else { throw NoteWorkflowError("This editor is read-only.") }
+        guard preservesTableBoundaries(in: selectedRange()) else {
+            throw NoteWorkflowError("Select text within one cell, or select the entire table before replacing it.")
+        }
+        if let storage = textStorage, let grid = NativeTableLayout.grid(in: storage, at: selectedRange().location),
+           !(selectedRange().location <= grid.range.location && selectedRange().upperBound >= grid.range.upperBound) {
+            guard selectedRange().upperBound <= grid.current.body.upperBound,
+                  content.images.isEmpty, content.page.blocks.allSatisfy({ $0.style == .paragraph }) else {
+                throw NoteWorkflowError("Paste text within one cell. Tables, lists and images must be pasted above or below the table.")
+            }
+            var runs: [FormattedRun] = []
+            for (index, block) in content.page.blocks.enumerated() {
+                if index > 0 { runs.append(FormattedRun(text: "\n")) }
+                runs.append(contentsOf: block.runs)
+            }
+            var base = NativePageCodec.attributes(style: .table, size: pageFontSize, family: pageFont,
+                color: textColor ?? .textColor)
+            base[.paragraphStyle] = storage.attribute(.paragraphStyle, at: grid.current.paragraph.location, effectiveRange: nil)
+            base[.folioTableRow] = true
+            if grid.current.block.startingRow == 0, let font = base[.font] as? NSFont {
+                base[.font] = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+            }
+            let value = NativePageCodec.attributedRuns(runs, base: base, resources: nil,
+                size: pageFontSize, family: pageFont, tableCell: true)
+            let selection = selectedRange()
+            editAttributes(name: "Paste Formatted Content") { $0.replaceCharacters(in: selection, with: value) }
+            setSelectedRange(NSRange(location: selection.location + value.length, length: 0))
+            return
+        }
         var page = content.page
         var newResources = resources
         if !content.images.isEmpty {
@@ -1120,18 +1304,29 @@ final class PageTextView: DocumentTextView {
             }
             newResources = imported.resources
         }
-        let value = try NativePageCodec.decode(page.html(), resources: newResources, size: pageFontSize,
-                                              family: pageFont, color: textColor ?? .textColor)
+        let value = NSMutableAttributedString(attributedString: try NativePageCodec.decode(page.html(),
+            resources: newResources, size: pageFontSize, family: pageFont, color: textColor ?? .textColor))
         resources = newResources
         window?.makeFirstResponder(self)
         let selection = selectedRange()
+        if page.blocks.contains(where: { $0.style == .table }) {
+            let body = string as NSString
+            let normal = NativePageCodec.attributes(style: .paragraph, size: pageFontSize,
+                family: pageFont, color: textColor ?? .textColor)
+            if selection.location > 0, body.substring(with: NSRange(location: selection.location - 1, length: 1)) != "\n" {
+                value.insert(NSAttributedString(string: "\n", attributes: normal), at: 0)
+            }
+            if selection.upperBound < body.length, !value.string.hasSuffix("\n") {
+                value.append(NSAttributedString(string: "\n", attributes: normal))
+            }
+        }
         // NSTextView.insertText normalizes pasted font sizes to the insertion paragraph.
         editAttributes(name: "Paste Formatted Content") {
             $0.replaceCharacters(in: selection, with: value)
         }
         setSelectedRange(NSRange(location: selection.location + value.length, length: 0))
         var typing = value.length > 0 ? value.attributes(at: value.length - 1, effectiveRange: nil) : typingAttributes
-        for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment] {
+        for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment, .folioTableExit] {
             typing.removeValue(forKey: key)
         }
         typingAttributes = typing
@@ -1141,6 +1336,10 @@ final class PageTextView: DocumentTextView {
     @discardableResult
     func insertFiles(_ urls: [URL]) -> Bool {
         guard isEditable else { return false }
+        if let storage = textStorage, NativeTableLayout.cell(in: storage, at: selectedRange().location) != nil {
+            onError?("Attach images and files above or below the table, not inside a cell.")
+            return false
+        }
         guard let onImportFiles else {
             onError?("Attachment insertion is unavailable.")
             return false
@@ -1274,6 +1473,7 @@ struct NoteFormattingControls: View {
     @ViewState private var showingFormatting = false
     @ViewState private var addingLink = false
     @ViewState private var link = ""
+    @ViewState private var showingTable = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -1302,7 +1502,7 @@ struct NoteFormattingControls: View {
                             }
                         }
                         Divider()
-                        ForEach(FormattedBlock.Style.allCases.filter { $0 != .table }, id: \.rawValue) { style in
+                        ForEach(FormattedBlock.Style.allCases.filter { $0 != .table && !actions.inTable }, id: \.rawValue) { style in
                             Button { actions.setStyle(style) } label: {
                                 HStack {
                                     Image(systemName: actions.style == style ? "checkmark" : "circle")
@@ -1327,8 +1527,10 @@ struct NoteFormattingControls: View {
                         }
                         Menu("More") {
                             Button(actions.code ? "Remove Inline Code" : "Inline Code") { actions.toggleInline(.folioCode) }
-                            Button("Decrease List Indent") { actions.indentList(by: -1) }
-                            Button("Increase List Indent") { actions.indentList(by: 1) }
+                            if !actions.inTable {
+                                Button("Decrease List Indent") { actions.indentList(by: -1) }
+                                Button("Increase List Indent") { actions.indentList(by: 1) }
+                            }
                             Button("Add Link...") { addingLink = true }
                             Button("Remove Link") { actions.removeLink() }.disabled(!actions.linked)
                         }
@@ -1340,9 +1542,37 @@ struct NoteFormattingControls: View {
             }
             NoteToolbarButton(title: "Checklist", selected: actions.style == .checklist, symbol: "checklist", bordered: false) {
                 actions.setStyle(actions.style == .checklist ? .paragraph : .checklist)
-            }.help("Checklist").accessibilityLabel("Checklist")
-            NoteToolbarButton(title: "Insert Table", symbol: "tablecells", bordered: false) { actions.insertTable() }
-                .help("Insert editable table").accessibilityLabel("Insert editable table")
+            }.help("Checklist").accessibilityLabel("Checklist").disabled(actions.inTable)
+            NoteToolbarButton(title: actions.inTable ? "Table" : "Insert Table", symbol: "tablecells", bordered: false) {
+                if actions.inTable { showingTable.toggle() }
+                else { actions.insertTable() }
+            }
+            .help(actions.inTable ? "Table rows and columns" : "Insert editable table")
+            .popover(isPresented: $showingTable) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Table").font(.headline)
+                    ForEach([Array(TableAction.allCases.prefix(3)), Array(TableAction.allCases[3..<6])], id: \.self) { group in
+                        Menu(group.first == .rowAbove ? "Rows" : "Columns") {
+                            ForEach(group, id: \.rawValue) { action in
+                                Button(action.title) {
+                                    showingTable = false
+                                    actions.performTableAction(action)
+                                }.disabled(!actions.tableActionEnabled(action))
+                            }
+                        }
+                    }
+                    Divider()
+                    ForEach([TableAction.writeAbove, .writeBelow, .deleteTable], id: \.rawValue) { action in
+                        NoteToolbarButton(title: action.title, bordered: false) {
+                            showingTable = false
+                            actions.performTableAction(action)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Text("Tab: next cell · Shift-Tab: previous\nReturn: new line · Esc: leave table")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(14).frame(width: 230).folioAppearance()
+            }
         }
         .buttonStyle(.borderless)
         .onChange(of: showingFormatting) { _, visible in
@@ -1350,6 +1580,9 @@ struct NoteFormattingControls: View {
                 addingLink = false
                 link = ""
             }
+        }
+        .onChange(of: actions.inTable) { _, active in
+            if !active { showingTable = false }
         }
     }
 }
@@ -1485,6 +1718,8 @@ struct NativePageView: NSViewRepresentable {
             coordinator.resources = resources
             if paletteChanged || coordinator.needsRecolor {
                 FolioPalette.styleRichText(editor, dracula: dracula, accent: linkColor, palette: colors)
+                if let storage = editor.textStorage { NativeTableLayout.recolor(storage, color: color) }
+                editor.needsDisplay = true
                 coordinator.needsRecolor = false
             }
             return
@@ -1503,7 +1738,7 @@ struct NativePageView: NSViewRepresentable {
             var typing = decoded.length > 0
                 ? decoded.attributes(at: min(location, decoded.length - 1), effectiveRange: nil)
                 : NativePageCodec.attributes(style: .paragraph, size: size, family: family, color: color)
-            for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment] {
+            for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment, .folioTableExit] {
                 typing.removeValue(forKey: key)
             }
             editor.typingAttributes = typing
@@ -1553,6 +1788,7 @@ struct NativePageView: NSViewRepresentable {
             typing.removeValue(forKey: .folioImage)
             typing.removeValue(forKey: .folioAlt)
             typing.removeValue(forKey: .attachment)
+            typing.removeValue(forKey: .folioTableExit)
             editor.typingAttributes = typing
             parent.actions.refresh()
         }
@@ -1562,7 +1798,7 @@ struct NativePageView: NSViewRepresentable {
             let raw = editor.typingAttributes[.folioBlock] as? String ?? ""
             parent.actions.style = FormattedBlock.Style(rawValue: raw) ?? .paragraph
             var typing = editor.typingAttributes
-            for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment] {
+            for key in [NSAttributedString.Key.folioMarker, .folioImage, .folioAlt, .attachment, .folioTableExit] {
                 typing.removeValue(forKey: key)
             }
             editor.typingAttributes = typing

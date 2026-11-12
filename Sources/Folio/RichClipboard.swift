@@ -246,7 +246,7 @@ enum RichClipboard {
             attributed.replaceCharacters(in: range, with: replacement)
         }
         for key in [NSAttributedString.Key.folioBlock, .folioMarker, .folioImage, .folioAlt, .folioCode,
-                    .folioBold, .folioFontSize, .folioListDepth, .folioChecked, .folioOrderedNumber, .folioTableRow] {
+                    .folioBold, .folioFontSize, .folioListDepth, .folioChecked, .folioOrderedNumber, .folioTableRow, .folioTableExit] {
             attributed.removeAttribute(key, range: NSRange(location: 0, length: attributed.length))
         }
         for block in portable.blocks.indices {

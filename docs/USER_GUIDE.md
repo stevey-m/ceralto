@@ -5,7 +5,7 @@
 Detailed instructions for the current source version. Published downloads may
 be an earlier version; check their release notes.
 The app is now **Ceralto**, formerly Deltos and Folio. Older downloads retain
-their original names; the instructions below describe Ceralto 0.23.7.
+their original names; the instructions below describe Ceralto 0.23.8.
 
 [Install](#install-on-mac) · [Save and export](#save-or-export-a-note) ·
 [Writing](#write-and-format-in-compose) · [Appearance](#choose-an-appearance) ·
@@ -135,9 +135,22 @@ Imported HTML presentation tables retain their borderless layout rather than
 being styled as data grids. One-pixel tracking images are omitted from display,
 and local raster images are identified by their contents, including Joplin's
 timestamp-suffixed filenames. External images and trackers remain blocked.
-The table toolbar button inserts a two-column table, selects its first header,
-and returns keyboard focus to the note body. The native editor presents simple
-tab-separated cells; the rendered view shows the table grid.
+The table toolbar button inserts a two-column **visible grid**, selects its
+first header and returns keyboard focus to the note body. Click a cell to type.
+Inside a table, the same button opens **Rows** and **Columns** controls for
+adding and deleting rows or columns, plus writing above/below or deleting the
+whole table. These actions are also available by right-clicking a cell and
+choosing **Table**. The first row is the header; deleting it promotes the next row.
+**Tab** and **Shift-Tab** move between cells; Tab in the final cell adds a row.
+**Return** inserts a line break within a cell, and **Esc** moves below the table.
+Text formatting, links, selected text sizes and Undo/Redo retain the grid.
+Copying a whole table preserves its structure; copying part of a cell copies
+formatted text. Cell boundaries cannot be deleted as ordinary text: use the
+row, column or table controls instead.
+Columns share the available width and wrap their contents. Drag-resizing,
+merged/nested cells, lists and images inside cells are not supported. Attach
+images above or below the table instead. Simple tables remain portable
+Markdown/HTML; opening a table does not rewrite its saved source.
 Use **Note actions > Use Markdown Source Editor...** or **Use HTML Source Editor...**
 to choose literal source editing explicitly. Live Markdown folders remain a
 separate source-editing workflow.
@@ -210,7 +223,7 @@ only. Ordinary paste does not silently flatten unsupported structures or
 non-image attachments. Unsupported content produces an error without replacing
 selected text. Compose includes toolbar actions for ordered and nested lists,
 checklists (click the checkbox marker to toggle), and editable tables. Table
-cells are separated with Tab; Tab moves between cells. HTML clipboard images must be embedded;
+cells are editable in a visible grid; Tab moves between cells. HTML clipboard images must be embedded;
 Ceralto neither downloads remote images nor follows local image paths supplied
 by clipboard HTML. Copy the image itself or attach its original file instead.
 Formatted clipboard payloads and individual images are limited to 32 MiB.

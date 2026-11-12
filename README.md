@@ -14,7 +14,7 @@ Markdown. No account, subscription or runtime server.
 
 ## What it does
 
-- Write with headings, checklists, tables, images and native undo.
+- Write with headings, checklists, visible editable table grids, images and native undo.
 - Organise notebooks, tags and smart folders; browse notes or attachments.
 - Search offline, link notes and keep reference notes beside your writing.
 - Import Joplin exports, Markdown and HTML, or edit an existing Markdown folder.

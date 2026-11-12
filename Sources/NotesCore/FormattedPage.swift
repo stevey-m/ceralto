@@ -323,7 +323,7 @@ public struct FormattedPage: Equatable, Sendable {
                 func row(_ cells: [FormattedTableCell]) -> String {
                     "| " + cells.map { cell in
                         Self.merged(cell.runs).map { run in
-                            if run.fontSize != nil {
+                            if run.fontSize != nil || run.code || run.text.contains(where: \.isNewline) {
                                 return Self.inlineHTML([run]).replacingOccurrences(of: "|", with: "&#124;")
                             }
                             var value = Self.markdownText(run.text)
